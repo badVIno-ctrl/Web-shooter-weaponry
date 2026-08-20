@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тактический лазерный целеуказатель — процедурная модель three.js</title>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}</script>
+<style>
+  :root{
+    --bg:#15171a; --panel:rgba(22,24,28,.86); --line:rgba(255,255,255,.14);
+    --tx:#e9ebee; --tx2:rgba(233,235,238,.62); --acc:#5e9fe8;
+    --red:#ff4a3a; --green:#46e07a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  canvas{display:block}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    box-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.35)}
+  #ui{top:16px;left:16px;padding:14px;display:flex;flex-direction:column;gap:8px;width:292px;z-index:10;
+    max-height:calc(100vh - 32px);overflow:auto}
+  .ttl{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--tx2);margin-top:6px}
+  .ttl:first-child{margin-top:0}
+  .row{display:flex;flex-wrap:wrap;gap:8px}
+  .row.seg>button{flex:1 1 0;min-width:0}
+  .row.seg>#bView{flex:1 1 100%}
+  button{font:inherit;font-size:13px;line-height:1;min-height:44px;padding:12px;color:var(--tx);
+    background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:8px;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    transition:background .12s,border-color .12s,box-shadow .12s}
+  button:hover{background:rgba(255,255,255,.14)}
+  button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  button.on{background:rgba(94,159,232,.26);border-color:var(--acc);color:#fff}
+  #bLaser{width:100%;justify-content:flex-start;font-size:15px;min-height:54px;padding:12px 14px}
+  #bLaser.on{background:rgba(255,74,58,.20);border-color:rgba(255,74,58,.72);
+    box-shadow:0 0 24px rgba(255,74,58,.20)}
+  #bLaser.on.green{background:rgba(70,224,122,.18);border-color:rgba(70,224,122,.7);
+    box-shadow:0 0 24px rgba(70,224,122,.18)}
+  #led{width:11px;height:11px;border-radius:50%;background:#4a4d52;flex:0 0 auto;
+    transition:background .12s,box-shadow .12s}
+  #bLaser.on #led{background:var(--red);box-shadow:0 0 11px var(--red)}
+  #bLaser.on.green #led{background:var(--green);box-shadow:0 0 11px var(--green)}
+  #bLaserTx{flex:1 1 auto;text-align:left}
+  kbd{font:600 11px/1 Menlo,Consolas,monospace;color:var(--tx2);border:1px solid var(--line);
+    border-radius:5px;padding:4px 6px;background:rgba(255,255,255,.05)}
+  .sw{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .sw.red{background:var(--red);box-shadow:0 0 8px rgba(255,74,58,.85)}
+  .sw.green{background:var(--green);box-shadow:0 0 8px rgba(70,224,122,.85)}
+  #sliders{display:flex;flex-direction:column;gap:10px}
+  .sl{display:block;font-size:13px}
+  .sl .lab{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px}
+  .sl .lab span:last-child{font-variant-numeric:tabular-nums;color:var(--tx2);font-size:12px}
+  .sl input{width:100%;accent-color:var(--acc);margin:0;height:26px;display:block}
+  #stats{top:16px;right:16px;padding:12px 14px;z-index:10;min-width:232px;
+    font-family:Menlo,Consolas,"Liberation Mono",monospace;font-size:12px;line-height:1.75}
+  #stats .r{display:flex;justify-content:space-between;gap:16px}
+  #stats .k{color:var(--tx2)}
+  #stats .v{font-variant-numeric:tabular-nums}
+  #stats .sep{height:1px;background:var(--line);margin:8px 0}
+  #hint{right:16px;bottom:16px;padding:10px 14px;font-size:12.5px;color:var(--tx2);z-index:10;
+    max-width:min(600px,calc(100vw - 32px))}
+  #hint b{color:var(--tx);font-weight:600}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    padding:32px;background:var(--bg);z-index:50;font-size:16px;color:var(--tx2)}
+  #boot .err{color:#e97366;max-width:620px;line-height:1.65;text-align:left;font-size:15px}
+  #boot .err b{color:#fff;display:block;margin-bottom:10px;font-size:17px}
+  @media (max-width:900px){
+    #stats{display:none}
+    #hint{display:none}
+    #ui{width:calc(100vw - 32px)}
+  }
+</style>
+</head>
+<body>
+<div id="boot">Загрузка three.js…</div>
+
+<div id="ui" class="panel" hidden>
+  <div class="ttl">Лазер</div>
+  <button id="bLaser" aria-pressed="false"><span id="led"></span><span id="bLaserTx">Включить лазер</span><kbd>L</kbd></button>
+  <div class="row seg">
+    <button id="cRed" class="on"><i class="sw red"></i>Красный</button>
+    <button id="cGreen"><i class="sw green"></i>Зелёный</button>
+  </div>
+  <div class="row seg">
+    <button id="mConst" class="on">Постоянный</button>
+    <button id="mPulse">Импульс</button>
+  </div>
+
+  <div class="ttl">Настройка луча</div>
+  <div id="sliders"></div>
+
+  <div class="ttl">Сцена</div>
+  <div class="row">
+    <button id="bTarget" class="on">Мишень</button>
+    <button id="bGrid" class="on">Сетка</button>
+    <button id="bSpin">Автоповорот</button>
+  </div>
+  <div class="row seg">
+    <button id="bView">Крупный план</button>
+    <button id="bShot">PNG</button>
+    <button id="bGlb">GLB</button>
+  </div>
+</div>
+
+<div id="stats" class="panel" hidden></div>
+<div id="hint" class="panel" hidden>ЛКМ — вращать · колесо — зум · ПКМ — панорама &nbsp;·&nbsp; <b>L</b> — лазер, <b>C</b> — цвет, <b>P</b> — режим, или клик по тумблеру на корпусе</div>
+
+<script type="module">
+let THREE, OrbitControls, GLTFExporter;
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  ({ GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js'));
+} catch (err) {
+  document.getElementById('boot').innerHTML =
+    '<div class="err"><b>Не удалось загрузить three.js с CDN unpkg.com</b>' +
+    'Сам файл исправен, но библиотека тянется из интернета при первом открытии. ' +
+    'Проверьте сеть, VPN или блокировщики и обновите страницу (F5). ' +
+    'После первой успешной загрузки модуль останется в кэше браузера и файл будет работать офлайн.' +
+    '<div style="margin-top:14px;opacity:.65;font-size:13px">' + String((err && err.message) || err) + '</div></div>';
+  throw err;
+}
+
+// ==== МОДЕЛЬ: НАЧАЛО ====
+/*
+ ТАКТИЧЕСКИЙ ЛАЗЕРНЫЙ ЦЕЛЕУКАЗАТЕЛЬ — коробчатый корпус, процедурная геометрия
+ buildLaser(THREE) -> THREE.Group          единственное качество — максимальная детализация
+
+ СИСТЕМА КООРДИНАТ
+   −Z — вперёд (куда светит лазер),  +Y — вверх,  +X — вправо
+   Origin (0,0,0) — центр нижней плоскости крепления на планку Пикатинни.
+   Геометрия симметрична относительно X — блок ставится и на верхнюю, и на левую планку.
+
+ ТАБЛИЦА РАЗМЕРОВ (мм)
+ ┌─────────────────────────────────┬───────────────────────────────────────┐
+ │ Корпус (Ш×В×Д)                 │ 40 × 35 × 75, скругление рёбер R3           │
+ │ Высота зажима над планкой       │ 12.6 (низ корпуса Y=12.6, верх Y=47.6)     │
+ │ Интерфейс Пикатинни            │ рельс 21.2, шаг пазов 10.16, скосы 45°      │
+ │ Зажим планки                   │ ширина 25, длина 46                       │
+ │ Барашковый винт (слева)         │ Ø14 × 6, накатка 6 рисок, шпилька Ø5       │
+ │ Линза излучателя               │ Ø8, утоплена на 3 в колодец Ø12, прилив Ø15 │
+ │ Винты пристрелки (В и Г)          │ Ø5 в гнёздах Ø9, крестовой шлиц 0.8        │
+ │ Шкала вокруг винтов             │ 6 рисок 1.4 × 0.6 по Ø11.2                  │
+ │ Крышка батарейки (сзади)        │ Ø20, рифлёное кольцо Ø22, прорезь 16 × 1.6 │
+ │ Резиновый тумблер               │ 14 × 10 × 4.5, OFF / постоянно / импульс   │
+ │ Разъём выносной кнопки (справа) │ Ø8 × 6 + контакт Ø4.4                      │
+ │ Табличка-рельеф (слева)         │ 22 × 9 × 0.5 + 3 строки гравировки         │
+ │ Облегчающие выемки по бокам     │ два кармана на сторону между рёбрами 1.2   │
+ └─────────────────────────────────┴───────────────────────────────────────┘
+
+ БЮДЖЕТ (замерено validate())
+   ≈ 1372 треугольника (точное число — в панели статистики).
+   Статика собрана в 3 меша = 3 draw call (anodized / steel / lens);
+   подвижные switchLever (rubber) и cap — отдельные объекты, иначе их не анимировать.
+
+ АПИ
+   group.nodes = { mount, emitter, beamOrigin, beamDir, switchPad }
+     beamDir — ребёнок beamOrigin: dir = beamDir.getWorldPosition() − beamOrigin.getWorldPosition()
+   group.parts = { switchLever, cap }
+   group.setBeam(on, color)  — эмиссия линзы; сам луч рисует createLaserBeam() ниже
+   group.dispose()           — освобождает геометрию и материалы
+*/
+function buildLaser(THREE) {
+  const mm = (x) => x / 1000;                     // всё в метрах, числа в миллиметрах
+  const seg  = 12;                                // радиальные сегменты крупных тел вращения
+  const segS = 8;                                 // радиальные сегменты винтов
+  const PI = Math.PI, HP = PI / 2;
+
+  const group = new THREE.Group();
+  group.name = 'LaserDesignator';
+
+  /* ─── МАТЕРИАЛЫ ──────────────────────────────── */
+  const anodized = new THREE.MeshStandardMaterial({ name: 'anodized', color: 0x24272b, metalness: 0.60, roughness: 0.55 });
+  const steel    = new THREE.MeshStandardMaterial({ name: 'steel',    color: 0x9aa0a6, metalness: 0.95, roughness: 0.28 });
+  const rubber   = new THREE.MeshStandardMaterial({ name: 'rubber',   color: 0x121314, metalness: 0.00, roughness: 0.95 });
+  const lensMat  = new THREE.MeshStandardMaterial({ name: 'lens',     color: 0x140404, metalness: 0.25, roughness: 0.12,
+                                                    emissive: 0x2a0808, emissiveIntensity: 1 });
+  const materials = [anodized, steel, rubber, lensMat];
+
+  /* ─── СБОРКА ГЕОМЕТРИИ (сливаем всё в несколько мешей) ────── */
+  const bAnod = [], bSteel = [], bLens = [], bRub = [], bCap = [];
+  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+  const _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
+
+  // put(): печёт примитив сразу в нужное место и кладёт в корзину материала
+  function put(bucket, geo, pos, rot) {
+    _p.set(pos ? pos[0] : 0, pos ? pos[1] : 0, pos ? pos[2] : 0);
+    _e.set(rot ? rot[0] : 0, rot ? rot[1] : 0, rot ? rot[2] : 0);
+    _m.compose(_p, _q.setFromEuler(_e), _s);
+    geo.applyMatrix4(_m);
+    bucket.push(geo);
+    return geo;
+  }
+
+  // ручной merge без BufferGeometryUtils — чтобы файл не тянул лишние аддоны
+  function mergeBucket(list) {
+    if (!list.length) return null;
+    let vc = 0, ic = 0;
+    for (const g of list) {
+      vc += g.attributes.position.count;
+      ic += g.index ? g.index.count : g.attributes.position.count;
+    }
+    const pos = new Float32Array(vc * 3), nor = new Float32Array(vc * 3), idx = new Uint32Array(ic);
+    let vo = 0, io = 0;
+    for (const g of list) {
+      const p = g.attributes.position, n = g.attributes.normal;
+      pos.set(p.array.subarray(0, p.count * 3), vo * 3);
+      if (n) nor.set(n.array.subarray(0, n.count * 3), vo * 3);
+      if (g.index) {
+        const a = g.index.array;
+        for (let i = 0; i < a.length; i++) idx[io + i] = a[i] + vo;
+        io += a.length;
+      } else {
+        for (let i = 0; i < p.count; i++) idx[io + i] = i + vo;
+        io += p.count;
+      }
+      vo += p.count;
+      g.dispose();
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setIndex(new THREE.BufferAttribute(idx, 1));
+    out.computeBoundingBox();
+    out.computeBoundingSphere();
+    return out;
+  }
+
+  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r, h, s, open) => new THREE.CylinderGeometry(r, r, h, s, 1, !!open);
+
+  /* ─── ГАБАРИТЫ ────────────────────────────────── */
+  const BW = mm(40), BH = mm(35), BL = mm(75);    // корпус 40 × 35 × 75 мм
+  const R  = mm(3);                               // скругление рёбер 3 мм
+  const CLAMP_H = mm(12.6);                       // высота зажима от плоскости планки
+  const BY = CLAMP_H + BH / 2;                    // центр корпуса по высоте = 30.1 мм
+  const TOP = BY + BH / 2, BOT = BY - BH / 2;     // 47.6 / 12.6 мм
+  const FRONT = -BL / 2, BACK = BL / 2;           // −37.5 / +37.5 мм
+  const emitY = BY + mm(4);                       // ось излучателя на 34.1 мм
+  const RAIL_W = mm(21.2);                        // ширина рельса Пикатинни
+
+  /* ─── 1. КОРПУС СО СКРУГЛЁННЫМИ РЁБРАМИ ──────────── */
+  // Профиль 40 × 35 с R3 выдавливается на 69 мм + фаска 3 мм с двух торцов = 75 мм.
+  {
+    const shape = new THREE.Shape();
+    const hx = BW / 2 - R, hy = BH / 2 - R;
+    shape.moveTo(-hx, -hy - R);
+    shape.lineTo(hx, -hy - R);
+    shape.absarc(hx, -hy, R, -HP, 0, false);
+    shape.lineTo(hx + R, hy);
+    shape.absarc(hx, hy, R, 0, HP, false);
+    shape.lineTo(-hx, hy + R);
+    shape.absarc(-hx, hy, R, HP, PI, false);
+    shape.lineTo(-hx - R, -hy);
+    shape.absarc(-hx, -hy, R, PI, PI + HP, false);
+    const depth = BL - 2 * R;
+    put(bAnod, new THREE.ExtrudeGeometry(shape, {
+      depth, steps: 1, bevelEnabled: true, bevelThickness: R, bevelSize: mm(2),
+      bevelSegments: 1, curveSegments: 2,
+    }), [0, BY, -depth / 2]);
+  }
+
+  /* ─── 2. ФРЕЗЕРОВАННЫЕ ОБЛЕГЧАЮЩИЕ ВЫЕМКИ ПО БОКАМ ───── */
+  // Карманы обозначены сеткой рёбер 1.2 мм, выступающих на 0.9 мм — фрезерованный вид без CSG.
+  {
+    for (const sx of [-1, 1]) {
+      const px = sx * (BW / 2 + mm(0.3));
+      put(bAnod, box(mm(1.2), mm(2.6), mm(28)), [px, BY, mm(4)]);                    // продольное ребро
+      for (const dz of [-10, 4, 18])
+        put(bAnod, box(mm(1.2), mm(18), mm(2.6)), [px, BY, mm(dz)]);                 // поперечные рёбра
+    }
+  }
+
+  /* ─── 3. КОЛОДЕЦ ИЗЛУЧАТЕЛЯ И УТОПЛЕННАЯ ЛИНЗА ─────── */
+  put(bAnod, cyl(mm(7.5), mm(4), seg), [0, emitY, FRONT], [HP, 0, 0]);                 // прилив Ø15, выступ 2 мм
+  put(bAnod, cyl(mm(6), mm(3.2), seg, true), [0, emitY, FRONT - mm(0.4)], [HP, 0, 0]);  // стенка колодца Ø12
+  put(bAnod, new THREE.RingGeometry(mm(4), mm(6), seg), [0, emitY, FRONT + mm(1)], [0, PI, 0]); // дно колодца
+  put(bLens, new THREE.CircleGeometry(mm(4), seg), [0, emitY, FRONT + mm(1)], [0, PI, 0]);      // линза Ø8 на глубине 3 мм
+
+  /* ─── 4. ВИНТЫ ПРИСТРЕЛКИ В УТОПЛЕННЫХ ГНЁЗДАХ ──────── */
+  // Гнездо Ø9 + головка Ø5 с крестовым шлицем (два врезанных бруска 0.8 мм) + шкала рисок.
+  function turret(pos, rot) {
+    const n = new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(rot[0], rot[1], rot[2]));
+    const at = (d) => [pos[0] + n.x * d, pos[1] + n.y * d, pos[2] + n.z * d];
+    put(bAnod,  cyl(mm(4.5), mm(1.6), segS), at(mm(0.2)), rot);                      // гнездо Ø9
+    put(bSteel, cyl(mm(2.5), mm(2.4), segS), at(mm(2.0)), rot);                      // головка винта Ø5
+    put(bSteel, box(mm(4.6), mm(0.8), mm(0.8)), at(mm(3.0)), rot);                   // шлиц — перекладина 1
+    put(bSteel, box(mm(0.8), mm(0.8), mm(4.6)), at(mm(3.0)), rot);                   // шлиц — перекладина 2
+    for (let i = 0; i < 6; i++) {                                                    // риски-шкала вокруг гнезда
+      const a = i / 6 * PI * 2;
+      const off = new THREE.Vector3(Math.cos(a) * mm(5.6), mm(0.15), Math.sin(a) * mm(5.6))
+        .applyEuler(new THREE.Euler(rot[0], rot[1], rot[2]));
+      put(bAnod, box(mm(1.4), mm(0.6), mm(0.6)),
+          [pos[0] + off.x, pos[1] + off.y, pos[2] + off.z], [rot[0], rot[1] + a, rot[2]]);
+    }
+  }
+  turret([0, TOP, FRONT + mm(16)], [0, 0, 0]);                                        // вертикальная поправка — сверху
+  turret([BW / 2, emitY, FRONT + mm(16)], [0, 0, -HP]);                               // горизонтальная — справа
+
+  /* ─── 5. ЗАЖИМ ПЛАНКИ ПИКАТИННИ ─────────────────── */
+  put(bAnod, box(mm(25), mm(6), mm(46)), [0, mm(9.6), 0]);                            // тело зажима шириной 25
+  for (const sx of [-1, 1]) {
+    put(bAnod, box(mm(4.2), mm(6.6), mm(46)), [sx * (RAIL_W / 2 + mm(2.1)), mm(3.3), 0]);       // губки
+    put(bAnod, box(mm(3.2), mm(3.2), mm(46)), [sx * (RAIL_W / 2 - mm(0.5)), mm(6.3), 0], [0, 0, PI / 4]); // скос 45°
+  }
+  for (let i = -1.5; i <= 1.5; i++)                                                   // гребни с шагом 10.16
+    put(bAnod, box(RAIL_W - mm(1), mm(1.2), mm(2.4)), [0, mm(6.4), i * mm(10.16)]);
+
+  /* ─── 6. БАРАШКОВЫЙ ВИНТ Ø14 С НАКАТКОЙ (СЛЕВА) ────── */
+  const wingX = -mm(17.8);
+  put(bSteel, cyl(mm(7), mm(6), seg), [wingX, mm(9.6), 0], [0, 0, HP]);               // головка Ø14 × 6
+  put(bSteel, cyl(mm(2.5), mm(10), segS, true), [mm(-13), mm(9.6), 0], [0, 0, HP]);   // шпилька Ø5
+  { const n = 6; for (let i = 0; i < n; i++) {                                        // накатка
+    const a = i / n * PI * 2;
+    put(bSteel, box(mm(6), mm(1), mm(1)), [wingX, mm(9.6) + Math.cos(a) * mm(7), Math.sin(a) * mm(7)], [a, 0, 0]);
+  } }
+
+  /* ─── 7. КРЫШКА БАТАРЕЙКИ СЗАДИ (подвижная деталь) ──── */
+  put(bAnod, cyl(mm(11.5), mm(1.2), seg), [0, BY, BACK + mm(0.6)], [HP, 0, 0]);       // посадочный прилив Ø23
+  const capPivot = new THREE.Group();                                                 // шарнир по левому краю
+  capPivot.name = 'capPivot';
+  capPivot.position.set(-mm(11), BY, BACK + mm(1.2));
+  put(bCap, cyl(mm(10), mm(3), seg), [mm(11), 0, mm(1.5)], [HP, 0, 0]);               // диск крышки Ø20
+  put(bCap, cyl(mm(11), mm(2), seg, true), [mm(11), 0, mm(1.4)], [HP, 0, 0]);         // рифлёное кольцо Ø22
+  { const n = 8; for (let i = 0; i < n; i++) {                                        // насечки кольца
+    const a = i / n * PI * 2;
+    put(bCap, box(mm(1.2), mm(1.2), mm(2.2)), [mm(11) + Math.cos(a) * mm(11), Math.sin(a) * mm(11), mm(1.4)], [0, 0, a]);
+  } }
+  for (const sx of [-1, 1])                                                           // два сектора — между ними прорезь 1.6 мм
+    put(bCap, box(mm(8.2), mm(16), mm(1)), [mm(11) + sx * mm(4.9), 0, mm(3.5)]);
+  group.add(capPivot);
+
+  /* ─── 8. РЕЗИНОВЫЙ ТУМБЛЕР СВЕРХУ СЗАДИ ──────────── */
+  put(bAnod, box(mm(17), mm(2.4), mm(13)), [0, TOP - mm(1.2), BACK - mm(14)]);        // площадка под кнопку
+  for (const dx of [-6.4, 0, 6.4])                                                    // метки OFF / постоянно / импульс
+    put(bAnod, box(mm(1.2), mm(0.6), mm(1.2)), [mm(dx), TOP, BACK - mm(21.5)]);
+  const swPivot = new THREE.Group();                                                  // ось качания тумблера — поперёк корпуса (X)
+  swPivot.name = 'switchPivot';
+  swPivot.position.set(0, TOP - mm(0.4), BACK - mm(14));
+  put(bRub, box(mm(14), mm(4.5), mm(10)), [0, mm(2), 0]);                             // тело кнопки 14 × 10 × 4.5
+  for (let i = -1; i <= 1; i++)                                                       // рифление резины
+    put(bRub, box(mm(13), mm(1), mm(1)), [0, mm(4.1), i * mm(2.6)]);
+  group.add(swPivot);
+
+  /* ─── 9. РАЗЪЁМ ПОД ВЫНОСНУЮ КНОПКУ Ø8 × 6 (СПРАВА) ──── */
+  put(bAnod,  cyl(mm(4), mm(6), segS), [BW / 2 + mm(2), BY - mm(7), BACK - mm(12)], [0, 0, HP]);
+  put(bSteel, cyl(mm(2.2), mm(2.2), segS), [BW / 2 + mm(5.6), BY - mm(7), BACK - mm(12)], [0, 0, HP]); // контакт
+
+  /* ─── 10. ПРЕДУПРЕЖДАЮЩАЯ ТАБЛИЧКА-РЕЛЬЕФ (СЛЕВА) ── */
+  {
+    const px = -(BW / 2 + mm(0.25));
+    put(bAnod, box(mm(0.5), mm(9), mm(22)), [px, BY - mm(6), -mm(22)]);               // рамка 22 × 9
+    for (let i = 0; i < 3; i++)                                                       // строки гравировки «LASER RADIATION»
+      put(bAnod, box(mm(0.9), mm(0.9), mm(15 - i * 3)), [px - mm(0.2), BY - mm(3.2) - i * mm(2.2), -mm(22)]);
+  }
+
+  /* ─── СБОРКА МЕШЕЙ ───────────────────────────── */
+  const housing  = new THREE.Mesh(mergeBucket(bAnod),  anodized); housing.name  = 'housing';
+  const hardware = new THREE.Mesh(mergeBucket(bSteel), steel);    hardware.name = 'hardware';
+  const lens     = new THREE.Mesh(mergeBucket(bLens),  lensMat);  lens.name     = 'lens';
+  const swMesh   = new THREE.Mesh(mergeBucket(bRub),   rubber);   swMesh.name   = 'switchRubber';
+  const capMesh  = new THREE.Mesh(mergeBucket(bCap),   anodized); capMesh.name  = 'batteryCap';
+  group.add(housing, hardware, lens);
+  swPivot.add(swMesh);
+  capPivot.add(capMesh);
+  group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+  /* ─── УЗЛЫ ─────────────────────────────────────── */
+  const mkNode = (name, p, parent) => {
+    const o = new THREE.Object3D();
+    o.name = name;
+    o.position.set(p[0], p[1], p[2]);
+    (parent || group).add(o);
+    return o;
+  };
+  const mount      = mkNode('mount',      [0, 0, 0]);                       // центр плоскости крепления
+  const emitter    = mkNode('emitter',    [0, emitY, FRONT + mm(1)]);       // плоскость линзы
+  const beamOrigin = mkNode('beamOrigin', [0, emitY, FRONT - mm(2.5)]);     // точка рождения луча
+  const beamDir    = mkNode('beamDir',    [0, 0, -mm(10)], beamOrigin);     // ребёнок beamOrigin: направление −Z
+  const switchPad  = mkNode('switchPad',  [0, TOP + mm(3), BACK - mm(14)]); // точка нажатия / выносной кнопки
+
+  group.nodes = { mount, emitter, beamOrigin, beamDir, switchPad };
+  group.parts = { switchLever: swPivot, cap: capPivot };
+
+  /* ─── API ──────────────────────────────────────────── */
+  const OFF_EMISSIVE = new THREE.Color(0x2a0808);
+  const OFF_COLOR    = new THREE.Color(0x140404);
+  group.userData.beamOn = false;
+  group.setBeam = function (on, color) {                                    // сам луч рисует движок, здесь только линза
+    const c = new THREE.Color(color === undefined ? 0xff1a1a : color);
+    group.userData.beamOn = !!on;
+    lensMat.emissive.copy(on ? c : OFF_EMISSIVE);
+    lensMat.emissiveIntensity = on ? 2.4 : 1;
+    lensMat.color.copy(on ? c.clone().multiplyScalar(0.35) : OFF_COLOR);
+    lensMat.needsUpdate = true;
+    return group;
+  };
+  group.setBeam(false);
+
+  group.dispose = function () {                                             // освободить GPU-память
+    group.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
+    for (const m of materials) m.dispose();
+    return group;
+  };
+
+  group.validate = () => validate(group);
+  return group;
+}
+
+// Проверка контракта: узлы, подвижные детали, API, число треугольников.
+function validate(group) {
+  const missing = [];
+  for (const k of ['mount', 'emitter', 'beamOrigin', 'beamDir', 'switchPad'])
+    if (!group.nodes || !group.nodes[k]) missing.push('nodes.' + k);
+  for (const k of ['switchLever', 'cap'])
+    if (!group.parts || !group.parts[k]) missing.push('parts.' + k);
+  for (const k of ['setBeam', 'dispose'])
+    if (typeof group[k] !== 'function') missing.push(k + '()');
+  let tris = 0, meshes = 0;
+  const mats = new Set();
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++;
+    mats.add(o.material.uuid);
+    const g = o.geometry;
+    tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+  });
+  return { ok: missing.length === 0, missing, tris: Math.round(tris), meshes, materials: mats.size };
+}
+
+const build = buildLaser;
+window.buildLaser = buildLaser;
+window.validate = validate;
+// export { buildLaser }
+// ==== МОДЕЛЬ: КОНЕЦ ====
+
+/* ═══════════════ ЛУЧ ЛАЗЕРА · самостоятельный модуль ═══════════════ */
+/*
+ createLaserBeam(THREE, opts) -> THREE.Group c API. Зависит только от three.js,
+ переносится в игру целиком вместе с моделью прибора.
+
+ КАК УСТРОЕН ЛУЧ
+   Три соосных цилиндра с аддитивным смешиванием, растянутых от линзы до цели:
+     halo — широкий мягкий ореол (свет, рассеянный пылью в воздухе),
+     mid  — средний слой, даёт лучу «тело» и насыщенный цвет,
+     core — тонкая почти белая нить: именно она читается как сам лазер.
+   Прозрачность слоя = pow(|dot(нормаль, взгляд)|, power). В середине силуэта трубы
+   нормаль смотрит в камеру — максимум яркости, к краям гаснет в ноль. Поэтому луч
+   выглядит объёмным с любого ракурса и не выдаёт себя плоской лентой.
+   Луч упирается в первое препятствие (raycast): в точке попадания — пятно из двух
+   спрайтов и точечный источник света, у линзы — вспышка и подсветка корпуса.
+
+ ПОДКЛЮЧЕНИЕ В ИГРУ
+   const laser = createLaserBeam(THREE, { color: 'green', maxDistance: 60 });
+   scene.add(laser);                                    // луч живёт в мире, а не в оружии
+   laser.setSource(weapon.nodes.emitter, weapon.nodes.beamDir);
+   laser.setEnabled(true);                              // ← кнопка включения
+   laser.update(dt, worldMeshes);                       // каждый кадр
+   if (laser.state.hit) paintDecal(laser.state.point);  // куда именно смотрит лазер
+
+ API
+   setEnabled(on) · setColor('red' | 'green' | 0x00ff88) · setMode('constant' | 'pulse')
+   setIntensity(x) · setRadius(м) · setMaxDistance(м) · setHaze(0..1)
+   setSource(originObj, dirObj) · update(dt, colliders) · dispose()
+   state = { on, mode, color, hit, distance, point }
+*/
+const LASER_PRESETS = {
+  red:   { beam: 0xff2418, light: 0xff2810, label: 'красный' },
+  green: { beam: 0x2bff5c, light: 0x1bff4a, label: 'зелёный' },
+};
+
+// hex → сырой sRGB-вектор: шейдер луча пишет цвет в кадр напрямую, без тонмаппинга
+function srgbVec3(THREE, hex) {
+  return new THREE.Vector3(((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255);
+}
+function mixHex(a, b, t) {
+  const ch = (s) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t) << s;
+  return ch(16) | ch(8) | ch(0);
+}
+// мягкое круглое пятно на canvas — текстура для вспышки и точки попадания
+function radialTexture(THREE, stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (const [p, col] of stops) grd.addColorStop(p, col);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function createLaserBeam(THREE, opts = {}) {
+  const cfg = {
+    color:       opts.color       ?? 'red',
+    maxDistance: opts.maxDistance ?? 2.4,      // м, дальше луч не рисуется
+    radius:      opts.radius      ?? 0.0007,   // м, радиус ядра (диаметр 1.4 мм)
+    divergence:  opts.divergence  ?? 2.2,      // во сколько раз луч шире на макс. дистанции
+    intensity:   opts.intensity   ?? 1,
+    haze:        opts.haze        ?? 0.55,     // запылённость воздуха: видимость столба света
+    dotSize:     opts.dotSize     ?? 0.0032,   // м, пятно на цели
+  };
+
+  const VERT = [
+    'varying vec2 vUv;',
+    'varying vec3 vNrm;',
+    'varying vec3 vEye;',
+    'void main() {',
+    '  vUv  = uv;',
+    '  vNrm = normalize(normalMatrix * normal);',
+    '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+    '  vEye = -mv.xyz;',
+    '  gl_Position = projectionMatrix * mv;',
+    '}',
+  ].join('\n');
+
+  const FRAG = [
+    'precision highp float;',
+    'uniform vec3  uColor;',
+    'uniform float uPower;',
+    'uniform float uAlpha;',
+    'uniform float uTime;',
+    'uniform float uHit;',
+    'varying vec2 vUv;',
+    'varying vec3 vNrm;',
+    'varying vec3 vEye;',
+    'void main() {',
+    '  float rim = clamp(abs(dot(normalize(vNrm), normalize(vEye))), 0.0, 1.0);',
+    '  float a = pow(rim, uPower);',
+    '  a *= smoothstep(0.0, 0.02, vUv.y);',
+    '  a *= mix(1.0 - smoothstep(0.15, 1.0, vUv.y), 1.0 - 0.15 * vUv.y, uHit);',
+    '  a *= 0.94 + 0.06 * sin(vUv.y * 180.0 - uTime * 5.0);',
+    '  a *= uAlpha;',
+    '  if (a < 0.003) discard;',
+    '  gl_FragColor = vec4(uColor, a);',
+    '}',
+  ].join('\n');
+
+  const LAYERS = [
+    { k: 'halo', w: 7.0, power: 3.2,  alpha: 0.20, white: 0.00, air: 1 },
+    { k: 'mid',  w: 3.0, power: 1.5,  alpha: 0.34, white: 0.12, air: 1 },
+    { k: 'core', w: 1.0, power: 0.45, alpha: 1.00, white: 0.66, air: 0 },
+  ];
+
+  const root = new THREE.Group();
+  root.name = 'LaserBeam';
+
+  // Труба длиной 1 от начала координат в −Z, чуть расширяющаяся к концу (расходимость)
+  const tube = new THREE.CylinderGeometry(cfg.divergence, 1, 1, 22, 1, true);
+  tube.translate(0, 0.5, 0);
+  tube.rotateX(-Math.PI / 2);
+
+  const beamGroup = new THREE.Group();
+  beamGroup.visible = false;
+  root.add(beamGroup);
+
+  const layers = LAYERS.map((L) => {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Vector3(1, 0.14, 0.09) },
+        uPower: { value: L.power },
+        uAlpha: { value: L.alpha },
+        uTime:  { value: 0 },
+        uHit:   { value: 0 },
+      },
+      vertexShader: VERT,
+      fragmentShader: FRAG,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const mesh = new THREE.Mesh(tube, mat);
+    mesh.name = 'beam_' + L.k;
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 10;
+    beamGroup.add(mesh);
+    return { L, mesh, mat };
+  });
+
+  const texSoft = radialTexture(THREE, [
+    [0, 'rgba(255,255,255,0.95)'], [0.12, 'rgba(255,255,255,0.42)'],
+    [0.42, 'rgba(255,255,255,0.09)'], [1, 'rgba(255,255,255,0)'],
+  ]);
+  const texHard = radialTexture(THREE, [
+    [0, 'rgba(255,255,255,1)'], [0.28, 'rgba(255,255,255,0.92)'],
+    [0.52, 'rgba(255,255,255,0.20)'], [1, 'rgba(255,255,255,0)'],
+  ]);
+  const mkSprite = (map, hex, order) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: map, color: hex, blending: THREE.AdditiveBlending,
+      transparent: true, depthWrite: false, toneMapped: false,
+    }));
+    s.renderOrder = order;
+    return s;
+  };
+
+  const muzzle = mkSprite(texSoft, 0xff2418, 11);   // вспышка на линзе
+  beamGroup.add(muzzle);
+
+  const impact = new THREE.Group();                 // пятно на цели, едет по −Z
+  const dotGlow = mkSprite(texSoft, 0xff2418, 12);
+  const dotCore = mkSprite(texHard, 0xffd7d0, 13);
+  dotGlow.visible = dotCore.visible = false;
+  impact.add(dotGlow, dotCore);
+  root.add(impact);
+
+  // Свет всегда остаётся в списке сцены и гасится интенсивностью:
+  // скрытие самого источника заставляло бы three.js пересобирать шейдеры материалов
+  const hitLight = new THREE.PointLight(0xff2810, 0, 0.16, 2);
+  impact.add(hitLight);
+  const muzzleLight = new THREE.PointLight(0xff2810, 0, 0.07, 2);
+  muzzleLight.position.set(0, 0, 0.004);
+  root.add(muzzleLight);
+
+  const FWD = new THREE.Vector3(0, 0, -1);
+  const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster();
+  let srcObj = null, dirObj = null, time = 0;
+
+  root.state = {
+    on: false, mode: 'constant', color: cfg.color,
+    hit: false, distance: cfg.maxDistance, point: new THREE.Vector3(),
+  };
+
+  function applyColor() {
+    const p = LASER_PRESETS[cfg.color];
+    const beamHex = p ? p.beam : (cfg.color | 0);
+    const lightHex = p ? p.light : beamHex;
+    for (const l of layers) {
+      l.mat.uniforms.uColor.value.copy(srgbVec3(THREE, mixHex(beamHex, 0xffffff, l.L.white)));
+    }
+    muzzle.material.color.setHex(beamHex);
+    dotGlow.material.color.setHex(beamHex);
+    dotCore.material.color.setHex(mixHex(beamHex, 0xffffff, 0.8));
+    hitLight.color.setHex(lightHex);
+    muzzleLight.color.setHex(lightHex);
+    root.state.color = cfg.color;
+  }
+  applyColor();
+
+  /* ─── API ─────────────────────────────────────── */
+  root.setSource = (originObj, directionObj) => {
+    srcObj = originObj || null;
+    dirObj = directionObj || null;
+    return root;
+  };
+  root.setEnabled = (on) => {
+    root.state.on = !!on;
+    beamGroup.visible = !!on;
+    if (!on) {
+      dotGlow.visible = dotCore.visible = false;
+      hitLight.intensity = muzzleLight.intensity = 0;
+      root.state.hit = false;
+    }
+    return root;
+  };
+  root.setColor = (c) => { cfg.color = c; applyColor(); return root; };
+  root.setMode = (m) => { root.state.mode = m === 'pulse' ? 'pulse' : 'constant'; return root; };
+  root.setIntensity = (v) => { cfg.intensity = v; return root; };
+  root.setRadius = (v) => { cfg.radius = v; return root; };
+  root.setMaxDistance = (v) => { cfg.maxDistance = v; return root; };
+  root.setHaze = (v) => { cfg.haze = v; return root; };
+  root.getConfig = () => Object.assign({}, cfg);
+
+  // Импульсный режим: строб 8 Гц с коротким мягким спадом — как у реальных указок
+  function strobe(t) {
+    const ph = (t * 8) % 1;
+    if (ph < 0.30) return 1;
+    if (ph < 0.37) return 1 - (ph - 0.30) / 0.07;
+    return 0.015;
+  }
+
+  root.update = function (dt, colliders) {
+    time += dt;
+
+    // 1. Позиция и ориентация: луч всегда идёт из srcObj в сторону dirObj
+    if (srcObj) {
+      srcObj.getWorldPosition(_o);
+      if (dirObj) { dirObj.getWorldPosition(_t); _d.subVectors(_t, _o); }
+      else { srcObj.getWorldDirection(_d).negate(); }
+      if (_d.lengthSq() < 1e-12) _d.set(0, 0, -1);
+      _d.normalize();
+      root.position.copy(_o);
+      root.quaternion.setFromUnitVectors(FWD, _d);
+    }
+    if (!root.state.on) return;
+
+    // 2. Во что упёрся луч
+    let dist = cfg.maxDistance, hit = false;
+    if (colliders && colliders.length) {
+      raycaster.set(_o, _d);
+      raycaster.near = 0.0005;
+      raycaster.far = cfg.maxDistance;
+      const res = raycaster.intersectObjects(colliders, true);
+      if (res.length) { dist = res[0].distance; hit = true; }
+    }
+    root.state.hit = hit;
+    root.state.distance = dist;
+    if (hit) root.state.point.copy(_o).addScaledVector(_d, dist);
+
+    // 3. Яркость кадра: строб или лёгкое живое мерцание
+    const pulse = root.state.mode === 'pulse' ? strobe(time) : 0.97 + 0.03 * Math.sin(time * 21);
+    const gain = cfg.intensity * pulse;
+
+    // 4. Сам столб света
+    for (const l of layers) {
+      const r = cfg.radius * l.L.w;
+      l.mesh.scale.set(r, r, dist);
+      l.mat.uniforms.uTime.value = time;
+      l.mat.uniforms.uHit.value = hit ? 1 : 0;
+      l.mat.uniforms.uAlpha.value = l.L.alpha * gain * (l.L.air ? 0.35 + cfg.haze : 1);
+    }
+
+    // 5. Вспышка на линзе
+    const flare = 0.009 * (0.8 + 0.35 * gain);
+    muzzle.scale.set(flare, flare, 1);
+    muzzle.material.opacity = Math.min(1, 0.9 * gain);
+    muzzleLight.intensity = 0.0016 * gain;
+
+    // 6. Пятно на цели: чуть крупнее с дистанцией (расходимость пучка)
+    dotGlow.visible = dotCore.visible = hit;
+    if (hit) {
+      impact.position.set(0, 0, -(dist - 0.0015));
+      const sc = cfg.dotSize * (1 + dist * 0.35);
+      dotCore.scale.set(sc, sc, 1);
+      dotGlow.scale.set(sc * 4.6, sc * 4.6, 1);
+      dotCore.material.opacity = Math.min(1, 0.95 * gain);
+      dotGlow.material.opacity = Math.min(1, 0.55 * gain);
+      hitLight.intensity = 0.006 * gain;
+    } else {
+      hitLight.intensity = 0;
+    }
+  };
+
+  root.dispose = function () {
+    tube.dispose();
+    for (const l of layers) l.mat.dispose();
+    for (const s of [muzzle, dotGlow, dotCore]) s.material.dispose();
+    texSoft.dispose();
+    texHard.dispose();
+    return root;
+  };
+
+  return root;
+}
+window.createLaserBeam = createLaserBeam;
+
+/* ============= ПРОСМОТРЩИК ============= */
+const $ = (id) => document.getElementById(id);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171a);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.004, 40);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.autoRotateSpeed = 1.6;
+
+// Свет: key сверху-справа, холодный fill слева, контровой rim сзади, hemisphere
+const key = new THREE.DirectionalLight(0xffffff, 2.7);
+key.position.set(0.16, 0.26, 0.2);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.camera.near = 0.02;
+key.shadow.camera.far = 1.2;
+key.shadow.camera.left = -0.09; key.shadow.camera.right = 0.09;
+key.shadow.camera.top = 0.09;   key.shadow.camera.bottom = -0.09;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xa9c6ff, 0.6);  fill.position.set(-0.3, 0.12, 0.14); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0xffe3c4, 1.45); rim.position.set(-0.08, 0.16, -0.3); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0x9fb6d6, 0x101216, 0.55));
+
+const grid = new THREE.GridHelper(1, 100, 0x3d444d, 0x252a31);
+grid.material.transparent = true;
+grid.material.opacity = 0.55;
+scene.add(grid);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.35 }));
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.0004;
+floor.receiveShadow = true;
+scene.add(floor);
+
+/* ----- МИШЕНЬ: во что упирается луч ----- */
+const TARGET_Z = -0.38;
+function buildTarget() {
+  const W = 0.24, H = 0.12, BEAM_Y = 0.0341;           // высота оси излучателя над опорой
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#2b2f35';
+  g.fillRect(0, 0, 512, 256);
+  for (let i = 0; i < 12000; i++) {                    // матовая зернистая поверхность
+    const a = Math.random() * 0.05;
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,' + a + ')' : 'rgba(255,255,255,' + a + ')';
+    g.fillRect(Math.random() * 512, Math.random() * 256, 2, 2);
+  }
+  const cy = (1 - BEAM_Y / H) * 256;                   // центр марки ровно на оси луча
+  g.strokeStyle = 'rgba(255,255,255,.16)';
+  g.lineWidth = 2;
+  for (const r of [26, 52]) { g.beginPath(); g.arc(256, cy, r, 0, Math.PI * 2); g.stroke(); }
+  g.beginPath();
+  g.moveTo(186, cy); g.lineTo(222, cy); g.moveTo(290, cy); g.lineTo(326, cy);
+  g.moveTo(256, cy - 70); g.lineTo(256, cy - 34); g.moveTo(256, cy + 34); g.lineTo(256, cy + 68);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.09)';
+  g.lineWidth = 3;
+  g.strokeRect(7, 7, 498, 242);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+  const group = new THREE.Group();
+  group.name = 'target';
+  const plate = new THREE.Mesh(
+    new THREE.PlaneGeometry(W, H),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0, side: THREE.DoubleSide })
+  );
+  plate.position.set(0, H / 2, TARGET_Z);
+  plate.receiveShadow = true;
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(W, 0.005, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0x1b1e22, roughness: 0.8, metalness: 0.3 })
+  );
+  base.position.set(0, 0.0025, TARGET_Z - 0.017);
+  group.add(plate, base);
+  group.userData.plate = plate;
+  return group;
+}
+const target = buildTarget();
+scene.add(target);
+
+/* ----- МОДЕЛЬ И ЛУЧ ----- */
+const model = buildLaser(THREE);
+scene.add(model);
+model.updateMatrixWorld(true);
+
+const leverRest = model.parts.switchLever.rotation.x;   // исходный наклон тумблера
+const LEVER_TILT = { off: 0, constant: -0.2, pulse: -0.42 };
+
+const beam = createLaserBeam(THREE, { color: 'red', maxDistance: 2.4 });
+beam.setSource(model.nodes.emitter, model.nodes.beamDir);   // из линзы вдоль оси ствола
+scene.add(beam);
+
+const ui = { on: false, color: 'red', mode: 'constant', target: true, grid: true, spin: false, view: 'scene' };
+const colliders = () => (target.visible ? [target.userData.plate] : []);
+
+/* ----- КАМЕРА ----- */
+function setView(name) {
+  ui.view = name;
+  const box = new THREE.Box3().setFromObject(model);
+  if (name === 'scene' && target.visible) box.union(new THREE.Box3().setFromObject(target));
+  const c = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.02);
+  const dist = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov) / 2) * 1.1;
+  const dir = new THREE.Vector3(0.78, 0.4, 0.9).normalize();
+  camera.position.copy(c).addScaledVector(dir, dist);
+  camera.near = Math.max(dist / 900, 0.002);
+  camera.far = dist * 14 + 8;
+  camera.updateProjectionMatrix();
+  controls.target.copy(c);
+  controls.minDistance = radius * 0.25;
+  controls.maxDistance = dist * 9;
+  controls.update();
+  $('bView').textContent = name === 'scene' ? 'Крупный план' : 'Вся сцена';
+}
+
+/* ----- ЛОГИКА ЛАЗЕРА ----- */
+function syncLaser() {
+  const preset = LASER_PRESETS[ui.color];
+  beam.setColor(ui.color);
+  beam.setMode(ui.mode);
+  beam.setEnabled(ui.on);
+  model.setBeam(ui.on, preset.beam);                    // эмиссия линзы на самой модели
+  const b = $('bLaser');
+  b.classList.toggle('on', ui.on);
+  b.classList.toggle('green', ui.color === 'green');
+  b.setAttribute('aria-pressed', String(ui.on));
+  $('bLaserTx').textContent = ui.on ? 'Лазер включён' : 'Включить лазер';
+  $('cRed').classList.toggle('on', ui.color === 'red');
+  $('cGreen').classList.toggle('on', ui.color === 'green');
+  $('mConst').classList.toggle('on', ui.mode === 'constant');
+  $('mPulse').classList.toggle('on', ui.mode === 'pulse');
+}
+const toggleLaser = () => { ui.on = !ui.on; syncLaser(); };
+const setColor = (c) => { ui.color = c; syncLaser(); };
+const setMode  = (m) => { ui.mode = m; syncLaser(); };
+
+/* ----- ПАНЕЛЬ НАСТРОЕК ----- */
+const SLIDERS = [
+  { label: 'Яркость',   min: 0.3, max: 2, step: 0.01, val: 1,    fmt: (v) => Math.round(v * 100) + ' %',    apply: (v) => beam.setIntensity(v) },
+  { label: 'Толщина',   min: 0.4, max: 4, step: 0.05, val: 1.4,  fmt: (v) => v.toFixed(2) + ' мм',          apply: (v) => beam.setRadius(v / 2000) },
+  { label: 'Дальность', min: 0.1, max: 5, step: 0.05, val: 2.4,  fmt: (v) => (v * 1000).toFixed(0) + ' мм', apply: (v) => beam.setMaxDistance(v) },
+  { label: 'Дымка',     min: 0,   max: 1, step: 0.01, val: 0.55, fmt: (v) => Math.round(v * 100) + ' %',    apply: (v) => beam.setHaze(v) },
+];
+for (const s of SLIDERS) {
+  const wrap = document.createElement('div');
+  wrap.className = 'sl';
+  const lab = document.createElement('div');
+  lab.className = 'lab';
+  const name = document.createElement('span');
+  name.textContent = s.label;
+  const val = document.createElement('span');
+  val.textContent = s.fmt(s.val);
+  lab.append(name, val);
+  const inp = document.createElement('input');
+  inp.type = 'range';
+  inp.min = String(s.min); inp.max = String(s.max); inp.step = String(s.step); inp.value = String(s.val);
+  inp.setAttribute('aria-label', s.label);
+  inp.oninput = () => { const v = parseFloat(inp.value); val.textContent = s.fmt(v); s.apply(v); };
+  wrap.append(lab, inp);
+  $('sliders').appendChild(wrap);
+  s.apply(s.val);
+}
+
+$('bLaser').onclick  = toggleLaser;
+$('cRed').onclick    = () => setColor('red');
+$('cGreen').onclick  = () => setColor('green');
+$('mConst').onclick  = () => setMode('constant');
+$('mPulse').onclick  = () => setMode('pulse');
+$('bTarget').onclick = () => {
+  ui.target = !ui.target;
+  target.visible = ui.target;
+  $('bTarget').classList.toggle('on', ui.target);
+};
+$('bGrid').onclick = () => {
+  ui.grid = !ui.grid;
+  grid.visible = floor.visible = ui.grid;
+  $('bGrid').classList.toggle('on', ui.grid);
+};
+$('bSpin').onclick = () => {
+  ui.spin = !ui.spin;
+  controls.autoRotate = ui.spin;
+  $('bSpin').classList.toggle('on', ui.spin);
+};
+$('bView').onclick = () => setView(ui.view === 'scene' ? 'device' : 'scene');
+
+// Клавиши — по физическому коду, чтобы работало и на русской раскладке
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target && /^(input|textarea|select)$/i.test(e.target.tagName)) return;
+  if (e.code === 'KeyL')      { toggleLaser(); e.preventDefault(); }
+  else if (e.code === 'KeyC') { setColor(ui.color === 'red' ? 'green' : 'red'); }
+  else if (e.code === 'KeyP') { setMode(ui.mode === 'constant' ? 'pulse' : 'constant'); }
+});
+
+// Клик по тумблеру на корпусе тоже включает лазер
+const pickRay = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let downAt = null;
+function overSwitch(e) {
+  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  pickRay.setFromCamera(pointer, camera);
+  return pickRay.intersectObject(model.parts.switchLever, true).length > 0;
+}
+renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  const from = downAt; downAt = null;
+  if (!from || e.button !== 0) return;
+  if (Math.hypot(e.clientX - from[0], e.clientY - from[1]) > 6) return;   // это было вращение, а не клик
+  if (overSwitch(e)) toggleLaser();
+});
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (downAt) return;
+  renderer.domElement.style.cursor = overSwitch(e) ? 'pointer' : '';
+});
+
+/* ----- ЭКСПОРТ ----- */
+function saveBlob(blob, name) {                // скачивание через Blob, работает и по file://
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$('bShot').onclick = () => {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((b) => saveBlob(b, 'laser_designator.png'), 'image/png');
+};
+$('bGlb').onclick = () => {
+  new GLTFExporter().parse(model, (res) => {
+    saveBlob(new Blob([res], { type: 'model/gltf-binary' }), 'laser_designator.glb');
+  }, (err) => { console.error(err); alert('Не удалось экспортировать GLB'); }, { binary: true });
+};
+
+/* ----- СТАТИСТИКА ----- */
+const check = validate(model);
+const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+let fps = 0, frames = 0, fpsT = 0;
+function updateStats() {
+  const p = LASER_PRESETS[ui.color];
+  const st = beam.state;
+  const hex = '#' + p.beam.toString(16).padStart(6, '0');
+  const row = (k, v) => '<div class="r"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+  $('stats').innerHTML =
+    row('лазер', ui.on
+      ? '<b style="color:' + hex + '">ВКЛ, ' + (ui.mode === 'pulse' ? 'импульс' : 'постоянно') + '</b>'
+      : 'выкл') +
+    row('цвет', '<span style="color:' + hex + '">' + p.label + '</span>') +
+    row('до цели', ui.on ? (st.hit ? (st.distance * 1000).toFixed(0) + ' мм' : 'нет цели') : '—') +
+    '<div class="sep"></div>' +
+    row('треугольники', check.tris) +
+    row('меши', check.meshes) +
+    row('draw calls', renderer.info.render.calls) +
+    row('габариты, мм', (size.x * 1000).toFixed(1) + ' x ' + (size.y * 1000).toFixed(1) + ' x ' + (size.z * 1000).toFixed(1)) +
+    row('FPS', fps);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ----- ЦИКЛ ----- */
+let prev = performance.now(), statT = 0;
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - prev) / 1000);
+  prev = now;
+
+  // тумблер сам приходит в нужное положение: выкл / постоянно / импульс
+  const lever = model.parts.switchLever;
+  const want = leverRest + LEVER_TILT[ui.on ? ui.mode : 'off'];
+  lever.rotation.x += (want - lever.rotation.x) * Math.min(1, dt * 14);
+
+  controls.update();
+  model.updateMatrixWorld(true);
+  beam.update(dt, colliders());
+  renderer.render(scene, camera);
+
+  frames++; fpsT += dt; statT += dt;
+  if (fpsT >= 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
+  if (statT >= 0.2) { statT = 0; updateStats(); }
+}
+
+syncLaser();
+setView('scene');
+updateStats();
+for (const id of ['ui', 'stats', 'hint']) $(id).hidden = false;   // панели — только после успешной загрузки three.js
+$('boot').style.display = 'none';
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

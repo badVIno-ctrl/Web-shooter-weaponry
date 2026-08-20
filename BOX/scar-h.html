@@ -1,0 +1,2295 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>SCAR-H · 7,62×51 NATO</title>
+<style>
+  :root{
+    --bg:#141414; --surface:rgba(32,32,34,.92); --surface2:rgba(255,255,255,.055);
+    --bd:rgba(255,255,255,.13); --bd2:rgba(255,255,255,.22);
+    --tx:#f5f5f4; --tx2:rgba(245,245,244,.62); --tx3:rgba(245,245,244,.38);
+    --acc:#5e9fe8; --warn:#e97366; --ok:#8bc48a;
+    --r:8px; --f:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font-family:var(--f);overflow:hidden;
+    -webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;touch-action:none}
+  canvas{display:block;position:fixed;inset:0}
+  .ui{position:fixed;z-index:5}
+  .panel{background:var(--surface);border:1px solid var(--bd);border-radius:var(--r);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 8px 28px rgba(0,0,0,.45)}
+
+  /* шапка */
+  #top{top:14px;left:14px;padding:11px 14px;min-width:214px}
+  #top h1{margin:0;font-size:13.5px;font-weight:650;letter-spacing:.2px}
+  #top .sub{margin-top:3px;font-size:11px;color:var(--tx2);line-height:1.45}
+  #top .spec{margin-top:8px;display:grid;grid-template-columns:auto auto;gap:2px 12px;font-size:10.5px;color:var(--tx3)}
+  #top .spec b{color:var(--tx2);font-weight:550}
+
+  /* панель модулей */
+  #mods{top:14px;right:14px;width:224px;padding:10px}
+  .mrow{margin-bottom:9px}
+  .mrow:last-child{margin-bottom:0}
+  .mlab{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.7px;margin:0 2px 5px}
+  .seg{display:flex;gap:4px}
+  .seg button{flex:1;padding:6px 4px;font-size:10.5px;font-family:var(--f);color:var(--tx2);
+    background:var(--surface2);border:1px solid transparent;border-radius:6px;cursor:pointer;transition:.13s;line-height:1.2}
+  .seg button:hover{background:rgba(255,255,255,.1);color:var(--tx)}
+  .seg button.on{background:rgba(94,159,232,.19);border-color:rgba(94,159,232,.55);color:#cfe2fa}
+
+  /* нижняя панель */
+  #bottom{left:50%;transform:translateX(-50%);bottom:14px;display:flex;gap:8px;align-items:stretch}
+  #ammo{padding:9px 14px;display:flex;align-items:center;gap:11px;min-width:150px}
+  #ammo .n{font-size:24px;font-weight:700;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1}
+  #ammo .n small{font-size:13px;color:var(--tx3);font-weight:600}
+  #ammo .st{font-size:9.5px;color:var(--tx3);text-transform:uppercase;letter-spacing:.8px;line-height:1.5}
+  #ammo .st b{display:block;color:var(--tx2);font-size:10.5px;font-weight:600}
+  #ammo.low .n{color:var(--warn)}
+  #btns{display:flex;gap:6px;padding:8px}
+  #btns button{padding:9px 13px;font-size:11.5px;font-weight:550;font-family:var(--f);color:var(--tx);
+    background:var(--surface2);border:1px solid var(--bd);border-radius:7px;cursor:pointer;transition:.13s;white-space:nowrap}
+  #btns button:hover{background:rgba(255,255,255,.12);border-color:var(--bd2)}
+  #btns button:active{transform:translateY(1px)}
+  #btns button.on{background:rgba(94,159,232,.2);border-color:rgba(94,159,232,.55);color:#cfe2fa}
+  #btns button.fire{background:rgba(233,115,102,.16);border-color:rgba(233,115,102,.4)}
+  #btns button:disabled{opacity:.4;cursor:default}
+
+  /* подсказки */
+  #keys{bottom:14px;left:14px;padding:9px 11px;font-size:10.5px;color:var(--tx3);line-height:1.75;max-width:190px}
+  #keys kbd{display:inline-block;min-width:15px;text-align:center;padding:0 4px;margin-right:5px;
+    background:rgba(255,255,255,.08);border:1px solid var(--bd);border-radius:4px;
+    font:inherit;font-size:9.5px;color:var(--tx2)}
+  #hint{bottom:14px;right:14px;padding:8px 11px;font-size:10.5px;color:var(--tx3);max-width:200px;line-height:1.5}
+
+  /* прицельная сетка */
+  #reticle{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;transition:opacity .12s}
+  #reticle.on{opacity:1}
+  #vignette{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .18s;
+    background:radial-gradient(circle at 50% 50%, transparent 26%, rgba(0,0,0,.55) 46%, #000 62%)}
+  #vignette.on{opacity:1}
+
+  /* подсветка детали под курсором */
+  #tip{position:fixed;z-index:6;pointer-events:none;padding:4px 8px;font-size:11px;color:var(--tx);
+    background:rgba(20,20,22,.94);border:1px solid var(--bd2);border-radius:6px;opacity:0;transition:opacity .1s;white-space:nowrap}
+  #tip.on{opacity:1}
+
+  #err{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9;display:none;max-width:80vw;
+    padding:9px 13px;font-size:11.5px;color:#ffd9d4;background:rgba(120,40,34,.95);
+    border:1px solid rgba(255,140,128,.5);border-radius:7px;white-space:pre-wrap}
+  #load{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);font-size:12px;color:var(--tx3);transition:opacity .4s}
+  #load.off{opacity:0;pointer-events:none}
+  @media (max-width:760px){
+    #keys,#hint,#top .spec{display:none}
+    #mods{width:186px;top:auto;bottom:70px;right:8px;padding:8px}
+    #top{padding:8px 10px}
+    #bottom{bottom:8px;gap:6px}
+    #btns button{padding:8px 9px;font-size:10.5px}
+  }
+</style>
+</head>
+<body>
+<div id="load">Загрузка модели…</div>
+<div id="vignette"></div>
+<canvas id="ret-c" hidden></canvas>
+<svg id="reticle"></svg>
+
+<div id="top" class="ui panel">
+  <h1>FN SCAR-H · Mk 17</h1>
+  <div class="sub">7,62×51 NATO · ствол 400 мм</div>
+  <div class="spec">
+    <span>Масса</span><b>3,58 кг</b>
+    <span>Длина</span><b>997 мм</b>
+    <span>Темп</span><b>600 выстр/мин</b>
+    <span>Магазин</span><b>20 патронов</b>
+  </div>
+</div>
+
+<div id="mods" class="ui panel"></div>
+
+<div id="bottom" class="ui">
+  <div id="ammo" class="panel">
+    <div class="n"><span id="a-cur">20</span><small>/20</small></div>
+    <div class="st"><b id="a-mode">АВТО</b><span id="a-state">готов</span></div>
+  </div>
+  <div id="btns" class="panel">
+    <button id="b-fire" class="fire">ОГОНЬ</button>
+    <button id="b-rel">ПЕРЕЗАРЯДКА</button>
+    <button id="b-ads">ПРИЦЕЛ</button>
+    <button id="b-cut">РАЗРЕЗ</button>
+    <button id="b-snd">ЗВУК</button>
+  </div>
+</div>
+
+<div id="keys" class="ui panel">
+  <div><kbd>␣</kbd>огонь</div>
+  <div><kbd>R</kbd>перезарядка</div>
+  <div><kbd>M</kbd>снять/вставить магазин</div>
+  <div><kbd>V</kbd>режим огня</div>
+  <div><kbd>F</kbd>приклад</div>
+  <div><kbd>B</kbd>сошки</div>
+  <div><kbd>C</kbd>затвор</div>
+  <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>прицелы</div>
+  <div><kbd>ПКМ</kbd>прицеливание</div>
+</div>
+<div id="hint" class="ui panel">Клик по детали — снять или поставить модуль. Колёсико — приближение, перетаскивание — поворот.</div>
+<div id="tip"></div>
+<div id="err"></div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}
+</script>
+<script type="module">
+// ==== МОДЕЛЬ: НАЧАЛО ====
+/**
+ * FN SCAR-H (Mk 17 STD), калибр 7,62x51 NATO — процедурная модель для three.js
+ *
+ * Система координат:  X — вправо, Y — вверх, Z — НАЗАД (ствол смотрит в −Z).
+ * Ось канала ствола:  X = 0, Y = 0 (это же — начало координат модели).
+ * Все размеры записаны в МИЛЛИМЕТРАХ через mm(), на выходе — метры.
+ *
+ * Реальные габариты, которым соответствует модель:
+ *   общая длина 1000 мм, ствол 400 мм, ширина ресивера 54 мм,
+ *   магазин на 20 патронов 7,62x51 (габарит патрона 71,1 мм — он ФИЗИЧЕСКИ
+ *   помещается в магазин глубиной 78 мм и в шахту длиной 90 мм).
+ */
+function buildSCAR(THREE, opts = {}) {
+  const mm = v => v / 1000;
+  const DEG = Math.PI / 180;
+  const V2 = (x, y) => new THREE.Vector2(x, y);
+  const CS = 10;                      // сегментов на кривую в профилях
+
+  // =====================================================================
+  // 0. МАТЕРИАЛЫ
+  // =====================================================================
+  const std = o => new THREE.MeshStandardMaterial(o);
+  const M = {
+    fde:      std({ color: 0x8c7e5f, roughness: 0.63, metalness: 0.18 }),  // корпус FDE
+    fdeDark:  std({ color: 0x6a6046, roughness: 0.72, metalness: 0.13 }),  // тень/вставки
+    fdeLite:  std({ color: 0x9d8f6c, roughness: 0.57, metalness: 0.20 }),  // потёртые грани
+    polymer:  std({ color: 0x776d55, roughness: 0.82, metalness: 0.04 }),  // полимер нижнего
+    black:    std({ color: 0x25272b, roughness: 0.46, metalness: 0.55 }),
+    blackMat: std({ color: 0x1b1d20, roughness: 0.74, metalness: 0.25 }),
+    steel:    std({ color: 0x41474e, roughness: 0.30, metalness: 0.92 }),
+    steelDark:std({ color: 0x191c1f, roughness: 0.36, metalness: 0.88 }),
+    phos:     std({ color: 0x2e3134, roughness: 0.55, metalness: 0.80 }),  // фосфатирование
+    brass:    std({ color: 0xbf9a4c, roughness: 0.25, metalness: 0.95 }),
+    copper:   std({ color: 0xa4703f, roughness: 0.33, metalness: 0.90 }),
+    rubber:   std({ color: 0x141518, roughness: 0.95, metalness: 0.02 }),
+    bore:     std({ color: 0x0b0c0d, roughness: 0.42, metalness: 0.70, side: THREE.DoubleSide }),
+    glass:    std({ color: 0x2b3f52, roughness: 0.08, metalness: 0.30,
+                    transparent: true, opacity: 0.38 }),
+    dot:      new THREE.MeshBasicMaterial({ color: 0xff2a12, transparent: true, opacity: 0.95 })
+  };
+  M.glass.envMapIntensity = 2.2;
+
+  const g = new THREE.Group();
+  g.name = 'FN SCAR-H Mk17';
+
+  // =====================================================================
+  // 1. ХЕЛПЕРЫ ПОСТРОЕНИЯ
+  // =====================================================================
+  const BEV = { bevelEnabled: true, bevelThickness: mm(0.35), bevelSize: mm(0.35), bevelSegments: 2 };
+
+  // скруглённый прямоугольник в существующий Shape/Path
+  function rr(p, cx, cy, w, h, r) {
+    r = Math.min(r, Math.min(w, h) / 2);
+    const x0 = cx - w / 2, y0 = cy - h / 2, x1 = cx + w / 2, y1 = cy + h / 2;
+    p.moveTo(x0 + r, y0);
+    p.lineTo(x1 - r, y0); p.quadraticCurveTo(x1, y0, x1, y0 + r);
+    p.lineTo(x1, y1 - r); p.quadraticCurveTo(x1, y1, x1 - r, y1);
+    p.lineTo(x0 + r, y1); p.quadraticCurveTo(x0, y1, x0, y1 - r);
+    p.lineTo(x0, y0 + r); p.quadraticCurveTo(x0, y0, x0 + r, y0);
+    return p;
+  }
+  const rrShape = (cx, cy, w, h, r) => rr(new THREE.Shape(), cx, cy, w, h, r);
+  const rrPath  = (cx, cy, w, h, r) => rr(new THREE.Path(),  cx, cy, w, h, r);
+  const circPath = (cx, cy, r) => { const p = new THREE.Path(); p.absarc(cx, cy, r, 0, Math.PI * 2, true); return p; };
+  const circShape = (cx, cy, r) => { const s = new THREE.Shape(); s.absarc(cx, cy, r, 0, Math.PI * 2, false); return s; };
+
+  // многоугольник со скруглением углов: pts = [[x,y],...], r — число или массив
+  function poly(pts, r) {
+    const s = new THREE.Shape(), n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n];
+      const ri = Array.isArray(r) ? r[i] : r;
+      const v1x = p1[0] - p0[0], v1y = p1[1] - p0[1];
+      const v2x = p2[0] - p1[0], v2y = p2[1] - p1[1];
+      const l1 = Math.hypot(v1x, v1y) || 1e-9, l2 = Math.hypot(v2x, v2y) || 1e-9;
+      const k = Math.max(0, Math.min(ri, l1 * 0.49, l2 * 0.49));
+      const ax = p1[0] - v1x / l1 * k, ay = p1[1] - v1y / l1 * k;
+      const bx = p1[0] + v2x / l2 * k, by = p1[1] + v2y / l2 * k;
+      if (i === 0) s.moveTo(ax, ay); else s.lineTo(ax, ay);
+      if (k > 1e-6) s.quadraticCurveTo(p1[0], p1[1], bx, by);
+    }
+    s.closePath();
+    return s;
+  }
+
+  // выдавливание вдоль +Z: профиль (X,Y), от z0 до z0+d
+  function exZ(shape, d, mat, z0, cs) {
+    const geo = new THREE.ExtrudeGeometry(shape, Object.assign({ depth: d, curveSegments: cs || CS }, BEV));
+    geo.translate(0, 0, z0);
+    return new THREE.Mesh(geo, mat);
+  }
+  // выдавливание вдоль +X: профиль (Z,Y), от x0 до x0+w
+  function exX(shape, w, mat, x0, cs) {
+    const geo = new THREE.ExtrudeGeometry(shape, Object.assign({ depth: w, curveSegments: cs || CS }, BEV));
+    geo.rotateY(-Math.PI / 2);
+    geo.translate(x0 + w, 0, 0);
+    return new THREE.Mesh(geo, mat);
+  }
+  // выдавливание вдоль +Y: профиль (X,Z), от y0 до y0+h
+  function exY(shape, h, mat, y0, cs) {
+    const geo = new THREE.ExtrudeGeometry(shape, Object.assign({ depth: h, curveSegments: cs || CS }, BEV));
+    geo.rotateX(Math.PI / 2);
+    geo.translate(0, y0 + h, 0);
+    return new THREE.Mesh(geo, mat);
+  }
+
+  const cylY = (rt, rb, h, mat, seg, open) =>
+    new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 28, 1, !!open), mat);
+  function cylZ(rt, rb, h, mat, seg, open) { const m = cylY(rt, rb, h, mat, seg, open); m.rotation.x = Math.PI / 2; return m; }
+  function cylX(rt, rb, h, mat, seg, open) { const m = cylY(rt, rb, h, mat, seg, open); m.rotation.z = Math.PI / 2; return m; }
+  const box = (w, h, d, mat) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const torus = (r, tube, mat, seg, arc) =>
+    new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, seg || 24, arc === undefined ? Math.PI * 2 : arc), mat);
+  const sphere = (r, mat, seg) => new THREE.Mesh(new THREE.SphereGeometry(r, seg || 20, (seg || 20) / 2), mat);
+
+  // тело вращения; ось +Y профиля смотрит НАЗАД (+Z)
+  function latheB(pts, mat, seg) {
+    const m = new THREE.Mesh(new THREE.LatheGeometry(pts, seg || 28), mat);
+    m.rotation.x = Math.PI / 2; return m;
+  }
+  // тело вращения; ось +Y профиля смотрит ВПЕРЁД (−Z)
+  function latheF(pts, mat, seg) {
+    const m = new THREE.Mesh(new THREE.LatheGeometry(pts, seg || 28), mat);
+    m.rotation.x = -Math.PI / 2; return m;
+  }
+
+  function put(parent, mesh, x, y, z) {
+    mesh.position.set(x || 0, y || 0, z || 0);
+    parent.add(mesh);
+    return mesh;
+  }
+  function node(x, y, z, rx, ry, rz) {
+    const o = new THREE.Object3D();
+    o.position.set(x || 0, y || 0, z || 0);
+    o.rotation.set(rx || 0, ry || 0, rz || 0);
+    g.add(o);
+    return o;
+  }
+  // головка винта с шлицем, ось X
+  function screwX(r, side) {
+    const s = new THREE.Group();
+    const head = cylX(r, r, mm(1.8), M.steelDark, 18);
+    s.add(head);
+    const sl = exX(rrShape(0, 0, r * 1.8, mm(0.7), mm(0.3)), mm(0.6), M.black, side > 0 ? mm(0.9) : mm(-1.5), 3);
+    s.add(sl);
+    return s;
+  }
+  // кольцо насечки вокруг оси axis
+  function knurl(parent, n, rad, len, axis, px, py, pz, mat) {
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2;
+      const rib = exZ(rrShape(0, 0, mm(1.2), mm(1.2), mm(0.4)), len, mat, -len / 2, 3);
+      if (axis === 'z') rib.position.set(Math.cos(a) * rad, Math.sin(a) * rad, 0);
+      else if (axis === 'x') { rib.rotation.y = Math.PI / 2; rib.position.set(0, Math.sin(a) * rad, Math.cos(a) * rad); }
+      else { rib.rotation.x = Math.PI / 2; rib.position.set(Math.cos(a) * rad, 0, Math.sin(a) * rad); }
+      rib.position.x += px; rib.position.y += py; rib.position.z += pz;
+      parent.add(rib);
+    }
+  }
+
+  // =====================================================================
+  // 2. ГЛАВНЫЕ РАЗМЕРЫ
+  // =====================================================================
+  const REC_HW   = mm(27);          // полуширина ресивера (ширина 54 мм)
+  const REC_TOP  = mm(30);          // верх ресивера (низ планки)
+  const REC_BOT  = mm(-30);         // низ ресивера
+  const REC_F    = mm(-200);        // перед ресивера
+  const REC_B    = mm(42);          // зад ресивера (ось шарнира приклада)
+  const RAIL_Y   = REC_TOP;         // основание планки
+  const RAIL_TOP = RAIL_Y + mm(8.5);// верх гребня планки = 38.5 мм над осью ствола
+  const RAIL_F   = mm(-452), RAIL_B = mm(38);
+  const HG_F     = mm(-450), HG_B = mm(-198);   // цевьё
+  const BREECH   = mm(-180);        // казённый срез ствола
+  const MUZZLE_Z = mm(-580);        // дульный срез ствола (ствол 400 мм)
+  const MW_F     = mm(-182), MW_B = mm(-92);    // шахта магазина, 90 мм
+  const SIGHT_Y  = mm(50);          // единая линия прицеливания (механика)
+
+  // =====================================================================
+  // 3. СТВОЛ, ГАЗОВЫЙ УЗЕЛ  (parts.barrel)
+  // =====================================================================
+  const barrel = new THREE.Group(); g.add(barrel);
+  {
+    // казённая часть / ствольная коробка ствола: Ø30 → Ø24
+    put(barrel, latheF([
+      V2(mm(6), 0), V2(mm(15), 0), V2(mm(15), mm(46)), V2(mm(13.4), mm(52)),
+      V2(mm(12), mm(60)), V2(mm(12), mm(215)), V2(mm(10.6), mm(222))
+    ], M.phos, 32), 0, 0, BREECH);
+
+    // средняя часть Ø21 до газблока
+    put(barrel, latheF([
+      V2(mm(6), 0), V2(mm(10.6), 0), V2(mm(10.6), mm(12)), V2(mm(9.2), mm(18)), V2(mm(9.2), mm(30))
+    ], M.phos, 32), 0, 0, BREECH - mm(222));
+
+    // тонкая часть Ø17 после газблока до дульного среза, ка��ал СКВОЗНОЙ
+    const zGasEnd = BREECH - mm(252);
+    put(barrel, latheF([
+      V2(mm(3.91), 0), V2(mm(8.5), 0), V2(mm(8.5), mm(124)), V2(mm(9.6), mm(128)),
+      V2(mm(9.6), mm(146)), V2(mm(8.6), mm(148)), V2(mm(3.91), mm(148))
+    ], M.phos, 32), 0, 0, zGasEnd);
+    // тёмный канал ствола (виден в дульный срез)
+    put(barrel, cylZ(mm(3.91), mm(3.91), mm(400), M.bore, 24, true), 0, 0, BREECH - mm(200));
+
+    // ГАЗОВЫЙ БЛОК с двухпозиционным регулятором: Z −400…−432
+    const gb = poly([[mm(-15), mm(-14)], [mm(15), mm(-14)], [mm(15), mm(9)], [mm(9), mm(20)],
+                     [mm(-9), mm(20)], [mm(-15), mm(9)]], mm(2.5));
+    gb.holes.push(circPath(0, 0, mm(9.4)));
+    put(barrel, exZ(gb, mm(32), M.phos, BREECH - mm(252), 6), 0, 0, 0);
+    // регулятор-барашек снизу-спереди
+    put(barrel, latheF([V2(0, 0), V2(mm(5.4), 0), V2(mm(7.6), mm(2.4)), V2(mm(7.6), mm(9)),
+                        V2(mm(5.6), mm(10.6)), V2(0, mm(10.6))], M.steelDark, 24),
+        0, mm(-11), BREECH - mm(258));
+    knurl(barrel, 12, mm(7.2), mm(6), 'z', 0, mm(-11), BREECH - mm(263), M.steelDark);
+    // ГАЗОВАЯ ТРУБКА Ø13 над стволом от газблока в ресивер
+    put(barrel, cylZ(mm(6.5), mm(6.5), mm(212), M.phos, 20), 0, mm(19), BREECH - mm(144));
+    put(barrel, latheB([V2(mm(6.5), 0), V2(mm(9), 0), V2(mm(9), mm(7)), V2(mm(6.5), mm(8))], M.phos, 20),
+        0, mm(19), BREECH - mm(250));
+
+    // два рычага-фиксатора быстросъёмного ствола (реальная деталь Mk17)
+    for (const side of [-1, 1]) {
+      const lv = poly([[mm(-24), mm(0)], [mm(20), mm(0)], [mm(24), mm(6)], [mm(-24), mm(6)]], mm(1.6));
+      put(barrel, exX(lv, mm(7), M.steelDark, side > 0 ? mm(20) : mm(-27), 4), 0, mm(26), BREECH - mm(30));
+      // болт крепления
+      const bt = latheB([V2(0, 0), V2(mm(4.6), 0), V2(mm(4.6), mm(2.6)), V2(mm(3.4), mm(3.4)), V2(0, mm(3.4))], M.steelDark, 18);
+      bt.rotation.x = -Math.PI / 2;
+      put(barrel, bt, side * mm(23.5), mm(32), BREECH - mm(48));
+    }
+  }
+
+  // =====================================================================
+  // 4. ДУЛЬНЫЕ МОДУЛИ (сменные): пламегаситель / глушитель / голая резьба
+  // =====================================================================
+  const muzzleMods = {};
+  {
+    // --- пламегаситель-клетка, 62 мм, 4 сквозные прорези ---
+    const fh = new THREE.Group();
+    const R1 = mm(11), R0 = mm(8.2);
+    const ringArc = (a0, a1) => {
+      const s = new THREE.Shape();
+      s.absarc(0, 0, R1, a0, a1, false);
+      s.absarc(0, 0, R0, a1, a0, true);
+      return s;
+    };
+    const half = mm(2.6) / mm(9.6);                    // полуугол прорези 5.2 мм
+    const cen = [Math.PI / 2, Math.PI * 0.1, -Math.PI * 0.3, Math.PI * 0.9];
+    cen.sort((a, b) => a - b);
+    for (let i = 0; i < cen.length; i++) {
+      const a0 = cen[i] + half;
+      const a1 = (i < cen.length - 1 ? cen[i + 1] : cen[0] + Math.PI * 2) - half;
+      put(fh, exZ(ringArc(a0, a1), mm(38), M.blackMat, MUZZLE_Z - mm(52), Math.max(4, Math.round((a1 - a0) * 6))), 0, 0, 0);
+    }
+    // передняя корона и задняя гайка
+    put(fh, latheF([V2(R0, 0), V2(R1, mm(1.4)), V2(R1, mm(9)), V2(mm(9.4), mm(10)), V2(mm(4.6), mm(10))], M.blackMat, 32),
+        0, 0, MUZZLE_Z - mm(52));
+    put(fh, latheB([V2(mm(8.2), 0), V2(mm(11.6), mm(1.2)), V2(mm(11.6), mm(12)), V2(mm(10.4), mm(14))], M.blackMat, 32),
+        0, 0, MUZZLE_Z - mm(14));
+    knurl(fh, 16, mm(11), mm(9), 'z', 0, 0, MUZZLE_Z - mm(7), M.steelDark);
+    fh.userData = { tip: MUZZLE_Z - mm(62), flash: 1.0, sound: 'open', name: 'Пламегаситель' };
+    muzzleMods.flash = fh;
+
+    // --- глушитель Ø41 x 205, надевается поверх пламегасителя ---
+    const sup = new THREE.Group();
+    put(sup, latheF([
+      V2(mm(11.8), 0), V2(mm(15), mm(4)), V2(mm(20.5), mm(16)), V2(mm(20.5), mm(178)),
+      V2(mm(19.2), mm(186)), V2(mm(19.2), mm(196)), V2(mm(12), mm(200)), V2(mm(4.6), mm(200))
+    ], M.steelDark, 40), 0, 0, MUZZLE_Z + mm(8));
+    // рёбра-кольца по корпусу
+    for (let i = 0; i < 7; i++)
+      put(sup, latheF([V2(mm(20.6), 0), V2(mm(21.6), mm(1.2)), V2(mm(21.6), mm(5)), V2(mm(20.6), mm(6.2))], M.blackMat, 32),
+          0, 0, MUZZLE_Z - mm(24) - i * mm(22));
+    knurl(sup, 22, mm(20.4), mm(12), 'z', 0, 0, MUZZLE_Z - mm(16), M.phos);
+    sup.userData = { tip: MUZZLE_Z - mm(192), flash: 0.22, sound: 'suppressed', name: 'Глушитель' };
+    muzzleMods.suppressor = sup;
+
+    // --- голый ствол с резьбой 5/8-24 ---
+    const bare = new THREE.Group();
+    for (let i = 0; i < 17; i++)
+      put(bare, latheF([V2(mm(7.4), 0), V2(mm(8.3), mm(0.6)), V2(mm(7.4), mm(1.2))], M.steel, 24),
+          0, 0, MUZZLE_Z - mm(1) - i * mm(1.2));
+    bare.userData = { tip: MUZZLE_Z, flash: 1.35, sound: 'bare', name: 'Без насадки' };
+    muzzleMods.none = bare;
+
+    for (const k in muzzleMods) { muzzleMods[k].visible = (k === 'flash'); g.add(muzzleMods[k]); }
+  }
+
+  // =====================================================================
+  // 5. ПЛАНКА ПИКАТИННИ (MIL-STD-1913): шаг 10.16, паз 5.35
+  // =====================================================================
+  function railTooth(hw, yBase, hTooth, len, mat, z0) {
+    // трапеция со скосами 45°, профиль (X,Y)
+    const s = poly([
+      [-hw, yBase], [hw, yBase], [hw - hTooth * 0.55, yBase + hTooth], [-hw + hTooth * 0.55, yBase + hTooth]
+    ], mm(0.5));
+    return exZ(s, len, mat, z0, 3);
+  }
+  function buildRail(zF, zB, mat, yBase, hw) {
+    hw = hw || mm(10.6);
+    yBase = (yBase === undefined) ? RAIL_Y : yBase;
+    const grp = new THREE.Group();
+    // основание планки со скосами под кронштейны
+    const base = poly([
+      [-hw, yBase], [hw, yBase], [hw, yBase + mm(2.2)], [hw - mm(2.4), yBase + mm(4.2)],
+      [-hw + mm(2.4), yBase + mm(4.2)], [-hw, yBase + mm(2.2)]
+    ], mm(0.4));
+    grp.add(exZ(base, zB - zF, mat, zF, 3));
+    const pitch = mm(10.16), tooth = mm(4.81);
+    const n = Math.floor((zB - zF) / pitch);
+    for (let i = 0; i < n; i++) {
+      const z = zB - pitch * (i + 1);
+      grp.add(railTooth(hw, yBase + mm(4.2), mm(4.3), tooth, mat, z));
+    }
+    return grp;
+  }
+
+  // =====================================================================
+  // 6. ВЕРХНИЙ РЕСИВЕР — ОБОЛОЧКА (окно выброса и паз рукоятки СКВОЗНЫЕ)
+  // =====================================================================
+  const upper = new THREE.Group(); g.add(upper);
+  const EJ_Z = mm(-118), EJ_Y = mm(6);          // центр окна выброса
+  const CH_Y = mm(14), CH_REST = mm(-158), CH_TRAVEL = mm(110);
+  {
+    const WALL = mm(4.5);
+    // ---- боковой профиль стенок (Z,Y) ----
+    const sideOuter = () => poly([
+      [REC_F, mm(-26)], [REC_B, mm(-26)], [REC_B, mm(26)], [REC_F, mm(26)]
+    ], mm(3));
+
+    // ПРАВАЯ стенка: окно выброса 76x34 + отбойник
+    const sr = sideOuter();
+    sr.holes.push(rrPath(EJ_Z, EJ_Y, mm(76), mm(34), mm(7)));
+    upper.add(exX(sr, WALL, M.fde, REC_HW - WALL));
+    // отбортовка окна
+    const lip = rrShape(EJ_Z, EJ_Y, mm(84), mm(42), mm(9));
+    lip.holes.push(rrPath(EJ_Z, EJ_Y, mm(76), mm(34), mm(7)));
+    upper.add(exX(lip, mm(1.6), M.fdeDark, REC_HW - WALL - mm(1.6)));
+    // латунеотбойник за окном
+    const defl = poly([[mm(-72), mm(-6)], [mm(-56), mm(-2)], [mm(-56), mm(22)], [mm(-74), mm(22)]], mm(2));
+    upper.add(exX(defl, mm(9), M.fde, REC_HW - mm(2)));
+
+    // ЛЕВАЯ стенка: сквозной паз рукоятки взведения
+    const sl = sideOuter();
+    sl.holes.push(rrPath(CH_REST + CH_TRAVEL / 2, CH_Y, CH_TRAVEL + mm(26), mm(13), mm(6)));
+    upper.add(exX(sl, WALL, M.fde, -REC_HW));
+
+    // ---- верхняя и нижняя плиты ----
+    const topShape = rrShape(0, (REC_F + REC_B) / 2, mm(54), REC_B - REC_F, mm(4));
+    upper.add(exY(topShape, mm(5), M.fde, REC_TOP - mm(5)));
+    const botShape = rrShape(0, (REC_F + REC_B) / 2 + mm(6), mm(50), REC_B - REC_F - mm(12), mm(4));
+    // окно подачи из магазина (иначе патрон упирался бы в дно ствольной коробки)
+    botShape.holes.push(rrPath(0, mm(-137), mm(27), mm(84), mm(4)));
+    upper.add(exY(botShape, mm(4.5), M.fde, mm(-30)));
+
+    // ---- скосы верхних рёбер (характерный силуэт SCAR) ----
+    for (const side of [-1, 1]) {
+      const ch = poly([[side * mm(27), mm(19)], [side * mm(27), mm(26)], [side * mm(19), mm(26)]], mm(0.8));
+      upper.add(exZ(ch, REC_B - REC_F, M.fdeLite, REC_F, 3));
+    }
+
+    // ---- передний блок ствольной коробки со сквозным отверстием под ствол ----
+    const trun = poly([[-mm(27), mm(-26)], [mm(27), mm(-26)], [mm(27), mm(26)], [-mm(27), mm(26)]], mm(3));
+    trun.holes.push(circPath(0, 0, mm(15.4)));
+    upper.add(exZ(trun, mm(30), M.fde, REC_F, 6));
+    // ---- задний торец + узел шарнира приклада ----
+    const rear = poly([[-mm(27), mm(-26)], [mm(27), mm(-26)], [mm(27), mm(26)], [-mm(27), mm(26)]], mm(3));
+    upper.add(exZ(rear, mm(12), M.fde, REC_B - mm(12), 6));
+
+    // ---- монолитная верхняя планка: от цевья до затыльника ресивера ----
+    upper.add(buildRail(RAIL_F, RAIL_B, M.fdeDark));
+
+    // ---- служебные детали на ресивере ----
+    for (const side of [-1, 1]) {
+      for (const z of [mm(20), mm(-60), mm(-170)])
+        put(upper, screwX(mm(3.2), side), side * (REC_HW - mm(0.4)), mm(-16), z);
+      // антабка QD
+      const qd = latheF([V2(mm(2.8), 0), V2(mm(7.4), 0), V2(mm(7.4), mm(4)), V2(mm(2.8), mm(4))], M.black, 20);
+      qd.rotation.set(0, side > 0 ? -Math.PI / 2 : Math.PI / 2, 0);
+      put(upper, qd, side * (REC_HW - mm(1)), mm(-14), mm(24));
+    }
+  }
+  // ==== МОДЕЛЬ: ЧАСТЬ 1 КОНЕЦ ====
+
+  // =====================================================================
+  // 7. ЦЕВЬЁ — панели со СКВОЗНЫМИ вентиляционными окнами
+  // =====================================================================
+  const handguard = new THREE.Group(); g.add(handguard);
+  {
+    const T = mm(4.5);
+    const zC = (HG_F + HG_B) / 2, zL = HG_B - HG_F;
+
+    // боковые панели (Z,Y) с тремя овальными окнами
+    for (const side of [-1, 1]) {
+      const s = poly([
+        [HG_F + mm(2), mm(-16)], [HG_F, mm(-6)], [HG_F, mm(24)],
+        [HG_B, mm(24)], [HG_B, mm(-22)], [HG_F + mm(2), mm(-22)]
+      ], mm(5));
+      for (let i = 0; i < 3; i++)
+        s.holes.push(rrPath(HG_F + mm(48) + i * mm(62), mm(4), mm(44), mm(20), mm(9)));
+      handguard.add(exX(s, T, M.fde, side > 0 ? mm(26) - T : mm(-26)));
+      // накладка-рёбро жёсткости
+      handguard.add(exX(rrShape(zC, mm(-15), zL - mm(16), mm(5), mm(2)), mm(1.4), M.fdeDark,
+        side > 0 ? mm(26) : mm(-27.4), 4));
+    }
+    // нижняя панель (X,Z) с двумя окнами
+    {
+      const s = rrShape(0, zC, mm(42), zL, mm(8));
+      for (let i = 0; i < 2; i++) s.holes.push(rrPath(0, HG_F + mm(70) + i * mm(78), mm(18), mm(44), mm(8)));
+      handguard.add(exY(s, mm(4.5), M.fde, mm(-26.5)));
+    }
+    // верхняя панель — опора планки (планка НЕ висит в воздухе)
+    handguard.add(exY(rrShape(0, zC, mm(52), zL, mm(6)), mm(6), M.fde, RAIL_Y - mm(6)));
+    // угловые скругления (связывают панели в единый корпус)
+    for (const side of [-1, 1]) {
+      const c = poly([[side * mm(26), mm(-22)], [side * mm(26), mm(-10)], [side * mm(21), mm(-26.5)]], mm(2));
+      handguard.add(exZ(c, zL, M.fde, HG_F, 4));
+    }
+    // передний торец с отверстием под ствол
+    const cap = poly([[-mm(26), -mm(26)], [mm(26), -mm(26)], [mm(26), mm(24)], [-mm(26), mm(24)]], mm(6));
+    cap.holes.push(circPath(0, 0, mm(12.5)));
+    handguard.add(exZ(cap, mm(7), M.fdeDark, HG_F, 6));
+
+    // короткие планки 3/6/9 часов (точки крепления модулей)
+    const rBottom = new THREE.Group();
+    rBottom.add(buildRail(mm(-400), mm(-250), M.fdeDark, 0, mm(10.6)));
+    rBottom.rotation.z = Math.PI;
+    rBottom.position.y = mm(-26.5);
+    handguard.add(rBottom);
+    for (const side of [-1, 1]) {
+      const r = new THREE.Group();
+      r.add(buildRail(mm(-392), mm(-262), M.fdeDark, 0, mm(10.6)));
+      r.rotation.z = -side * Math.PI / 2;
+      r.position.set(side * mm(26), mm(2), 0);
+      handguard.add(r);
+    }
+    // винты крепления цевья к ресиверу
+    for (const side of [-1, 1])
+      for (const z of [mm(-215), mm(-435)])
+        put(handguard, screwX(mm(3), side), side * mm(25.6), mm(-14), z);
+  }
+
+  // =====================================================================
+  // 8. НИЖНИЙ РЕСИВЕР — полимер, шахта магазина, скоба
+  // =====================================================================
+  const lower = new THREE.Group(); g.add(lower);
+  const LOW_HW = mm(23);
+  {
+    const T = mm(5);
+    // боковой профиль (Z,Y): шахта — скоба — хвостовик рукоятки
+    const sideProfile = () => poly([
+      [mm(-186), mm(-30)], [mm(-186), mm(-48)], [mm(-182), mm(-54)],
+      [mm(-92),  mm(-54)], [mm(-88),  mm(-48)], [mm(-86),  mm(-40)],
+      [mm(-84),  mm(-52)], [mm(-84),  mm(-84)], [mm(-24), mm(-90)],
+      [mm(-14),  mm(-66)], [mm(6),    mm(-62)], [mm(46),  mm(-56)],
+      [mm(46),   mm(-30)]
+    ], mm(4));
+    for (const side of [-1, 1]) {
+      const s = sideProfile();
+      lower.add(exX(s, T, M.polymer, side > 0 ? LOW_HW - T : -LOW_HW));
+      // панельная линия / площадка под маркировку
+      lower.add(exX(rrShape(mm(-134), mm(-42), mm(70), mm(14), mm(4)), mm(1.2), M.fdeDark,
+        side > 0 ? LOW_HW : -LOW_HW - mm(1.2), 4));
+    }
+    // СКОБА: нижняя перемычка между стенками
+    lower.add(exY(rrShape(0, mm(-54), mm(46), mm(64), mm(6)), mm(6), M.polymer, mm(-90)));
+    // СТЕНКИ ШАХТЫ МАГАЗИНА (внутренний короб 27 x 82 мм)
+    lower.add(exZ(rrShape(0, mm(-42), mm(46), mm(24), mm(3)), mm(6), M.polymer, mm(-186)));   // передняя
+    lower.add(exZ(rrShape(0, mm(-42), mm(46), mm(24), mm(3)), mm(6), M.polymer, mm(-92)));    // задняя
+    // горловина с раструбом: плита с ПРЯМОУГОЛЬНЫМ окном под магазин
+    {
+      const s = rrShape(0, mm(-137), mm(46), mm(98), mm(5));
+      s.holes.push(rrPath(0, mm(-137), mm(27.5), mm(84), mm(4)));
+      lower.add(exY(s, mm(6), M.polymer, mm(-54)));
+      // скошенный раструб вниз
+      const s2 = rrShape(0, mm(-137), mm(50), mm(102), mm(6));
+      s2.holes.push(rrPath(0, mm(-137), mm(34), mm(90), mm(5)));
+      lower.add(exY(s2, mm(4), M.polymer, mm(-58)));
+    }
+    // верхняя полка — стык с верхним ресивером
+    lower.add(exY(rrShape(0, mm(-70), mm(46), mm(232), mm(4)), mm(4), M.polymer, mm(-34)));
+    // хвостовая часть под шарнир приклада
+    lower.add(exZ(poly([[-mm(23), mm(-56)], [mm(23), mm(-56)], [mm(23), mm(-30)], [-mm(23), mm(-30)]], mm(3)),
+      mm(38), M.polymer, mm(8), 4));
+    // штифты соединения ресиверов
+    for (const side of [-1, 1])
+      for (const z of [mm(24), mm(-176)])
+        put(lower, screwX(mm(4.2), side), side * (LOW_HW - mm(0.2)), mm(-40), z);
+  }
+
+  // =====================================================================
+  // 9. ПИСТОЛЕТНАЯ РУКОЯТКА
+  // =====================================================================
+  const grip = new THREE.Group(); g.add(grip);
+  {
+    const s = poly([
+      [mm(4),  mm(-58)],  [mm(12), mm(-96)],  [mm(20), mm(-134)], [mm(28), mm(-160)],
+      [mm(40), mm(-170)], [mm(56), mm(-164)], [mm(58), mm(-140)], [mm(56), mm(-104)],
+      [mm(52), mm(-74)],  [mm(50), mm(-56)]
+    ], mm(8));
+    grip.add(exX(s, mm(34), M.polymer, mm(-17)));
+    // боковые накладки с насечкой
+    for (const side of [-1, 1]) {
+      const x = side > 0 ? mm(17) : mm(-18.2);
+      for (let r = 0; r < 5; r++)
+        for (let c = 0; c < 3; c++) {
+          const zz = mm(18) + c * mm(9) + r * mm(2.4);
+          const yy = mm(-78) - r * mm(15);
+          grip.add(exX(rrShape(zz, yy, mm(6.4), mm(9), mm(2)), mm(1.5), M.fdeDark, x, 3));
+        }
+      // бобышка под большой палец
+      const th = sphere(mm(11), M.polymer, 18);
+      th.scale.set(0.45, 1.1, 0.9);
+      put(grip, th, side * mm(17), mm(-72), mm(24));
+    }
+    // тыльник-бобровый хвост и крышка отсека
+    grip.add(exX(poly([[mm(44), mm(-56)], [mm(62), mm(-52)], [mm(62), mm(-72)], [mm(50), mm(-74)]], mm(4)),
+      mm(30), M.polymer, mm(-15)));
+    grip.add(exX(rrShape(mm(42), mm(-166), mm(22), mm(9), mm(3)), mm(28), M.fdeDark, mm(-14), 4));
+  }
+
+  // =====================================================================
+  // 10. СПУСКОВОЙ КРЮЧОК, ПЕРЕВОДЧИК, ЗАЩЁЛКА МАГАЗИНА, ЗАТВОРНАЯ ЗАДЕРЖКА
+  // =====================================================================
+  const trigger = new THREE.Group();
+  trigger.position.set(0, mm(-60), mm(-40));
+  lower.add(trigger);
+  {
+    const s = poly([
+      [mm(0),  mm(0)],   [mm(6), mm(-4)],  [mm(7), mm(-16)],
+      [mm(2),  mm(-26)], [mm(-6), mm(-24)], [mm(-6), mm(-8)]
+    ], mm(2.5));
+    trigger.add(exX(s, mm(9), M.steelDark, mm(-4.5), 6));
+    // насечка на крючке
+    for (let i = 0; i < 4; i++)
+      trigger.add(exX(rrShape(mm(3.4), mm(-10) - i * mm(4), mm(3), mm(1.4), mm(0.5)), mm(9), M.black, mm(-4.5), 3));
+  }
+
+  const selector = new THREE.Group();
+  selector.position.set(0, mm(-44), mm(-24));
+  lower.add(selector);
+  for (const side of [-1, 1]) {
+    const s = poly([[mm(0), mm(6)], [mm(30), mm(4)], [mm(32), mm(-3)], [mm(0), mm(-6)]], mm(2.5));
+    selector.add(exX(s, mm(4), M.black, side > 0 ? LOW_HW : -LOW_HW - mm(4), 4));
+    put(selector, cylX(mm(6), mm(6), mm(4), M.black, 20), side * (LOW_HW + mm(2)), 0, 0);
+  }
+  // маркировка S / 1 / A
+  for (const side of [-1, 1]) {
+    const x = side > 0 ? LOW_HW : -LOW_HW - mm(0.8);
+    lower.add(exX(rrShape(mm(-14), mm(-32), mm(3), mm(3), mm(1.4)), mm(0.8), M.fdeLite, x, 3));
+    lower.add(exX(rrShape(mm(-24), mm(-38), mm(2), mm(4), mm(0.8)), mm(0.8), M.fdeLite, x, 3));
+    lower.add(exX(rrShape(mm(-14), mm(-56), mm(3), mm(3), mm(1.4)), mm(0.8), M.fdeLite, x, 3));
+  }
+
+  const magRelease = new THREE.Group();
+  lower.add(magRelease);
+  for (const side of [-1, 1]) {
+    const s = poly([[mm(-90), mm(-40)], [mm(-72), mm(-38)], [mm(-70), mm(-48)], [mm(-88), mm(-50)]], mm(3));
+    magRelease.add(exX(s, mm(4), M.black, side > 0 ? LOW_HW : -LOW_HW - mm(4), 4));
+  }
+  const boltCatch = new THREE.Group();
+  lower.add(boltCatch);
+  {
+    const s = poly([[mm(-104), mm(-34)], [mm(-84), mm(-32)], [mm(-84), mm(-42)], [mm(-104), mm(-44)]], mm(2.5));
+    boltCatch.add(exX(s, mm(4), M.black, -LOW_HW - mm(4), 4));
+  }
+
+  // =====================================================================
+  // 11. ЗАТВОРНАЯ ГРУППА + РУКОЯТКА ВЗВЕДЕНИЯ (едут вместе)
+  // =====================================================================
+  const bolt = new THREE.Group(); g.add(bolt);
+  {
+    // затворная рама
+    const s = poly([[mm(-176), mm(-13)], [mm(-58), mm(-13)], [mm(-58), mm(17)], [mm(-176), mm(17)]], mm(3));
+    bolt.add(exX(s, mm(38), M.phos, mm(-19), 4));
+    // боевая личинка с боевыми упорами
+    put(bolt, latheF([V2(0, 0), V2(mm(9.5), 0), V2(mm(9.5), mm(26)), V2(mm(7.4), mm(30)), V2(0, mm(30))], M.steel, 24),
+      0, 0, mm(-172));
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * Math.PI * 2;
+      const lug = exZ(rrShape(0, 0, mm(4.4), mm(4.4), mm(1.2)), mm(9), M.steel, mm(-181), 3);
+      lug.position.set(Math.cos(a) * mm(11), Math.sin(a) * mm(11), 0);
+      bolt.add(lug);
+    }
+    // возвратная пружина (видна в разрезе)
+    for (let i = 0; i < 16; i++)
+      put(bolt, torus(mm(7), mm(1.5), M.steel, 14), 0, mm(2), mm(-50) + i * mm(5.4));
+    // РУКОЯТКА ВЗВЕДЕНИЯ слева
+    const chg = new THREE.Group();
+    chg.add(exX(rrShape(CH_REST, CH_Y, mm(26), mm(11), mm(4)), mm(12), M.phos, -REC_HW - mm(9), 4));
+    const knob = latheB([V2(0, 0), V2(mm(7.4), 0), V2(mm(8.2), mm(2)), V2(mm(8.2), mm(16)),
+                         V2(mm(6.6), mm(19)), V2(0, mm(19))], M.blackMat, 24);
+    knob.rotation.set(0, 0, Math.PI / 2);
+    put(chg, knob, -REC_HW - mm(9), CH_Y, CH_REST);
+    knurl(chg, 12, mm(7.6), mm(12), 'x', -REC_HW - mm(16), CH_Y, CH_REST, M.steelDark);
+    bolt.add(chg);
+  }
+
+  // =====================================================================
+  // 12. ПАТРОН 7,62x51 NATO — точная геометрия (OAL 71,1 мм)
+  // =====================================================================
+  const CASE_PTS = [
+    V2(0, 0), V2(mm(5.97), 0), V2(mm(5.97), mm(1.4)), V2(mm(4.9), mm(2.2)),
+    V2(mm(4.9), mm(4.2)), V2(mm(5.94), mm(5.8)), V2(mm(5.86), mm(38)),
+    V2(mm(5.76), mm(44.2)), V2(mm(4.32), mm(49.8)), V2(mm(4.32), mm(51.2))
+  ];
+  const BULLET_PTS = [
+    V2(mm(3.91), mm(44)), V2(mm(3.91), mm(56.4)), V2(mm(3.78), mm(59.6)), V2(mm(3.42), mm(63.2)),
+    V2(mm(2.82), mm(66.6)), V2(mm(1.98), mm(69.3)), V2(mm(1.0), mm(70.8)), V2(0, mm(71.1))
+  ];
+  // ось патрона — вдоль −Z (пуля смотрит вперёд), начало — донце гильзы
+  function makeCartridge(spent) {
+    const c = new THREE.Group();
+    c.add(latheF(CASE_PTS, M.brass, 20));
+    if (!spent) c.add(latheF(BULLET_PTS, M.copper, 20));
+    c.userData.spent = !!spent;
+    return c;
+  }
+
+  // =====================================================================
+  // 13. МАГАЗИН НА 20 ПАТРОНОВ 7,62x51
+  //     Сечение корпуса 25,5 (ширина) x 78 (глубина) мм — патрон 71,1 мм
+  //     ложится свободно. Изогнут по дуге R420 (низ уходит вперёд).
+  // =====================================================================
+  const MAG_R = mm(420), MAG_LEN = mm(178), MAG_PITCH = mm(7.85), MAG_CAP = 20;
+  const MAG_W = mm(25.5), MAG_D = mm(78);
+  const MAG_SEAT = { x: 0, y: mm(-30), z: mm(-137) };   // верхний торец магазина
+  // точка на дуге магазина на расстоянии s от горловины
+  function arcPt(s) {
+    const t = s / MAG_R;
+    return { y: -MAG_R * Math.sin(t), z: -MAG_R * (1 - Math.cos(t)), t };
+  }
+  const magazine = new THREE.Group();
+  magazine.name = 'Магазин 7,62x51 (20)';
+  magazine.position.set(MAG_SEAT.x, MAG_SEAT.y, MAG_SEAT.z);
+  g.add(magazine);
+  const magShell = [];                    // для режима «разрез»
+  const magRounds = [], magSpring = [];
+  let magFollower = null;
+  {
+    // ---- корпус: 14 секций по дуге, стенка 2,3 мм (короб ПОЛЫЙ) ----
+    const SEG = 14, L = MAG_LEN / SEG;
+    for (let i = 0; i < SEG; i++) {
+      const p = arcPt((i + 0.5) * L);
+      const s = rrShape(0, 0, MAG_W, MAG_D, mm(6));
+      s.holes.push(rrPath(0, 0, MAG_W - mm(4.6), MAG_D - mm(4.6), mm(4)));
+      const seg = exY(s, L * 1.1, M.fdeDark, -L * 0.55, 5);
+      seg.position.set(0, p.y, p.z);
+      seg.rotation.x = p.t;
+      magazine.add(seg); magShell.push(seg);
+    }
+    // ---- рёбра жёсткости по бокам ----
+    for (const side of [-1, 1])
+      for (let i = 0; i < 5; i++) {
+        const p = arcPt(mm(26) + i * mm(32));
+        const rib = exX(rrShape(0, 0, MAG_D - mm(12), mm(3.4), mm(1.4)), mm(1.6), M.fde,
+          side > 0 ? MAG_W / 2 : -MAG_W / 2 - mm(1.6), 4);
+        rib.position.set(0, p.y, p.z); rib.rotation.x = p.t;
+        magazine.add(rib);
+      }
+    // ---- губки (feed lips) — стальные, удерживают верхний патрон ----
+    for (const side of [-1, 1]) {
+      magazine.add(exX(rrShape(0, mm(3.6), mm(58), mm(3.6), mm(1.2)), mm(8), M.steelDark,
+        side > 0 ? mm(4.75) : mm(-12.75), 4));
+      magazine.add(exX(rrShape(0, mm(0.5), mm(74), mm(4), mm(1.5)), mm(2.4), M.steelDark,
+        side > 0 ? mm(10.35) : mm(-12.75), 4));
+    }
+    // задняя стенка горловины + зацеп защёлки
+    magazine.add(exZ(rrShape(0, mm(-6), mm(24), mm(22), mm(3)), mm(3), M.steelDark, mm(35.5), 4));
+    magazine.add(exZ(poly([[-mm(12), mm(-16)], [mm(12), mm(-16)], [mm(12), mm(-24)], [-mm(12), mm(-24)]], mm(2)),
+      mm(6), M.steelDark, mm(38), 3));
+
+    // ---- патроны: шахматный двухрядный столб ----
+    for (let i = 0; i < MAG_CAP; i++) {
+      const p = arcPt(mm(4) + i * MAG_PITCH);
+      const holder = new THREE.Object3D();
+      holder.position.set(i % 2 ? mm(4.5) : mm(-4.5), p.y, p.z);
+      holder.rotation.x = p.t;
+      const c = makeCartridge(false);
+      c.position.z = mm(35.6);
+      holder.add(c);
+      magazine.add(holder); magRounds.push(holder);
+    }
+    // ---- подаватель ----
+    magFollower = new THREE.Group();
+    magFollower.add(exY(rrShape(0, 0, mm(20.4), mm(72), mm(4)), mm(13), M.blackMat, mm(-13), 4));
+    magFollower.add(exY(rrShape(0, mm(-18), mm(20.4), mm(30), mm(4)), mm(7), M.blackMat, mm(-4), 4));
+    magazine.add(magFollower);
+    // ---- пружина (видна в разрезе) ----
+    for (let i = 0; i < 8; i++) {
+      const loop = torus(mm(8.6), mm(0.9), M.steel, 20);
+      loop.scale.set(1, 3.6, 1);
+      magazine.add(loop); magSpring.push(loop);
+    }
+    // ---- дно и крышка ----
+    {
+      const p = arcPt(MAG_LEN);
+      const fl = new THREE.Group();
+      fl.add(exY(rrShape(0, 0, mm(29), mm(82), mm(7)), mm(9), M.blackMat, mm(-9), 5));
+      fl.add(exY(rrShape(0, mm(30), mm(24), mm(16), mm(5)), mm(5), M.blackMat, mm(-14), 4));
+      fl.position.set(0, p.y, p.z); fl.rotation.x = p.t;
+      magazine.add(fl);
+    }
+  }
+  // положение подавателя/пружины по остатку патронов
+  function setAmmo(n) {
+    n = Math.max(0, Math.min(MAG_CAP, n | 0));
+    for (let i = 0; i < MAG_CAP; i++) magRounds[i].visible = i < n;
+    const sf = mm(4) + n * MAG_PITCH + mm(6);
+    const pf = arcPt(Math.min(sf, MAG_LEN - mm(14)));
+    magFollower.position.set(0, pf.y, pf.z); magFollower.rotation.x = pf.t;
+    const s0 = Math.min(sf + mm(12), MAG_LEN - mm(6)), s1 = MAG_LEN - mm(10);
+    for (let i = 0; i < magSpring.length; i++) {
+      const p = arcPt(s0 + (s1 - s0) * (i / (magSpring.length - 1)));
+      magSpring[i].position.set(0, p.y, p.z);
+      magSpring[i].rotation.set(Math.PI / 2 + p.t, 0, 0);
+    }
+  }
+  setAmmo(MAG_CAP);
+
+  // патрон в патроннике
+  const chamberRound = makeCartridge(false);
+  chamberRound.position.set(0, 0, BREECH);
+  chamberRound.visible = false;
+  g.add(chamberRound);
+
+  // =====================================================================
+  // 14. МЕХАНИЧЕСКИЕ ПРИЦЕЛЫ (складные, линия прицела Y = 50 мм)
+  // =====================================================================
+  const BASE_Y = RAIL_TOP + mm(2);          // верх основания прицела = ось шарнира
+  const APERT = SIGHT_Y - BASE_Y;           // 9,5 мм — высота целика над шарниром
+  // универсальное основание-зажим на планку (стоит НА планке, не в воздухе)
+  function railClamp(zC, len, mat, hw) {
+    hw = hw || mm(14);
+    const grp = new THREE.Group();
+    grp.add(exZ(rrShape(0, (RAIL_TOP + BASE_Y) / 2, hw * 2, BASE_Y - RAIL_TOP, mm(1)), len, mat, zC - len / 2, 4));
+    // захваты с двух сторон обхватывают гребень
+    for (const side of [-1, 1]) {
+      const jaw = poly([
+        [side * mm(9.6), RAIL_Y + mm(3.4)], [side * hw, RAIL_Y + mm(3.4)],
+        [side * hw, RAIL_TOP + mm(0.2)], [side * mm(9.6), RAIL_TOP + mm(0.2)]
+      ], mm(0.6));
+      grp.add(exZ(jaw, len * 0.8, mat, zC - len * 0.4, 3));
+    }
+    // барашек-винт справа
+    const t = cylX(mm(5), mm(5), mm(5), M.steelDark, 18);
+    put(grp, t, hw + mm(2), RAIL_Y + mm(5), zC);
+    knurl(grp, 10, mm(5), mm(4.4), 'x', hw + mm(2), RAIL_Y + mm(5), zC, M.steelDark);
+    return grp;
+  }
+
+  // ---- ЦЕЛИК: диоптр Ø4 мм, СКВОЗНОЕ отверстие ----
+  const sightRearMount = railClamp(mm(9), mm(24), M.black, mm(13));
+  g.add(sightRearMount);
+  const sightRear = new THREE.Group();
+  sightRear.position.set(0, BASE_Y, mm(9));
+  g.add(sightRear);
+  {
+    const leaf = poly([
+      [mm(-10), 0], [mm(10), 0], [mm(10), mm(11)], [mm(6.5), mm(15.5)],
+      [mm(-6.5), mm(15.5)], [mm(-10), mm(11)]
+    ], mm(2));
+    leaf.holes.push(circPath(0, APERT, mm(2)));
+    sightRear.add(exZ(leaf, mm(3), M.black, mm(-1.5), 12));
+    // защитные «уши»
+    for (const side of [-1, 1])
+      sightRear.add(exZ(poly([[side * mm(9), 0], [side * mm(12.4), 0], [side * mm(12.4), mm(15)],
+        [side * mm(9), mm(15)]], mm(1)), mm(3), M.black, mm(-1.5), 3));
+    // барабанчик ввода боковых поправок
+    put(sightRear, cylY(mm(4.6), mm(4.6), mm(4), M.steelDark, 16), mm(11), mm(3), 0);
+    knurl(sightRear, 10, mm(4.6), mm(3.6), 'y', mm(11), mm(3), 0, M.steelDark);
+  }
+  // ---- МУШКА: столбик Ø1,8 мм с защитными крыльями ----
+  const sightFrontMount = railClamp(mm(-379), mm(22), M.black, mm(12));
+  g.add(sightFrontMount);
+  const sightFront = new THREE.Group();
+  sightFront.position.set(0, BASE_Y, mm(-379));
+  g.add(sightFront);
+  {
+    put(sightFront, cylY(mm(0.9), mm(1.1), APERT, M.black, 12), 0, APERT / 2, 0);
+    put(sightFront, cylY(mm(2.2), mm(3.4), mm(3), M.black, 14), 0, mm(1.5), 0);
+    for (const side of [-1, 1])
+      sightFront.add(exZ(poly([[side * mm(5), 0], [side * mm(7.6), 0], [side * mm(7.6), mm(11)],
+        [side * mm(5), mm(11.6)]], mm(1)), mm(3.4), M.black, mm(-1.7), 3));
+  }
+
+  // =====================================================================
+  // 15. ОПТИКА — сменные модули на планке (ось 61,5 мм)
+  // =====================================================================
+  const OPT_Y = RAIL_TOP + mm(23);
+  const opticMods = {};
+  {
+    // ---- без оптики ----
+    const nn = new THREE.Group();
+    nn.userData = { eye: { y: SIGHT_Y, z: mm(72) }, irons: true, fov: null, name: 'Механика' };
+    opticMods.none = nn;
+
+    // ---- КОЛЛИМАТОР Ø30 ----
+    const rd = new THREE.Group();
+    const zc = mm(-26), zRear = mm(8), LEN = mm(68);
+    rd.add(railClamp(zc, mm(36), M.black, mm(15)));
+    rd.add(exZ(rrShape(0, (BASE_Y + OPT_Y - mm(15)) / 2, mm(26), (OPT_Y - mm(15)) - BASE_Y, mm(1.2)),
+      mm(36), M.black, zc - mm(18), 4));
+    put(rd, latheF([
+      V2(mm(10.6), 0), V2(mm(15), 0), V2(mm(15), mm(5)), V2(mm(16.6), mm(7)), V2(mm(16.6), mm(13)),
+      V2(mm(15), mm(15)), V2(mm(15), mm(53)), V2(mm(16.6), mm(55)), V2(mm(16.6), mm(61)),
+      V2(mm(15), mm(63)), V2(mm(15), LEN * 1000 / 1000), V2(mm(10.6), mm(68))
+    ], M.black, 34), 0, OPT_Y, zRear);
+    put(rd, latheF([V2(mm(10.6), 0), V2(mm(10.6), mm(68))], M.bore, 28), 0, OPT_Y, zRear);
+    // линзы
+    put(rd, cylZ(mm(10.4), mm(10.4), mm(1.2), M.glass, 28), 0, OPT_Y, zRear - mm(2));
+    put(rd, cylZ(mm(10.4), mm(10.4), mm(1.2), M.glass, 28), 0, OPT_Y, zRear - mm(66));
+    // красная точка на оптической оси
+    const dot = sphere(mm(0.75), M.dot, 12);
+    put(rd, dot, 0, OPT_Y, zRear - mm(60));
+    // башенки и батарейный отсек
+    put(rd, cylY(mm(5.6), mm(5.6), mm(8), M.black, 18), 0, OPT_Y + mm(16), zRear - mm(16));
+    knurl(rd, 12, mm(5.6), mm(7), 'y', 0, OPT_Y + mm(16), zRear - mm(16), M.steelDark);
+    put(rd, cylX(mm(5.6), mm(5.6), mm(8), M.black, 18), mm(16), OPT_Y, zRear - mm(16));
+    put(rd, cylX(mm(8.4), mm(8.4), mm(7), M.black, 20), mm(-17), OPT_Y, zRear - mm(30));
+    knurl(rd, 14, mm(8.4), mm(6), 'x', mm(-19), OPT_Y, zRear - mm(30), M.steelDark);
+    rd.userData = { eye: { y: OPT_Y, z: zRear + mm(62) }, irons: false, fov: null, name: 'Коллиматор', reticle: 'dot' };
+    opticMods.reddot = rd;
+
+    // ---- ПРИЦЕЛ 4x24 ----
+    const sc = new THREE.Group();
+    for (const zr of [mm(-72), mm(12)]) {
+      sc.add(railClamp(zr, mm(18), M.black, mm(13)));
+      const ring = circShape(0, OPT_Y, mm(21));
+      ring.holes.push(circPath(0, OPT_Y, mm(15)));
+      sc.add(exZ(ring, mm(18), M.black, zr - mm(9), 24));
+      for (const side of [-1, 1])
+        put(sc, screwX(mm(2.6), side), side * mm(19), OPT_Y + mm(13), zr);
+    }
+    put(sc, latheF([
+      V2(mm(11), 0), V2(mm(20), mm(1)), V2(mm(20.6), mm(6)), V2(mm(19), mm(30)), V2(mm(15), mm(40)),
+      V2(mm(15), mm(96)), V2(mm(17.4), mm(100)), V2(mm(17.4), mm(112)), V2(mm(15), mm(116)),
+      V2(mm(15), mm(190)), V2(mm(17), mm(196)), V2(mm(23), mm(212)), V2(mm(23), mm(248)),
+      V2(mm(21), mm(252)), V2(mm(11), mm(252))
+    ], M.black, 34), 0, OPT_Y, mm(118));
+    put(sc, latheF([V2(mm(11), 0), V2(mm(11), mm(252))], M.bore, 28), 0, OPT_Y, mm(118));
+    put(sc, cylZ(mm(10.8), mm(10.8), mm(1.2), M.glass, 28), 0, OPT_Y, mm(116));      // окуляр
+    put(sc, cylZ(mm(21.6), mm(21.6), mm(1.4), M.glass, 30), 0, OPT_Y, mm(-131));     // объектив
+    put(sc, cylZ(mm(22.6), mm(22.6), mm(12), M.rubber, 26), 0, OPT_Y, mm(124));      // наглазник
+    put(sc, cylY(mm(7.4), mm(7.4), mm(13), M.black, 20), 0, OPT_Y + mm(18), mm(-16));
+    knurl(sc, 14, mm(7.4), mm(11), 'y', 0, OPT_Y + mm(18), mm(-16), M.steelDark);
+    put(sc, cylX(mm(7.4), mm(7.4), mm(13), M.black, 20), mm(18), OPT_Y, mm(-16));
+    knurl(sc, 14, mm(7.4), mm(11), 'x', mm(20), OPT_Y, mm(-16), M.steelDark);
+    knurl(sc, 26, mm(17.6), mm(16), 'z', 0, OPT_Y, mm(88), M.blackMat);
+    sc.userData = { eye: { y: OPT_Y, z: mm(206) }, irons: false, fov: 11, name: 'Прицел 4x', reticle: 'mildot' };
+    opticMods.scope = sc;
+
+    for (const k in opticMods) { opticMods[k].visible = (k === 'none'); g.add(opticMods[k]); }
+  }
+
+  // =====================================================================
+  // 16. ПОДСТВОЛЬНЫЕ И БОКОВЫЕ МОДУЛИ
+  // =====================================================================
+  const underMods = {}, sideMods = {};
+  const bipodLegs = [];
+  {
+    underMods.none = new THREE.Group();
+    underMods.none.userData = { name: 'Нет' };
+
+    // ---- вертикальная рукоятка ----
+    const vg = new THREE.Group();
+    const zg = mm(-330);
+    vg.add(exZ(rrShape(0, mm(-32), mm(30), mm(13), mm(2)), mm(46), M.black, zg - mm(23), 4));
+    const vgBody = new THREE.Mesh(new THREE.LatheGeometry([
+      V2(0, 0), V2(mm(16), 0), V2(mm(16), mm(6)), V2(mm(14.6), mm(12)), V2(mm(14.6), mm(74)),
+      V2(mm(16.4), mm(80)), V2(mm(16.4), mm(88)), V2(mm(13), mm(92)), V2(0, mm(92))
+    ], 26), M.polymer);
+    vgBody.rotation.z = Math.PI;                 // ось профиля — вниз
+    vgBody.position.set(0, mm(-38), zg);
+    vg.add(vgBody);
+    for (let i = 0; i < 7; i++)
+      put(vg, torus(mm(15.2), mm(1.1), M.blackMat, 20), 0, mm(-52) - i * mm(8), zg).rotation.x = Math.PI / 2;
+    vg.userData = { name: 'Рукоятка' };
+    underMods.grip = vg;
+
+    // ---- СОШКИ ----
+    const bp = new THREE.Group();
+    const zb = mm(-380);
+    bp.add(exZ(rrShape(0, mm(-33), mm(34), mm(15), mm(2.5)), mm(40), M.black, zb - mm(20), 4));
+    bp.add(exZ(rrShape(0, mm(-42), mm(26), mm(10), mm(3)), mm(34), M.black, zb - mm(17), 4));
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Group();
+      leg.position.set(side * mm(12), mm(-44), zb);
+      put(leg, cylY(mm(4.6), mm(4.2), mm(96), M.steelDark, 14), 0, mm(-48), 0);
+      put(leg, cylY(mm(3.4), mm(3.4), mm(52), M.steel, 12), 0, mm(-116), 0);
+      put(leg, cylY(mm(5.4), mm(5.4), mm(8), M.rubber, 14), 0, mm(-142), 0);
+      put(leg, cylX(mm(5), mm(5), mm(10), M.black, 14), 0, 0, 0);
+      leg.userData.side = side;
+      bp.add(leg); bipodLegs.push(leg);
+    }
+    bp.userData = { name: 'Сошки' };
+    underMods.bipod = bp;
+
+    // ---- боковые: фонарь / ЛЦУ ----
+    sideMods.none = new THREE.Group();
+    sideMods.none.userData = { name: 'Нет' };
+
+    const lt = new THREE.Group();
+    const zl = mm(-300);
+    lt.add(exX(rrShape(zl, mm(2), mm(34), mm(28), mm(3)), mm(12), M.black, mm(-38), 4));
+    put(lt, latheF([
+      V2(0, 0), V2(mm(12), 0), V2(mm(12), mm(52)), V2(mm(15), mm(58)), V2(mm(17), mm(70)),
+      V2(mm(17), mm(78)), V2(mm(15.4), mm(80))
+    ], M.blackMat, 24), mm(-48), mm(2), zl + mm(34));
+    put(lt, cylZ(mm(15), mm(15), mm(2), M.glass, 24), mm(-48), mm(2), zl - mm(45));
+    put(lt, cylZ(mm(3.4), mm(3.4), mm(6), M.black, 14), mm(-48), mm(2), zl + mm(38));
+    knurl(lt, 16, mm(12), mm(20), 'z', mm(-48), mm(2), zl + mm(10), M.steelDark);
+    lt.userData = { name: 'Фонарь', light: { x: mm(-48), y: mm(2), z: zl - mm(46) } };
+    sideMods.light = lt;
+
+    const lz = new THREE.Group();
+    lz.add(exX(rrShape(mm(-300), mm(4), mm(46), mm(24), mm(3)), mm(12), M.black, mm(-38), 4));
+    lz.add(exX(rrShape(mm(-306), mm(6), mm(38), mm(17), mm(3)), mm(16), M.blackMat, mm(-53), 4));
+    put(lz, cylZ(mm(2.6), mm(2.6), mm(2), M.dot, 14), mm(-45), mm(6), mm(-325.5));
+    lz.userData = { name: 'ЛЦУ', laser: { x: mm(-45), y: mm(6), z: mm(-326) } };
+    sideMods.laser = lz;
+
+    for (const k in underMods) { underMods[k].visible = (k === 'none'); g.add(underMods[k]); }
+    for (const k in sideMods)  { sideMods[k].visible  = (k === 'none'); g.add(sideMods[k]); }
+  }
+
+  // =====================================================================
+  // 17. ПРИКЛАД (складной вправо, регулируемая щека)
+  // =====================================================================
+  const stockPivot = new THREE.Group();
+  stockPivot.position.set(mm(20), 0, REC_B);
+  g.add(stockPivot);
+  const stock = new THREE.Group();
+  stock.position.set(mm(-20), 0, -REC_B);
+  stockPivot.add(stock);
+  const cheek = new THREE.Group();
+  {
+    // шарнир
+    put(upper, cylY(mm(11), mm(11), mm(26), M.black, 20), mm(20), mm(-6), REC_B + mm(4));
+    put(stock, cylY(mm(10.6), mm(10.6), mm(44), M.polymer, 20), mm(20), mm(-6), REC_B + mm(4));
+    put(stock, cylY(mm(4), mm(4), mm(56), M.steelDark, 12), mm(20), mm(-6), REC_B + mm(4));
+    // боковые стенки рамы приклада
+    for (const side of [-1, 1]) {
+      const sp = poly([
+        [mm(48), mm(-46)], [mm(48), mm(24)], [mm(150), mm(26)], [mm(300), mm(24)],
+        [mm(334), mm(14)], [mm(334), mm(-34)], [mm(298), mm(-44)], [mm(150), mm(-46)], [mm(74), mm(-42)]
+      ], mm(7));
+      sp.holes.push(rrPath(mm(210), mm(-10), mm(126), mm(32), mm(14)));
+      stock.add(exX(sp, mm(5), M.polymer, side > 0 ? mm(21) : mm(-26)));
+    }
+    // верхняя и нижняя панели
+    stock.add(exY(rrShape(0, mm(192), mm(52), mm(288), mm(10)), mm(5), M.polymer, mm(20)));
+    stock.add(exY(rrShape(0, mm(196), mm(48), mm(276), mm(10)), mm(5), M.polymer, mm(-46)));
+    stock.add(exZ(rrShape(0, mm(-10), mm(52), mm(70), mm(8)), mm(26), M.polymer, mm(48), 5));
+    // регулируемая щека
+    cheek.add(exY(rrShape(0, mm(214), mm(46), mm(186), mm(16)), mm(15), M.polymer, mm(25)));
+    cheek.add(exY(rrShape(0, mm(214), mm(40), mm(176), mm(14)), mm(4), M.fdeDark, mm(40)));
+    for (const side of [-1, 1])
+      cheek.add(exX(rrShape(mm(214), mm(32), mm(180), mm(16), mm(6)), mm(2.4), M.polymer,
+        side > 0 ? mm(23) : mm(-25.4), 4));
+    stock.add(cheek);
+    // за��ыльник
+    stock.add(exZ(rrShape(0, mm(-11), mm(50), mm(62), mm(12)), mm(18), M.rubber, mm(334), 6));
+    for (let i = 0; i < 4; i++)
+      stock.add(exZ(rrShape(0, mm(-32) + i * mm(14), mm(46), mm(3.4), mm(1.4)), mm(2.5), M.blackMat, mm(352), 3));
+    // антабки и фиксаторы
+    for (const side of [-1, 1]) {
+      put(stock, cylX(mm(6), mm(6), mm(4), M.black, 16), side * mm(24), mm(-30), mm(300));
+      put(stock, screwX(mm(3.4), side), side * mm(25.6), mm(6), mm(120));
+    }
+    put(stock, cylZ(mm(7), mm(7), mm(8), M.black, 18), mm(-14), mm(-30), mm(52));
+    knurl(stock, 10, mm(7), mm(7), 'z', mm(-14), mm(-30), mm(52), M.steelDark);
+  }
+
+  // =====================================================================
+  // 18. УЗЛЫ, АНИМИРУЕМЫЕ ЧАСТИ, API МОДУЛЬНОСТИ
+  // =====================================================================
+  const nodes = {
+    muzzle:    node(0, 0, MUZZLE_Z - mm(62)),      // срез активного дульного модуля
+    chamber:   node(0, 0, BREECH),
+    eject:     node(REC_HW + mm(4), EJ_Y, EJ_Z),
+    magSeat:   node(0, MAG_SEAT.y, MAG_SEAT.z),
+    magDrop:   node(0, mm(-420), MAG_SEAT.z - mm(20)),
+    eye:       node(0, SIGHT_Y, mm(72)),           // точка глаза активного прицела
+    ejectPort: node(REC_HW, EJ_Y, EJ_Z)
+  };
+
+  const slots = { muzzle: muzzleMods, optic: opticMods, under: underMods, side: sideMods };
+  for (const slot in slots)
+    for (const key in slots[slot])
+      slots[slot][key].traverse(o => { o.userData.slot = slot; o.userData.modKey = key; });
+  magazine.traverse(o => { o.userData.slot = 'mag'; });
+
+  // ---- режим «разрез»: правые стенки и корпус магазина — прозрачные ----
+  const xrayMat = new THREE.MeshStandardMaterial({
+    color: 0x9a8c68, roughness: 0.5, metalness: 0.1,
+    transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false
+  });
+  const xrayList = magShell.slice();
+  [upper, lower, handguard].forEach(root => root.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox;
+    if (bb && bb.min.x > mm(13)) xrayList.push(o);
+  }));
+
+  // =====================================================================
+  // 19. ПУБЛИЧНЫЙ API
+  // =====================================================================
+  g.materials = M;
+  g.nodes = nodes;
+  g.parts = {
+    upper, lower, barrel, handguard, grip, trigger, selector, magRelease, boltCatch,
+    bolt, magazine, magFollower, chamberRound,
+    stock: stockPivot, stockBody: stock, cheek,
+    sightRear, sightFront, sightRearMount, sightFrontMount,
+    muzzleMods, opticMods, underMods, sideMods, bipodLegs
+  };
+  g.dims = {
+    mm, BORE_Y: 0, MUZZLE_Z, BREECH, SIGHT_Y, OPT_Y, RAIL_TOP,
+    EJ: { x: REC_HW, y: EJ_Y, z: EJ_Z },
+    CH: { rest: CH_REST, travel: CH_TRAVEL, y: CH_Y },
+    MAG_SEAT, MAG_CAP, MAG_LEN, CARTRIDGE_OAL: mm(71.1), MAG_DEPTH: MAG_D,
+    lengthTotal: mm(1000), barrelLen: mm(400), mass: 3.58, rpm: 600, caliber: '7,62x51 NATO'
+  };
+  g.modules = { muzzle: 'flash', optic: 'none', under: 'none', side: 'none', mag: true };
+  g.moduleNames = {
+    muzzle: { flash: 'Пламегаситель', suppressor: 'Глушитель', none: 'Голый ствол' },
+    optic:  { none: 'Механика', reddot: 'Коллиматор', scope: 'Прицел 4x' },
+    under:  { none: 'Нет', grip: 'Рукоятка', bipod: 'Сошки' },
+    side:   { none: 'Нет', light: 'Фонарь', laser: 'ЛЦУ' }
+  };
+  g.foldTarget = 0;                       // целевой угол складывания механики
+  g.makeCartridge = makeCartridge;
+  g.setAmmo = setAmmo;
+  g.setChamber = v => { chamberRound.visible = !!v; };
+
+  g.getSlot = key => (slots[key] ? slots[key][g.modules[key]] : null);
+
+  g.setModule = function (slot, key) {
+    const set = slots[slot];
+    if (!set || !set[key]) return null;
+    for (const k in set) set[k].visible = (k === key);
+    g.modules[slot] = key;
+    const ud = set[key].userData || {};
+    if (slot === 'muzzle') nodes.muzzle.position.z = (ud.tip !== undefined ? ud.tip : MUZZLE_Z);
+    if (slot === 'optic') {
+      g.foldTarget = ud.irons ? 0 : -Math.PI / 2;
+      if (ud.eye) nodes.eye.position.set(0, ud.eye.y, ud.eye.z);
+    }
+    return ud;
+  };
+
+  g.setBipod = function (deployed) {
+    for (const leg of bipodLegs) {
+      leg.rotation.z = deployed ? -leg.userData.side * 0.30 : 0;
+      leg.rotation.x = deployed ? 0 : -Math.PI / 2 + 0.08;
+    }
+    g.bipodDeployed = !!deployed;
+  };
+  g.setBipod(false);
+
+  g.setCutaway = function (on) {
+    for (const m of xrayList) {
+      if (on) { if (!m.userData.mat0) m.userData.mat0 = m.material; m.material = xrayMat; }
+      else if (m.userData.mat0) { m.material = m.userData.mat0; }
+    }
+    g.cutaway = !!on;
+  };
+
+  // масштаб и тени
+  if (opts.scale) g.scale.setScalar(opts.scale);
+  return g;
+}
+// ==== МОДЕЛЬ: КОНЕЦ ====
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+
+// =======================================================================
+//  БАЗА: рендерер, сцена, свет
+// =======================================================================
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+function fail(m) { const e = $('#err'); if (e) { e.style.display = 'block'; e.textContent = String(m); } }
+addEventListener('error', e => fail('Ошибка: ' + (e.message || e)));
+addEventListener('unhandledrejection', e => fail('Ошибка: ' + ((e.reason && e.reason.message) || e.reason)));
+
+const cv = document.createElement('canvas');
+document.body.appendChild(cv);
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x131315);
+scene.fog = new THREE.Fog(0x131315, 3.0, 9.0);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.006, 60);
+const orbitCam = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.006, 60);
+orbitCam.position.set(0.60, 0.31, 0.72);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
+scene.environmentIntensity = 0.62;
+
+const keyL = new THREE.DirectionalLight(0xfff1dc, 2.15);
+keyL.position.set(1.5, 2.3, 1.15);
+keyL.castShadow = true;
+keyL.shadow.mapSize.set(2048, 2048);
+keyL.shadow.camera.near = 0.6; keyL.shadow.camera.far = 7.5;
+keyL.shadow.camera.left = -0.85; keyL.shadow.camera.right = 0.85;
+keyL.shadow.camera.top = 0.85; keyL.shadow.camera.bottom = -0.85;
+keyL.shadow.bias = -0.0004; keyL.shadow.normalBias = 0.0035;
+keyL.shadow.camera.updateProjectionMatrix();
+scene.add(keyL);
+const fillL = new THREE.DirectionalLight(0x9dbcf0, 0.6); fillL.position.set(-1.7, 0.85, -0.7); scene.add(fillL);
+const rimL = new THREE.DirectionalLight(0xffd2a4, 0.85); rimL.position.set(-0.5, 0.35, -1.9); scene.add(rimL);
+scene.add(new THREE.HemisphereLight(0x7f93ad, 0x191917, 0.42));
+
+const GROUND_Y = -0.247;
+const floor = new THREE.Mesh(new THREE.CircleGeometry(3.0, 72),
+  new THREE.MeshStandardMaterial({ color: 0x1a1a1d, roughness: 0.72, metalness: 0.06 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = GROUND_Y - 0.001; floor.receiveShadow = true;
+scene.add(floor);
+const shadowPlane = new THREE.Mesh(new THREE.CircleGeometry(3.0, 72), new THREE.ShadowMaterial({ opacity: 0.5 }));
+shadowPlane.rotation.x = -Math.PI / 2; shadowPlane.position.y = GROUND_Y; shadowPlane.receiveShadow = true;
+scene.add(shadowPlane);
+
+// =======================================================================
+//  МОДЕЛЬ
+// =======================================================================
+const rig = new THREE.Group();          // отдача
+scene.add(rig);
+const gun = buildSCAR(THREE, {});
+gun.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+rig.add(gun);
+const P = gun.parts, N = gun.nodes, D = gun.dims;
+
+// точка глаза для режима прицеливания
+const eyeAnchor = new THREE.Object3D();
+gun.add(eyeAnchor);
+
+const controls = new OrbitControls(orbitCam, renderer.domElement);
+controls.target.set(-0.015, -0.035, -0.05);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.26; controls.maxDistance = 2.6;
+controls.maxPolarAngle = Math.PI * 0.88;
+controls.rotateSpeed = 0.8; controls.zoomSpeed = 0.9; controls.panSpeed = 0.6;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
+controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+controls.update();
+
+addEventListener('resize', () => {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = orbitCam.aspect = w / h;
+  camera.updateProjectionMatrix(); orbitCam.updateProjectionMatrix();
+});
+
+// =======================================================================
+//  СОСТОЯНИЕ
+// =======================================================================
+const S = {
+  cap: D.MAG_CAP, mag: D.MAG_CAP, chambered: true, boltLocked: false,
+  magIn: true, magBusy: false, reloading: false, mode: 'auto', trigger: false,
+  ads: false, adsT: 0, cutaway: false, folded: false, bipod: false,
+  lastShot: -1, semiLatch: false, muted: false
+};
+const MODE_NAME = { safe: 'ПРЕДОХР', semi: 'ОДИНОЧНЫЙ', auto: 'АВТО' };
+const RPM = 600, SHOT_DT = 60 / RPM;
+
+// =======================================================================
+//  ТВИНЫ
+// =======================================================================
+const tweens = [];
+function tw(obj, prop, to, dur, ease, done) {
+  const from = obj[prop];
+  const t = { obj, prop, from, to, dur, t: 0, ease: ease || (x => x * x * (3 - 2 * x)), done };
+  for (let i = tweens.length - 1; i >= 0; i--)
+    if (tweens[i].obj === obj && tweens[i].prop === prop) tweens.splice(i, 1);
+  tweens.push(t); return t;
+}
+function stepTweens(dt) {
+  for (let i = tweens.length - 1; i >= 0; i--) {
+    const t = tweens[i];
+    t.t += dt;
+    const k = t.dur <= 0 ? 1 : clamp(t.t / t.dur, 0, 1);
+    t.obj[t.prop] = lerp(t.from, t.to, t.ease(k));
+    if (k >= 1) { tweens.splice(i, 1); if (t.done) t.done(); }
+  }
+}
+const timers = [];
+const later = (ms, fn) => timers.push({ t: ms / 1000, fn });
+function stepTimers(dt) {
+  for (let i = timers.length - 1; i >= 0; i--) {
+    timers[i].t -= dt;
+    if (timers[i].t <= 0) { const f = timers[i].fn; timers.splice(i, 1); f(); }
+  }
+}
+
+// =======================================================================
+//  ЗВУК — полностью процедурный WebAudio (без внешних файлов)
+// =======================================================================
+const AU = (() => {
+  let ctx = null, master, comp, dry, verbSend, distSend, NOISE = null, on = true;
+
+  function makeIR(dur, decay) {
+    const sr = ctx.sampleRate, len = Math.floor(sr * dur);
+    const b = ctx.createBuffer(2, len, sr);
+    for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(c);
+      for (let i = 0; i < len; i++) {
+        const t = i / len;
+        const early = (i > sr * 0.011 && i < sr * 0.013) || (i > sr * 0.023 && i < sr * 0.0245) ? 2.2 : 1;
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) * early;
+      }
+    }
+    return b;
+  }
+  function init() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+    comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -13; comp.knee.value = 24; comp.ratio.value = 8;
+    comp.attack.value = 0.0025; comp.release.value = 0.25;
+    comp.connect(master);
+    dry = ctx.createGain(); dry.gain.value = 1; dry.connect(comp);
+    // реверберация помещения/открытого пространства
+    const cv = ctx.createConvolver(); cv.buffer = makeIR(2.4, 3.2); cv.connect(comp);
+    verbSend = ctx.createGain(); verbSend.gain.value = 0.5; verbSend.connect(cv);
+    // дальний раскат: задержка + глухой фильтр + второе эхо
+    distSend = ctx.createGain(); distSend.gain.value = 1;
+    const d1 = ctx.createDelay(1), lp1 = ctx.createBiquadFilter(), g1 = ctx.createGain();
+    d1.delayTime.value = 0.098; lp1.type = 'lowpass'; lp1.frequency.value = 560; g1.gain.value = 0.6;
+    const d2 = ctx.createDelay(1), g2 = ctx.createGain();
+    d2.delayTime.value = 0.23; g2.gain.value = 0.34;
+    distSend.connect(d1); d1.connect(lp1); lp1.connect(g1); g1.connect(comp);
+    lp1.connect(d2); d2.connect(g2); g2.connect(comp); g2.connect(cv);
+    // белый шум
+    const len = ctx.sampleRate * 2;
+    NOISE = ctx.createBuffer(1, len, ctx.sampleRate);
+    const nd = NOISE.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; nd[i] = w * 0.86 + last * 2.4; }
+    return true;
+  }
+  const now = () => ctx.currentTime;
+
+  function nz(t, dur, rate) {
+    const s = ctx.createBufferSource();
+    s.buffer = NOISE; s.loop = true;
+    s.playbackRate.value = rate || 1;
+    s.start(t, Math.random() * 1.2, dur + 0.02);
+    return s;
+  }
+  function eg(t, a, d, peak, hold) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + a);
+    if (hold) g.gain.setValueAtTime(peak, t + a + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + (hold || 0) + d);
+    return g;
+  }
+  function bq(type, f, q) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q) b.Q.value = q; return b; }
+  function out(node, dryG, verbG, distG) {
+    const g = ctx.createGain(); g.gain.value = dryG === undefined ? 1 : dryG;
+    node.connect(g); g.connect(dry);
+    if (verbG) { const v = ctx.createGain(); v.gain.value = verbG; node.connect(v); v.connect(verbSend); }
+    if (distG) { const w = ctx.createGain(); w.gain.value = distG; node.connect(w); w.connect(distSend); }
+  }
+  // короткий металлический призвук (модальный резонанс)
+  function ping(t, f, dur, gain, q) {
+    const s = nz(t, dur, 1), b = bq('bandpass', f, q || 26), g = eg(t, 0.0008, dur, gain);
+    s.connect(b); b.connect(g); out(g, 1, 0.25, 0);
+  }
+  // стук металла по металлу / полимеру
+  function clack(t, gain, bright, body) {
+    gain = gain === undefined ? 0.5 : gain;
+    bright = bright || 2600;
+    const s = nz(t, 0.05, rnd(0.9, 1.1));
+    const hp = bq('highpass', bright * 0.45), bp = bq('bandpass', bright * rnd(0.92, 1.08), 1.6);
+    const g = eg(t, 0.0006, 0.028, gain);
+    s.connect(hp); hp.connect(bp); bp.connect(g); out(g, 1, 0.2, 0);
+    if (body !== false) {
+      const o = ctx.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(rnd(150, 200), t);
+      o.frequency.exponentialRampToValueAtTime(70, t + 0.05);
+      const og = eg(t, 0.001, 0.045, gain * 0.5);
+      o.connect(og); out(og, 1, 0.1, 0); o.start(t); o.stop(t + 0.09);
+    }
+    ping(t + 0.0015, rnd(3200, 4600), 0.05, gain * 0.28, 30);
+  }
+  function click(t, gain, f) {
+    const s = nz(t, 0.014, 1), b = bq('bandpass', f || 4200, 3), g = eg(t, 0.0004, 0.011, gain || 0.34);
+    s.connect(b); b.connect(g); out(g, 1, 0.14, 0);
+  }
+
+  // ---------------- ВЫСТРЕЛ ----------------
+  function shot(kind, t0) {
+    if (!ctx || !on) return;
+    const t = t0 || now();
+    const p = rnd(0.95, 1.06), lv = rnd(0.92, 1.06);
+    if (kind === 'suppressed') {
+      // глушитель: глухой «тхумп» + механика + звон банки
+      const s = nz(t, 0.16, p), lp = bq('lowpass', 900, 0.9), g = eg(t, 0.002, 0.13, 0.5 * lv);
+      s.connect(lp); lp.connect(g); out(g, 1, 0.28, 0.25);
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(150 * p, t); o.frequency.exponentialRampToValueAtTime(58, t + 0.11);
+      const og = eg(t, 0.001, 0.1, 0.45 * lv); o.connect(og); out(og, 1, 0.1, 0.2); o.start(t); o.stop(t + 0.15);
+      ping(t + 0.004, 1750, 0.4, 0.09, 44);
+      ping(t + 0.004, 2680, 0.32, 0.06, 50);
+      clack(t + 0.012, 0.34, 2400);
+      clack(t + 0.05, 0.26, 1900);
+      return;
+    }
+    const power = kind === 'bare' ? 1.12 : 1.0;
+    // 1) ударная волна — резкий треск 4-6 кГц
+    const c = nz(t, 0.012, p), cb = bq('bandpass', 5200 * p, 0.75), cg = eg(t, 0.0006, 0.009, 1.05 * lv * power);
+    c.connect(cb); cb.connect(cg); out(cg, 1, 0.2, 0.5);
+    // 2) тело выстрела — шум с быстрым падением среза
+    const b = nz(t, 0.30, p), lp = bq('lowpass', 9000, 0.6);
+    lp.frequency.setValueAtTime(9000, t);
+    lp.frequency.exponentialRampToValueAtTime(1400, t + 0.045);
+    lp.frequency.exponentialRampToValueAtTime(280, t + 0.24);
+    const hp = bq('highpass', 110);
+    const bg = eg(t, 0.0012, 0.22, 1.0 * lv * power);
+    b.connect(lp); lp.connect(hp); hp.connect(bg); out(bg, 1, 0.75, 1.0);
+    // 3) низ — удар в грудь
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(112 * p, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.17);
+    const og = eg(t, 0.0015, 0.16, 0.95 * lv * power);
+    o.connect(og); out(og, 1, 0.2, 0.55); o.start(t); o.stop(t + 0.25);
+    // 4) средние — «рваный» пилообразный призвук
+    const sw = ctx.createOscillator(); sw.type = 'sawtooth';
+    sw.frequency.setValueAtTime(230 * p, t); sw.frequency.exponentialRampToValueAtTime(90, t + 0.08);
+    const swf = bq('lowpass', 1200), swg = eg(t, 0.001, 0.07, 0.3 * lv);
+    sw.connect(swf); swf.connect(swg); out(swg, 1, 0.15, 0.2); sw.start(t); sw.stop(t + 0.12);
+    // 5) механика автоматики: затвор назад и вперёд
+    clack(t + 0.011, 0.3, 2900);
+    clack(t + 0.048, 0.4, 2200);
+    ping(t + 0.05, 5200, 0.09, 0.1, 34);
+  }
+
+  const api = {
+    get ctx() { return ctx; },
+    resume() {
+      if (!ctx) { if (!init()) return false; }
+      if (ctx.state === 'suspended') ctx.resume();
+      return true;
+    },
+    setMuted(m) { on = !m; if (master) master.gain.value = m ? 0 : 0.9; },
+    shot,
+    dryFire() { if (!ctx || !on) return; const t = now(); click(t, 0.5, 3000); clack(t + 0.004, 0.22, 1500, false); },
+    trigger() { if (!ctx || !on) return; click(now(), 0.16, 5200); },
+    selector() { if (!ctx || !on) return; const t = now(); click(t, 0.42, 3600); ping(t, 2400, 0.05, 0.12, 30); },
+    magRelease() { if (!ctx || !on) return; click(now(), 0.4, 3100); },
+    magOut() { if (!ctx || !on) return; const t = now(); clack(t, 0.3, 1500); ping(t + 0.02, 900, 0.12, 0.1, 18); },
+    magGround() {
+      if (!ctx || !on) return; const t = now();
+      clack(t, 0.55, 900); clack(t + 0.075, 0.3, 1100); clack(t + 0.14, 0.16, 1400);
+      const s = nz(t, 0.2, 1), lp = bq('lowpass', 420), g = eg(t, 0.002, 0.16, 0.22);
+      s.connect(lp); lp.connect(g); out(g, 1, 0.4, 0.1);
+    },
+    magIn() { if (!ctx || !on) return; const t = now(); clack(t, 0.5, 1700); clack(t + 0.03, 0.6, 2500); click(t + 0.055, 0.42, 3800); },
+    boltBack() { if (!ctx || !on) return; const t = now();
+      const s = nz(t, 0.09, 0.85), b = bq('bandpass', 1500, 1.1), g = eg(t, 0.004, 0.07, 0.34);
+      s.connect(b); b.connect(g); out(g, 1, 0.2, 0); clack(t + 0.075, 0.42, 2300); },
+    boltHome() { if (!ctx || !on) return; const t = now();
+      const s = nz(t, 0.05, 1.1), b = bq('bandpass', 1200, 1.2), g = eg(t, 0.002, 0.04, 0.3);
+      s.connect(b); b.connect(g); out(g, 1, 0.2, 0);
+      clack(t + 0.028, 0.75, 2000); ping(t + 0.03, 3400, 0.13, 0.16, 30); ping(t + 0.03, 5100, 0.09, 0.1, 36); },
+    boltCatch() { if (!ctx || !on) return; clack(now(), 0.45, 2600); },
+    brass(t0) {
+      if (!ctx || !on) return; const t = (t0 || now());
+      for (let i = 0; i < 4; i++) {
+        const d = t + i * rnd(0.05, 0.11) + (i ? 0.02 : 0);
+        ping(d, rnd(2600, 5200), rnd(0.08, 0.22), 0.11 / (1 + i * 0.7), 40);
+        ping(d, rnd(6200, 9000), rnd(0.05, 0.1), 0.05 / (1 + i), 46);
+      }
+    },
+    rail(lock) { if (!ctx || !on) return; const t = now();
+      clack(t, lock ? 0.4 : 0.3, 2100); click(t + (lock ? 0.06 : 0.03), 0.3, lock ? 3400 : 4200); },
+    fold() { if (!ctx || !on) return; const t = now();
+      const s = nz(t, 0.12, 0.7), b = bq('bandpass', 700, 1.4), g = eg(t, 0.01, 0.1, 0.22);
+      s.connect(b); b.connect(g); out(g, 1, 0.2, 0); clack(t + 0.11, 0.5, 1900); },
+    bipod() { if (!ctx || !on) return; const t = now(); clack(t, 0.32, 2400); clack(t + 0.06, 0.34, 2100); ping(t + 0.06, 1800, 0.1, 0.1, 28); },
+    ui() { if (!ctx || !on) return; click(now(), 0.14, 5600); }
+  };
+  return api;
+})();
+
+// =======================================================================
+//  ПРОЦЕДУРНЫЕ ТЕКСТУРЫ ДЛЯ ЭФФЕКТОВ
+// =======================================================================
+function canvasTex(size, draw) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const TEX = {
+  glow: canvasTex(128, (x, s) => {
+    const g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0, 'rgba(255,255,240,1)'); g.addColorStop(0.18, 'rgba(255,232,150,0.95)');
+    g.addColorStop(0.45, 'rgba(255,150,40,0.45)'); g.addColorStop(1, 'rgba(255,90,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, s, s);
+  }),
+  star: canvasTex(256, (x, s) => {
+    x.translate(s / 2, s / 2);
+    const g = x.createRadialGradient(0, 0, 0, 0, 0, s / 2);
+    g.addColorStop(0, 'rgba(255,255,225,1)'); g.addColorStop(0.25, 'rgba(255,206,110,0.8)');
+    g.addColorStop(0.6, 'rgba(255,120,25,0.22)'); g.addColorStop(1, 'rgba(255,80,0,0)');
+    x.fillStyle = g;
+    for (let i = 0; i < 6; i++) {
+      x.save(); x.rotate(i * Math.PI / 3);
+      x.beginPath(); x.moveTo(0, 0); x.lineTo(s * 0.5, -s * 0.055); x.lineTo(s * 0.5, s * 0.055); x.closePath();
+      x.fill(); x.restore();
+    }
+    x.beginPath(); x.arc(0, 0, s * 0.17, 0, 7); x.fill();
+  }),
+  smoke: canvasTex(128, (x, s) => {
+    const g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0, 'rgba(214,210,200,0.62)'); g.addColorStop(0.5, 'rgba(170,166,158,0.26)');
+    g.addColorStop(1, 'rgba(140,138,132,0)');
+    x.fillStyle = g; x.fillRect(0, 0, s, s);
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * 7, r = 12 + Math.random() * 40;
+      const px = s / 2 + Math.cos(a) * r, py = s / 2 + Math.sin(a) * r;
+      const g2 = x.createRadialGradient(px, py, 0, px, py, 12 + Math.random() * 20);
+      g2.addColorStop(0, 'rgba(200,196,188,0.18)'); g2.addColorStop(1, 'rgba(200,196,188,0)');
+      x.fillStyle = g2; x.fillRect(0, 0, s, s);
+    }
+  }),
+  spark: canvasTex(64, (x, s) => {
+    const g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    g.addColorStop(0, 'rgba(255,246,214,1)'); g.addColorStop(0.4, 'rgba(255,176,60,0.7)'); g.addColorStop(1, 'rgba(255,110,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, s, s);
+  })
+};
+
+// =======================================================================
+//  ДУЛЬНОЕ ПЛАМЯ
+// =======================================================================
+const flashG = new THREE.Group(); flashG.visible = false; gun.add(flashG);
+const flashPlanes = [];
+for (let i = 0; i < 3; i++) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.30),
+    new THREE.MeshBasicMaterial({ map: TEX.star, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 1 }));
+  m.rotation.y = Math.PI / 2; m.rotation.x = i * Math.PI / 3;
+  flashG.add(m); flashPlanes.push(m);
+}
+const flashCore = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 12),
+  new THREE.MeshBasicMaterial({ color: 0xffe6b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+flashG.add(flashCore);
+const flashCone = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.16, 18, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xff9a30, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+flashCone.rotation.x = -Math.PI / 2; flashCone.position.z = -0.075;
+flashG.add(flashCone);
+const flashLight = new THREE.PointLight(0xffb060, 0, 4.5, 2);
+gun.add(flashLight);
+let flashT = 0, flashDur = 0.055, flashPow = 1;
+
+function fireFlash(scale) {
+  const mz = N.muzzle.position;
+  flashG.position.copy(mz);
+  flashLight.position.set(mz.x, mz.y, mz.z - 0.05);
+  flashPow = scale;
+  const s = scale * rnd(0.85, 1.2);
+  for (const p of flashPlanes) { p.rotation.x = Math.random() * Math.PI * 2; p.scale.setScalar(s * rnd(0.8, 1.15)); }
+  flashCore.scale.setScalar(s * 1.05);
+  flashCone.scale.set(s, s * rnd(0.8, 1.3), s);
+  flashG.visible = scale > 0.05;
+  flashT = flashDur;
+}
+function updateFlash(dt) {
+  if (flashT > 0) {
+    flashT -= dt;
+    const k = clamp(flashT / flashDur, 0, 1);
+    for (const p of flashPlanes) p.material.opacity = k * k;
+    flashCore.material.opacity = k;
+    flashCone.material.opacity = 0.5 * k * k;
+    flashLight.intensity = 26 * flashPow * k * k;
+    if (flashT <= 0) { flashG.visible = false; flashLight.intensity = 0; }
+  }
+}
+
+// =======================================================================
+//  ЧАСТИЦЫ (дым, искры, пыль)
+// =======================================================================
+const PP = [];
+const PMAX = 110;
+for (let i = 0; i < PMAX; i++) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.smoke, transparent: true, opacity: 0, depthWrite: false }));
+  sp.visible = false; scene.add(sp);
+  PP.push({ sp, life: 0, max: 1, v: new THREE.Vector3(), grow: 0, kind: 'smoke', fade: 1 });
+}
+let pIdx = 0;
+function emit(kind, pos, vel, life, size, grow) {
+  const p = PP[pIdx = (pIdx + 1) % PMAX];
+  p.kind = kind; p.life = p.max = life; p.v.copy(vel); p.grow = grow;
+  p.sp.position.copy(pos); p.sp.scale.setScalar(size); p.sp.visible = true;
+  const m = p.sp.material;
+  if (kind === 'spark') { m.map = TEX.spark; m.blending = THREE.AdditiveBlending; m.color.setHex(0xffc070); p.fade = 1; }
+  else if (kind === 'ember') { m.map = TEX.glow; m.blending = THREE.AdditiveBlending; m.color.setHex(0xff8a30); p.fade = 1; }
+  else { m.map = TEX.smoke; m.blending = THREE.NormalBlending; m.color.setHex(0xb9b6ae); p.fade = 0.55; }
+  m.opacity = p.fade; m.needsUpdate = true;
+  return p;
+}
+function updateParticles(dt) {
+  for (const p of PP) {
+    if (p.life <= 0) continue;
+    p.life -= dt;
+    if (p.life <= 0) { p.sp.visible = false; continue; }
+    const k = p.life / p.max;
+    if (p.kind === 'smoke') {
+      p.v.multiplyScalar(1 - 1.9 * dt);
+      p.v.y += 0.22 * dt;
+      p.sp.scale.setScalar(p.sp.scale.x + p.grow * dt);
+      p.sp.material.opacity = p.fade * k * k * 1.25;
+    } else {
+      p.v.y -= 5.2 * dt;
+      p.v.multiplyScalar(1 - 2.4 * dt);
+      p.sp.material.opacity = k;
+      p.sp.scale.setScalar(Math.max(0.0015, p.sp.scale.x * (1 - 1.4 * dt)));
+    }
+    p.sp.position.addScaledVector(p.v, dt);
+    if (p.sp.position.y < GROUND_Y + 0.002 && p.kind !== 'smoke') { p.sp.position.y = GROUND_Y + 0.002; p.v.y = Math.abs(p.v.y) * 0.28; p.v.x *= 0.6; p.v.z *= 0.6; }
+  }
+}
+
+// мировые орты оружия
+const _fwd = new THREE.Vector3(), _up = new THREE.Vector3(), _right = new THREE.Vector3(), _wp = new THREE.Vector3(), _q = new THREE.Quaternion();
+function axes() {
+  gun.updateWorldMatrix(true, false);
+  gun.getWorldQuaternion(_q);
+  _fwd.set(0, 0, -1).applyQuaternion(_q);
+  _up.set(0, 1, 0).applyQuaternion(_q);
+  _right.set(1, 0, 0).applyQuaternion(_q);
+}
+function worldOf(node, out) { node.updateWorldMatrix(true, false); return out.setFromMatrixPosition(node.matrixWorld); }
+
+function muzzleFX(kind) {
+  axes();
+  const mp = worldOf(N.muzzle, new THREE.Vector3()).clone();
+  const sup = kind === 'suppressed';
+  const n = sup ? 7 : 5;
+  for (let i = 0; i < n; i++) {
+    const p = mp.clone().addScaledVector(_fwd, rnd(0.0, 0.12)).add(new THREE.Vector3(rnd(-0.01, 0.01), rnd(-0.01, 0.01), rnd(-0.01, 0.01)));
+    const v = _fwd.clone().multiplyScalar(sup ? rnd(0.5, 1.3) : rnd(1.2, 3.0))
+      .addScaledVector(_up, rnd(-0.1, 0.35)).addScaledVector(_right, rnd(-0.25, 0.25));
+    emit('smoke', p, v, rnd(0.7, 1.5), rnd(0.03, 0.06), rnd(0.10, 0.22));
+  }
+  if (!sup) {
+    for (let i = 0; i < 9; i++) {
+      const v = _fwd.clone().multiplyScalar(rnd(1.5, 6.0))
+        .addScaledVector(_up, rnd(-0.6, 0.9)).addScaledVector(_right, rnd(-0.9, 0.9));
+      emit(Math.random() < 0.4 ? 'ember' : 'spark', mp.clone(), v, rnd(0.12, 0.34), rnd(0.006, 0.016), 0);
+    }
+  }
+  // дымок из окна выброса
+  const ep = worldOf(N.eject, new THREE.Vector3()).clone();
+  for (let i = 0; i < 2; i++)
+    emit('smoke', ep, _right.clone().multiplyScalar(rnd(0.15, 0.5)).addScaledVector(_up, rnd(0.1, 0.4)),
+      rnd(0.5, 1.0), rnd(0.012, 0.024), 0.09);
+  // пыль от дульной волны, если ствол близко к земле
+  if (mp.y < GROUND_Y + 0.32 && !sup) {
+    for (let i = 0; i < 6; i++)
+      emit('smoke', new THREE.Vector3(mp.x + rnd(-0.05, 0.05), GROUND_Y + 0.004, mp.z + rnd(-0.12, 0.05)),
+        new THREE.Vector3(rnd(-0.5, 0.5), rnd(0.15, 0.5), rnd(-0.9, 0.2)), rnd(0.8, 1.6), rnd(0.04, 0.08), 0.25);
+  }
+}
+
+// =======================================================================
+//  ГИЛЬЗЫ
+// =======================================================================
+const shells = [];
+const SHELL_MAX = 22;
+function ejectShell() {
+  axes();
+  let s;
+  if (shells.length >= SHELL_MAX) { s = shells.shift(); }
+  else {
+    const obj = gun.makeCartridge(true);
+    obj.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+    scene.add(obj);
+    s = { obj, v: new THREE.Vector3(), w: new THREE.Vector3(), rest: false, t: 0, hit: 0 };
+  }
+  shells.push(s);
+  s.rest = false; s.t = 0; s.hit = 0; s.obj.visible = true;
+  worldOf(N.eject, s.obj.position);
+  s.obj.quaternion.copy(_q);
+  s.obj.rotateY(rnd(-0.3, 0.3));
+  s.v.copy(_right).multiplyScalar(rnd(2.1, 3.1))
+    .addScaledVector(_up, rnd(1.1, 1.9))
+    .addScaledVector(_fwd, rnd(-0.5, 0.25));
+  s.w.set(rnd(-26, 26), rnd(-22, 22), rnd(-34, 34));
+}
+function updateShells(dt) {
+  for (const s of shells) {
+    if (s.rest) { s.t += dt; continue; }
+    s.t += dt;
+    s.v.y -= 9.81 * dt;
+    s.obj.position.addScaledVector(s.v, dt);
+    s.obj.rotateX(s.w.x * dt); s.obj.rotateY(s.w.y * dt); s.obj.rotateZ(s.w.z * dt);
+    const yFloor = GROUND_Y + 0.0055;
+    if (s.obj.position.y <= yFloor) {
+      s.obj.position.y = yFloor;
+      if (Math.abs(s.v.y) < 0.35 && s.v.lengthSq() < 0.5) { s.rest = true; s.v.set(0, 0, 0); s.w.set(0, 0, 0); }
+      else {
+        s.v.y = -s.v.y * 0.42; s.v.x *= 0.62; s.v.z *= 0.62; s.w.multiplyScalar(0.55);
+        if (s.hit < 3) { AU.brass(); s.hit++; }
+      }
+    }
+  }
+}
+
+// =======================================================================
+//  ФОНАРЬ И ЛЦУ
+// =======================================================================
+const laser = new THREE.Group(); gun.add(laser); laser.visible = false;
+{
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.0009, 0.0022, 8, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xff2a18, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+  beam.rotation.x = Math.PI / 2; beam.position.z = -4;
+  laser.add(beam);
+  const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: 0xff2a18, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+  dot.scale.setScalar(0.02); dot.position.z = -8;
+  laser.add(dot);
+}
+const flashlight = new THREE.SpotLight(0xfff0d0, 0, 9, 0.34, 0.45, 1.2);
+flashlight.target.position.set(0, 0, -8);
+gun.add(flashlight); gun.add(flashlight.target);
+const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: 0xfff2d2, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+lampGlow.scale.setScalar(0.05); gun.add(lampGlow);
+function syncSideModule() {
+  const key = gun.modules.side;
+  const obj = gun.getSlot('side');
+  const ud = (obj && obj.userData) || {};
+  laser.visible = key === 'laser';
+  if (key === 'laser' && ud.laser) laser.position.set(ud.laser.x, ud.laser.y, ud.laser.z);
+  const isLight = key === 'light';
+  flashlight.intensity = isLight ? 12 : 0;
+  lampGlow.material.opacity = isLight ? 0.75 : 0;
+  if (isLight && ud.light) {
+    flashlight.position.set(ud.light.x, ud.light.y, ud.light.z);
+    flashlight.target.position.set(ud.light.x, ud.light.y, ud.light.z - 8);
+    lampGlow.position.set(ud.light.x, ud.light.y, ud.light.z - 0.004);
+  }
+}
+
+// =======================================================================
+//  МОДУЛЬНОСТЬ: снятие / установка
+// =======================================================================
+const SLOT_LABEL = { muzzle: 'Дульный модуль', optic: 'Прицел', under: 'Нижний модуль', side: 'Боковой модуль', mag: 'Магазин' };
+const SLOT_KEYS = { muzzle: ['flash', 'suppressor', 'none'], optic: ['none', 'reddot', 'scope'], under: ['none', 'grip', 'bipod'], side: ['none', 'light', 'laser'] };
+S.adsFov = 30;
+
+function moduleBase(obj) {
+  if (!obj.userData.__p0) obj.userData.__p0 = obj.position.clone();
+  return obj.userData.__p0;
+}
+function applyOptic() {
+  const ud = (gun.getSlot('optic') || {}).userData || {};
+  S.adsFov = ud.fov || (gun.modules.optic === 'none' ? 30 : 25);
+  S.reticle = ud.reticle || null;
+  buildReticle();
+}
+function setSlot(slot, key, animate) {
+  const prev = gun.modules[slot];
+  if (prev === key) return;
+  const oldObj = gun.getSlot(slot);
+  const finish = () => {
+    if (oldObj) { const b = moduleBase(oldObj); oldObj.position.copy(b); }
+    gun.setModule(slot, key);
+    const nw = gun.getSlot(slot);
+    if (nw && animate !== false) {
+      const b = moduleBase(nw);
+      const dy = slot === 'under' ? -0.05 : 0.05;
+      const dx = slot === 'side' ? 0.06 : 0;
+      nw.position.set(b.x + dx, b.y + dy, b.z);
+      tw(nw.position, 'y', b.y, 0.17);
+      if (dx) tw(nw.position, 'x', b.x, 0.17);
+      AU.rail(true);
+    }
+    if (slot === 'optic') applyOptic();
+    if (slot === 'side') syncSideModule();
+    if (slot === 'under') gun.setBipod(key === 'bipod' ? S.bipod : false);
+    syncMods(); syncHud();
+  };
+  if (oldObj && prev !== 'none' && animate !== false) {
+    const b = moduleBase(oldObj);
+    AU.rail(false);
+    const dy = slot === 'under' ? -0.06 : 0.06;
+    tw(oldObj.position, 'y', b.y + dy, 0.16, x => x * x, finish);
+    if (slot === 'side') tw(oldObj.position, 'x', b.x + 0.07, 0.16);
+  } else finish();
+}
+function cycleSlot(slot, dir) {
+  const ks = SLOT_KEYS[slot];
+  const i = ks.indexOf(gun.modules[slot]);
+  setSlot(slot, ks[(i + (dir || 1) + ks.length) % ks.length], true);
+}
+
+// ---- магазин ----
+const MAG_Y = D.MAG_SEAT.y;
+function dropMag() {
+  if (!S.magIn || S.magBusy) return false;
+  S.magIn = false; S.magBusy = true;
+  AU.magRelease();
+  tw(P.magRelease.position, 'z', 0.0025, 0.05, null, () => tw(P.magRelease.position, 'z', 0, 0.12));
+  later(70, () => {
+    AU.magOut();
+    tw(P.magazine.position, 'y', MAG_Y - 0.055, 0.10, x => x * x);
+    tw(P.magazine.rotation, 'x', 0.10, 0.30);
+    later(100, () => {
+      tw(P.magazine.position, 'y', GROUND_Y - MAG_Y + 0.06, 0.30, x => x * x, () => {
+        AU.magGround();
+        P.magazine.visible = false;
+        P.magazine.position.set(D.MAG_SEAT.x, MAG_Y, D.MAG_SEAT.z);
+        P.magazine.rotation.x = 0;
+        S.magBusy = false; syncHud(); syncMods();
+      });
+    });
+  });
+  syncHud(); syncMods();
+  return true;
+}
+function insertMag(full) {
+  if (S.magIn || S.magBusy) return false;
+  S.magBusy = true;
+  if (full) { S.mag = S.cap; gun.setAmmo(S.mag); }
+  P.magazine.visible = true;
+  P.magazine.position.set(D.MAG_SEAT.x, MAG_Y - 0.14, D.MAG_SEAT.z + 0.012);
+  P.magazine.rotation.x = 0.09;
+  tw(P.magazine.rotation, 'x', 0, 0.20);
+  tw(P.magazine.position, 'z', D.MAG_SEAT.z, 0.20);
+  tw(P.magazine.position, 'y', MAG_Y, 0.20, x => 1 - (1 - x) * (1 - x), () => {
+    AU.magIn();
+    S.magIn = true; S.magBusy = false; syncHud(); syncMods();
+  });
+  return true;
+}
+function toggleMag() { if (S.magIn) dropMag(); else insertMag(true); }
+
+// ---- затвор ----
+function feed() {
+  if (S.magIn && S.mag > 0) {
+    S.mag--; gun.setAmmo(S.mag);
+    S.chambered = true; gun.setChamber(true);
+    S.boltLocked = false;
+    tw(P.bolt.position, 'z', 0, 0.045);
+  } else {
+    S.chambered = false; gun.setChamber(false);
+    S.boltLocked = true;
+    tw(P.bolt.position, 'z', D.CH.travel, 0.02);
+    tw(P.boltCatch.position, 'y', -0.0022, 0.06);
+    AU.boltCatch();
+  }
+  syncHud();
+}
+function chargeBolt() {
+  if (S.magBusy || S.reloading) return;
+  if (S.boltLocked) {                      // сброс затворной задержки
+    AU.boltHome();
+    tw(P.boltCatch.position, 'y', 0, 0.08);
+    S.boltLocked = false;
+    tw(P.bolt.position, 'z', 0, 0.05, null, feedSilent);
+    return;
+  }
+  AU.boltBack();
+  const had = S.chambered;
+  gun.setChamber(false); S.chambered = false;
+  tw(P.bolt.position, 'z', D.CH.travel, 0.11, null, () => {
+    if (had) ejectShell();
+    later(60, () => { AU.boltHome(); feed(); });
+  });
+}
+function feedSilent() {
+  if (S.magIn && S.mag > 0) { S.mag--; gun.setAmmo(S.mag); S.chambered = true; gun.setChamber(true); }
+  syncHud();
+}
+
+// ---- выстрел ----
+let recZ = 0, recV = 0, recP = 0, recPV = 0;
+function pullTrigger() {
+  tw(P.trigger.rotation, 'x', -0.24, 0.02, null, () => tw(P.trigger.rotation, 'x', 0, 0.07));
+}
+function fireOnce(now) {
+  S.lastShot = now;
+  const mObj = gun.getSlot('muzzle');
+  const ud = (mObj && mObj.userData) || {};
+  const kind = ud.sound === 'suppressed' ? 'suppressed' : (gun.modules.muzzle === 'none' ? 'bare' : 'normal');
+  AU.shot(kind);
+  pullTrigger();
+  fireFlash(ud.flash === undefined ? 1 : ud.flash);
+  muzzleFX(kind);
+  recV += 0.52 + Math.random() * 0.06;
+  recPV += 1.15 + Math.random() * 0.15;
+  gun.setChamber(false); S.chambered = false;
+  tw(P.bolt.position, 'z', D.CH.travel, 0.032, x => 1 - (1 - x) * (1 - x));
+  later(24, ejectShell);
+  later(62, feed);
+  syncHud();
+}
+function tryFire(now) {
+  if (S.reloading || S.magBusy) return;
+  if (S.mode === 'safe') { AU.dryFire(); pullTrigger(); S.semiLatch = true; return; }
+  if (S.boltLocked) { AU.dryFire(); pullTrigger(); S.semiLatch = true; return; }
+  if (!S.chambered) { AU.dryFire(); pullTrigger(); S.semiLatch = true; return; }
+  if (now - S.lastShot < SHOT_DT) return;
+  fireOnce(now);
+  if (S.mode === 'semi') S.semiLatch = true;
+}
+
+// ---- перезарядка ----
+function reload() {
+  if (S.reloading || S.magBusy) return;
+  if (S.magIn && S.mag === S.cap) { AU.ui(); return; }
+  S.reloading = true; syncHud();
+  if (S.magIn) dropMag();
+  later(760, () => insertMag(true));
+  later(1080, () => {
+    if (S.boltLocked) {
+      AU.boltHome();
+      tw(P.boltCatch.position, 'y', 0, 0.08);
+      S.boltLocked = false;
+      tw(P.bolt.position, 'z', 0, 0.05, null, feedSilent);
+    }
+  });
+  later(1320, () => { S.reloading = false; syncHud(); });
+}
+
+// ---- прочее ----
+function setMode(m) {
+  S.mode = m; AU.selector();
+  tw(P.selector.rotation, 'x', m === 'safe' ? 0 : m === 'semi' ? 0.8 : 1.6, 0.12);
+  syncHud(); syncMods();
+}
+function cycleMode() { setMode(S.mode === 'safe' ? 'semi' : S.mode === 'semi' ? 'auto' : 'safe'); }
+function toggleFold() {
+  S.folded = !S.folded; AU.fold();
+  tw(P.stock.rotation, 'y', S.folded ? Math.PI : 0, 0.42);
+  tw(P.stock.position, 'x', S.folded ? 0.030 : 0.020, 0.42);
+  syncMods();
+}
+function toggleBipod() {
+  if (gun.modules.under !== 'bipod') { setSlot('under', 'bipod', true); S.bipod = true; gun.setBipod(true); AU.bipod(); syncMods(); return; }
+  S.bipod = !S.bipod; gun.setBipod(S.bipod); AU.bipod(); syncMods();
+}
+function toggleCut() { S.cutaway = !S.cutaway; gun.setCutaway(S.cutaway); AU.ui(); syncMods(); }
+
+// =======================================================================
+//  ИНТЕРФЕЙС
+// =======================================================================
+const elMods = $('#mods'), elCur = $('#a-cur'), elMode = $('#a-mode'), elState = $('#a-state');
+const elTip = $('#tip'), elHint = $('#hint'), elRet = $('#reticle'), elVig = $('#vignette');
+let hintT = 0;
+function toast(t) { if (!elHint) return; elHint.textContent = t; elHint.style.opacity = '1'; hintT = 2.2; }
+
+function row(label) {
+  const r = document.createElement('div'); r.className = 'mrow';
+  const l = document.createElement('div'); l.className = 'mlab'; l.textContent = label;
+  const s = document.createElement('div'); s.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end';
+  r.appendChild(l); r.appendChild(s); elMods.appendChild(r);
+  return s;
+}
+function segBtn(host, text, fn) {
+  const b = document.createElement('button'); b.className = 'seg'; b.textContent = text;
+  b.addEventListener('click', e => { e.preventDefault(); AU.resume(); fn(); });
+  host.appendChild(b); return b;
+}
+const segs = { muzzle: {}, optic: {}, under: {}, side: {} };
+let segMag, segStock, segBip;
+function buildMods() {
+  for (const slot of ['muzzle', 'optic', 'under', 'side']) {
+    const host = row(SLOT_LABEL[slot]);
+    for (const key of SLOT_KEYS[slot])
+      segs[slot][key] = segBtn(host, gun.moduleNames[slot][key], () => setSlot(slot, key, true));
+  }
+  const hm = row('Магазин'); segMag = segBtn(hm, 'Снять', () => toggleMag());
+  const hs = row('Приклад'); segStock = segBtn(hs, 'Сложить', () => toggleFold());
+  const hb = row('Сошки'); segBip = segBtn(hb, 'Раскрыть', () => toggleBipod());
+}
+function syncMods() {
+  for (const slot of ['muzzle', 'optic', 'under', 'side'])
+    for (const key of SLOT_KEYS[slot])
+      segs[slot][key].classList.toggle('on', gun.modules[slot] === key);
+  if (segMag) { segMag.textContent = S.magIn ? 'Снять' : 'Вставить'; segMag.classList.toggle('on', !S.magIn); }
+  if (segStock) { segStock.textContent = S.folded ? 'Разложить' : 'Сложить'; segStock.classList.toggle('on', S.folded); }
+  if (segBip) {
+    segBip.textContent = (gun.modules.under === 'bipod' && S.bipod) ? 'Сложить' : 'Раскрыть';
+    segBip.classList.toggle('on', gun.modules.under === 'bipod' && S.bipod);
+  }
+  const bc = $('#b-cut'); if (bc) bc.classList.toggle('on', S.cutaway);
+  const ba = $('#b-ads'); if (ba) ba.classList.toggle('on', S.ads);
+  const bs = $('#b-snd'); if (bs) { bs.classList.toggle('off', S.muted); bs.textContent = S.muted ? 'Звук: выкл' : 'Звук: вкл'; }
+}
+function syncHud() {
+  if (elCur) {
+    elCur.textContent = (S.magIn ? S.mag : 0) + (S.chambered ? '+1' : '');
+    elCur.classList.toggle('low', (S.magIn ? S.mag : 0) + (S.chambered ? 1 : 0) <= 5);
+  }
+  if (elMode) elMode.textContent = MODE_NAME[S.mode];
+  if (elState) {
+    let t = 'ГОТОВ';
+    if (S.reloading) t = 'ПЕРЕЗАРЯДКА';
+    else if (!S.magIn) t = 'БЕЗ МАГАЗИНА' + (S.chambered ? ' (1 в патроннике)' : '');
+    else if (S.boltLocked) t = 'ЗАТВОР НА ЗАДЕРЖКЕ';
+    else if (S.mode === 'safe') t = 'НА ПРЕДОХРАНИТЕЛЕ';
+    elState.textContent = t;
+    elState.classList.toggle('warn', S.boltLocked || !S.magIn || S.reloading);
+  }
+}
+
+// ---- прицельная сетка ----
+function buildReticle() {
+  if (!elRet) return;
+  elRet.setAttribute('viewBox', '0 0 200 200');
+  elRet.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const r = S.reticle;
+  if (r === 'dot') {
+    elRet.innerHTML =
+      '<defs><filter id="gl" x="-60%" y="-60%" width="220%" height="220%">' +
+      '<feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>' +
+      '<circle cx="100" cy="100" r="7.5" fill="#ff2a12" opacity=".22" filter="url(#gl)"/>' +
+      '<circle cx="100" cy="100" r="2.6" fill="#ff3a1c" filter="url(#gl)"/>' +
+      '<circle cx="100" cy="100" r="1.5" fill="#ffd9cf"/>';
+  } else if (r === 'mildot') {
+    let s = '<g stroke="#15161a" stroke-width="1.1" fill="#15161a" opacity=".92">' +
+      '<line x1="12" y1="100" x2="86" y2="100"/><line x1="114" y1="100" x2="188" y2="100"/>' +
+      '<line x1="100" y1="12" x2="100" y2="86"/><line x1="100" y1="114" x2="100" y2="188"/>' +
+      '<rect x="98.4" y="150" width="3.2" height="38"/>';
+    for (let i = 1; i <= 4; i++) {
+      const d = i * 18;
+      s += '<circle cx="' + (100 - d) + '" cy="100" r="1.7"/><circle cx="' + (100 + d) + '" cy="100" r="1.7"/>' +
+        '<circle cx="100" cy="' + (100 - d) + '" r="1.7"/>' +
+        (d < 50 ? '<circle cx="100" cy="' + (100 + d) + '" r="1.7"/>' : '');
+    }
+    s += '</g><circle cx="100" cy="100" r="1.3" fill="#e0402a"/>';
+    elRet.innerHTML = s;
+  } else elRet.innerHTML = '';
+}
+
+// ---- рейкаст: подсказки и клики по деталям ----
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+function underAncestor(obj, root) { let o = obj; while (o) { if (o === root) return true; o = o.parent; } return false; }
+function pick(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+  ptr.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(ptr, camera);
+  const hits = ray.intersectObject(gun, true);
+  for (const h of hits) {
+    if (!h.object.visible) continue;
+    let o = h.object;
+    while (o && o !== gun) {
+      if (o.userData && o.userData.slot) return { kind: 'slot', slot: o.userData.slot, key: o.userData.modKey, obj: o };
+      o = o.parent;
+    }
+    if (underAncestor(h.object, P.stock)) return { kind: 'stock' };
+    if (underAncestor(h.object, P.bolt)) return { kind: 'bolt' };
+    if (underAncestor(h.object, P.trigger)) return { kind: 'trigger' };
+    if (underAncestor(h.object, P.selector)) return { kind: 'selector' };
+    if (underAncestor(h.object, P.magRelease)) return { kind: 'magrel' };
+    if (underAncestor(h.object, P.boltCatch)) return { kind: 'boltcatch' };
+    return { kind: 'body' };
+  }
+  return null;
+}
+const HOVER = {
+  stock: 'Приклад — клик: сложить/разложить',
+  bolt: 'Рукоятка взведения — клик: передёрнуть',
+  trigger: 'Спусковой крючок — клик: выстрел',
+  selector: 'Переводчик огня — клик: сменить режим',
+  magrel: 'Защёлка магазина — клик: сбросить магазин',
+  boltcatch: 'Затворная задержка — клик: снять с затворной задержки'
+};
+function hover(ev) {
+  if (!elTip) return;
+  if (S.ads) { elTip.style.display = 'none'; return; }
+  const p = pick(ev);
+  let txt = '';
+  if (p) {
+    if (p.kind === 'slot' && p.slot === 'mag') txt = 'Магазин 7,62×51 (20) — клик: снять';
+    else if (p.kind === 'slot') txt = gun.moduleNames[p.slot][p.key] + ' — клик: снять';
+    else txt = HOVER[p.kind] || '';
+  }
+  if (!txt) { elTip.style.display = 'none'; return; }
+  elTip.style.display = 'block';
+  elTip.textContent = txt;
+  elTip.style.left = (ev.clientX + 14) + 'px';
+  elTip.style.top = (ev.clientY + 16) + 'px';
+}
+function clickPart(ev) {
+  const p = pick(ev);
+  if (!p) return;
+  if (p.kind === 'slot') {
+    if (p.slot === 'mag') { toggleMag(); toast(S.magIn ? 'Магазин снят' : 'Магазин примкнут'); return; }
+    if (gun.modules[p.slot] !== 'none') {
+      const nm = gun.moduleNames[p.slot][gun.modules[p.slot]];
+      setSlot(p.slot, 'none', true); toast(nm + ' снят');
+    } else cycleSlot(p.slot, 1);
+    return;
+  }
+  if (p.kind === 'stock') toggleFold();
+  else if (p.kind === 'bolt' || p.kind === 'boltcatch') chargeBolt();
+  else if (p.kind === 'trigger') { S.trigger = true; later(90, () => { S.trigger = false; S.semiLatch = false; }); }
+  else if (p.kind === 'selector') cycleMode();
+  else if (p.kind === 'magrel') { if (S.magIn) { dropMag(); toast('Магазин снят'); } }
+}
+
+// =======================================================================
+//  ВВОД
+// =======================================================================
+const dom = renderer.domElement;
+let downX = 0, downY = 0, downBtn = -1;
+dom.addEventListener('contextmenu', e => e.preventDefault());
+dom.addEventListener('pointerdown', e => {
+  AU.resume(); downBtn = e.button; downX = e.clientX; downY = e.clientY;
+  if (e.button === 2) { S.ads = true; syncMods(); }
+});
+addEventListener('pointerup', e => {
+  if (e.button === 2) { S.ads = false; syncMods(); }
+  if (e.button === 0 && downBtn === 0 && Math.abs(e.clientX - downX) < 5 && Math.abs(e.clientY - downY) < 5 &&
+    e.target === dom) clickPart(e);
+  downBtn = -1;
+});
+dom.addEventListener('pointermove', hover);
+dom.addEventListener('pointerleave', () => { if (elTip) elTip.style.display = 'none'; });
+
+addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  AU.resume();
+  if (k === ' ' || e.code === 'Space') { e.preventDefault(); S.trigger = true; return; }
+  switch (k) {
+    case 'r': reload(); break;
+    case 'm': toggleMag(); break;
+    case 'v': cycleMode(); break;
+    case 'f': toggleFold(); break;
+    case 'b': toggleBipod(); break;
+    case 'c': chargeBolt(); break;
+    case 'z': toggleCut(); break;
+    case 'x': cycleSlot('muzzle', 1); toast(gun.moduleNames.muzzle[gun.modules.muzzle]); break;
+    case 'g': cycleSlot('under', 1); toast(gun.moduleNames.under[gun.modules.under]); break;
+    case 'l': cycleSlot('side', 1); toast(gun.moduleNames.side[gun.modules.side]); break;
+    case '1': setSlot('optic', 'none', true); break;
+    case '2': setSlot('optic', 'reddot', true); break;
+    case '3': setSlot('optic', 'scope', true); break;
+    case 'q': S.muted = !S.muted; AU.setMuted(S.muted); syncMods(); break;
+    case 'e': S.ads = !S.ads; syncMods(); break;
+  }
+});
+addEventListener('keyup', e => {
+  if (e.key === ' ' || e.code === 'Space') { S.trigger = false; S.semiLatch = false; }
+});
+function bindHold(el, on, off) {
+  if (!el) return;
+  el.addEventListener('pointerdown', e => { e.preventDefault(); AU.resume(); on(); });
+  addEventListener('pointerup', () => off());
+  el.addEventListener('pointerleave', () => off());
+}
+bindHold($('#b-fire'), () => { S.trigger = true; }, () => { S.trigger = false; S.semiLatch = false; });
+if ($('#b-rel')) $('#b-rel').addEventListener('click', () => { AU.resume(); reload(); });
+if ($('#b-ads')) $('#b-ads').addEventListener('click', () => { AU.resume(); S.ads = !S.ads; syncMods(); });
+if ($('#b-cut')) $('#b-cut').addEventListener('click', () => { AU.resume(); toggleCut(); });
+if ($('#b-snd')) $('#b-snd').addEventListener('click', () => { S.muted = !S.muted; AU.resume(); AU.setMuted(S.muted); syncMods(); });
+
+// =======================================================================
+//  КАМЕРА / ПРИЦЕЛИВАНИЕ
+// =======================================================================
+const _wp2 = new THREE.Vector3(), _wq2 = new THREE.Quaternion();
+function updateCamera(dt) {
+  const want = S.ads ? 1 : 0;
+  S.adsT += (want - S.adsT) * Math.min(1, dt * 12);
+  if (S.adsT < 0.004) S.adsT = 0;
+  controls.enabled = S.adsT < 0.02;
+  controls.update();
+  const e = S.adsT * S.adsT * (3 - 2 * S.adsT);
+  if (e <= 0) {
+    camera.position.copy(orbitCam.position);
+    camera.quaternion.copy(orbitCam.quaternion);
+    camera.fov = 38;
+  } else {
+    eyeAnchor.position.copy(N.eye.position);
+    eyeAnchor.updateWorldMatrix(true, false);
+    eyeAnchor.getWorldPosition(_wp2);
+    eyeAnchor.getWorldQuaternion(_wq2);
+    camera.position.lerpVectors(orbitCam.position, _wp2, e);
+    camera.quaternion.copy(orbitCam.quaternion).slerp(_wq2, e);
+    camera.fov = lerp(38, S.adsFov, e);
+  }
+  camera.updateProjectionMatrix();
+  if (elRet) elRet.style.opacity = String(S.reticle ? clamp((e - 0.45) / 0.4, 0, 1) : 0);
+  if (elVig) elVig.style.opacity = String(clamp((e - 0.3) / 0.5, 0, 1) * (gun.modules.optic === 'scope' ? 1 : 0.42));
+}
+function updateRecoil(dt) {
+  recV += (-300 * recZ - 21 * recV) * dt; recZ += recV * dt;
+  recPV += (-330 * recP - 23 * recPV) * dt; recP += recPV * dt;
+  rig.position.z = recZ;
+  rig.rotation.x = recP;
+  rig.position.y = recP * 0.02;
+}
+function updateSights(dt) {
+  const t = gun.foldTarget, k = Math.min(1, dt * 9);
+  P.sightRear.rotation.x += (t - P.sightRear.rotation.x) * k;
+  P.sightFront.rotation.x = P.sightRear.rotation.x;
+}
+
+// =======================================================================
+//  СТАРТ
+// =======================================================================
+gun.setChamber(true);
+gun.setAmmo(S.mag);
+buildMods();
+applyOptic();
+syncSideModule();
+syncMods();
+syncHud();
+
+let prev = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+  const t = now / 1000;
+  stepTimers(dt); stepTweens(dt);
+  if (S.trigger && !S.semiLatch) tryFire(t);
+  updateRecoil(dt); updateFlash(dt); updateParticles(dt); updateShells(dt);
+  updateSights(dt); updateCamera(dt);
+  if (hintT > 0) { hintT -= dt; if (hintT <= 0 && elHint) elHint.style.opacity = '0'; }
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(loop);
+
+const ld = $('#load');
+if (ld) { ld.style.opacity = '0'; setTimeout(() => ld.remove(), 700); }
+toast('Кликни по модулю — снять его. ПКМ — прицеливание.');
+
+</script>
+</body>
+</html>

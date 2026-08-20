@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Полевая аптечка · процедурная модель three.js</title>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}</script>
+<style>
+	:root {
+		--bg: #15171a;
+		--panel: rgba(23, 26, 30, .86);
+		--line: rgba(255, 255, 255, .14);
+		--txt: #f2f3f5;
+		--dim: rgba(255, 255, 255, .62);
+		--acc: #5e9fe8;
+		--ok: #72bc8f;
+		--bad: #e97366;
+		--mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+		--ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	}
+	* { box-sizing: border-box; }
+	html, body { height: 100%; }
+	body {
+		margin: 0;
+		background: var(--bg);
+		color: var(--txt);
+		font: 13px/1.45 var(--ui);
+		overflow: hidden;
+		-webkit-font-smoothing: antialiased;
+	}
+	canvas { display: block; }
+
+	.panel {
+		position: fixed;
+		z-index: 10;
+		background: var(--panel);
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		padding: 12px;
+		backdrop-filter: blur(9px);
+		-webkit-backdrop-filter: blur(9px);
+		box-shadow: 0 12px 34px rgba(0, 0, 0, .42);
+		opacity: .45;
+		transition: opacity .25s ease;
+	}
+	body.ready .panel { opacity: 1; }
+
+	#tools {
+		top: 16px; left: 16px; width: 252px;
+		max-height: calc(100vh - 296px);
+		overflow-y: auto;
+	}
+	#anim {
+		bottom: 16px; left: 16px; width: 252px;
+		max-height: 256px;
+		overflow-y: auto;
+	}
+	#stats {
+		top: 16px; right: 16px; width: 274px;
+		font: 12px/1.5 var(--mono);
+	}
+	#hint {
+		bottom: 16px; right: 16px; max-width: 400px;
+		color: var(--dim); font-size: 12px; padding: 10px 14px;
+	}
+	#hint b { color: var(--txt); font-weight: 600; }
+
+	.h {
+		font: 600 10px/1 var(--ui);
+		letter-spacing: .09em;
+		text-transform: uppercase;
+		color: var(--dim);
+		margin: 0 0 8px;
+	}
+	.h + .h, .grid1 + .h, .grid2 + .h, .grid3 + .h { margin-top: 14px; }
+
+	.grid1, .grid2, .grid3 { display: grid; gap: 6px; }
+	.grid1 { grid-template-columns: 1fr; }
+	.grid2 { grid-template-columns: 1fr 1fr; }
+	.grid3 { grid-template-columns: 1fr 1fr 1fr; }
+
+	button {
+		min-height: 38px;
+		padding: 8px 6px;
+		border: 1px solid var(--line);
+		border-radius: 9px;
+		background: rgba(255, 255, 255, .05);
+		color: var(--txt);
+		font: 500 12px/1.15 var(--ui);
+		cursor: pointer;
+		transition: background .15s, border-color .15s, transform .06s;
+	}
+	button:hover { background: rgba(255, 255, 255, .11); }
+	button:active { transform: translateY(1px); }
+	button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+	button[disabled] { opacity: .45; cursor: progress; }
+	button.on {
+		background: rgba(94, 159, 232, .22);
+		border-color: rgba(94, 159, 232, .75);
+		color: #dcebff;
+	}
+
+	.row { margin: 0 0 10px; }
+	.row:last-child { margin-bottom: 0; }
+	.row label {
+		display: flex; justify-content: space-between; align-items: baseline;
+		gap: 8px; margin-bottom: 4px; color: var(--dim); font-size: 12px;
+	}
+	.row label b { color: var(--txt); font: 600 11px/1 var(--mono); }
+	input[type=range] {
+		-webkit-appearance: none; appearance: none;
+		width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0;
+	}
+	input[type=range]::-webkit-slider-runnable-track {
+		height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .16);
+	}
+	input[type=range]::-webkit-slider-thumb {
+		-webkit-appearance: none; appearance: none;
+		width: 15px; height: 15px; margin-top: -5px;
+		border-radius: 50%; background: var(--acc); border: 2px solid #0e1013;
+	}
+	input[type=range]::-moz-range-track {
+		height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .16);
+	}
+	input[type=range]::-moz-range-thumb {
+		width: 13px; height: 13px; border-radius: 50%;
+		background: var(--acc); border: 2px solid #0e1013;
+	}
+	input[type=range]:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+	.r { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
+	.r span { color: var(--dim); }
+	.r b { font-weight: 700; }
+
+	.nc {
+		margin-top: 10px; padding: 8px 10px;
+		border-radius: 8px; font-size: 11px; line-height: 1.45;
+		word-break: break-word;
+	}
+	.nc.ok { color: var(--ok); background: rgba(114, 188, 143, .12); border: 1px solid rgba(114, 188, 143, .35); }
+	.nc.bad { color: var(--bad); background: rgba(233, 115, 102, .12); border: 1px solid rgba(233, 115, 102, .42); }
+
+	#boot, #err {
+		position: fixed; z-index: 30;
+		left: 50%; top: 50%; transform: translate(-50%, -50%);
+	}
+	/* атрибут hidden должен побеждать display:flex у #boot/#err */
+	[hidden] { display: none !important; }
+	#boot {
+		display: flex; align-items: center; gap: 10px;
+		color: var(--dim); font-size: 14px;
+	}
+	.dot {
+		width: 9px; height: 9px; border-radius: 50%;
+		background: var(--acc); animation: pulse 1.1s ease-in-out infinite;
+	}
+	@keyframes pulse { 0%, 100% { opacity: .25; transform: scale(.7); } 50% { opacity: 1; transform: scale(1); } }
+
+	#err {
+		width: min(560px, calc(100vw - 48px));
+		background: var(--panel);
+		border: 1px solid rgba(233, 115, 102, .5);
+		border-radius: 12px; padding: 18px 20px;
+		box-shadow: 0 18px 44px rgba(0, 0, 0, .5);
+	}
+	#err .ttl { color: var(--bad); font: 700 15px/1.3 var(--ui); margin-bottom: 10px; }
+	#err .msg {
+		font: 11px/1.5 var(--mono); color: var(--dim);
+		background: rgba(0, 0, 0, .3); border-radius: 7px;
+		padding: 8px 10px; margin-bottom: 12px; word-break: break-all;
+	}
+	#err ul { margin: 0; padding-left: 20px; color: var(--dim); font-size: 12px; }
+	#err li { margin: 5px 0; }
+
+	@media (prefers-reduced-motion: reduce) {
+		* { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+	}
+	@media (max-width: 960px) {
+		#tools, #anim { width: 208px; }
+		#stats { width: 232px; font-size: 11px; }
+		#hint { display: none; }
+	}
+</style>
+</head>
+<body>
+
+<div id="boot"><span class="dot"></span>Загрузка three.js…</div>
+
+<div id="err" hidden>
+  <div class="ttl">three.js не загрузился</div>
+  <div class="msg">—</div>
+  <ul>
+    <li>Модуль тянется с CDN unpkg.com — нужен интернет при первом открытии (дальше работает из кэша браузера).</li>
+    <li>Проверьте, что браузер поддерживает importmap: Chrome/Edge 89+, Firefox 108+, Safari 16.4+.</li>
+    <li>Блокировщик рекламы или корпоративный прокси может резать unpkg.com.</li>
+    <li>Сам файл самодостаточен: соседние файлы и локальный сервер не нужны.</li>
+  </ul>
+</div>
+
+<div id="tools" class="panel">
+  <div class="h">Отображение</div>
+  <div class="grid2">
+    <button id="b-wire">Каркас</button>
+    <button id="b-nodes">Узлы</button>
+    <button id="b-bbox">Габариты</button>
+    <button id="b-grid" class="on">Сетка</button>
+    <button id="b-auto">Автоповорот</button>
+    <button id="b-reset">Сброс камеры</button>
+  </div>
+  <div class="h">Детализация</div>
+  <div class="grid3">
+    <button id="b-lod0" class="on">LOD0</button>
+    <button id="b-lod1">LOD1</button>
+    <button id="b-lod2">LOD2</button>
+  </div>
+  <div class="h">Действия</div>
+  <div class="grid2">
+    <button id="b-shot">Выстрел</button>
+    <button id="b-reload">Перезарядка</button>
+    <button id="b-png">Скриншот PNG</button>
+    <button id="b-glb">Экспорт GLB</button>
+  </div>
+</div>
+
+<div id="anim" class="panel">
+  <div class="h">Анимация деталей</div>
+  <div id="anim-parts"></div>
+  <div id="anim-toggles" class="grid1"></div>
+  <div class="grid2" style="margin-top:10px">
+    <button id="b-shot2">Выстрел</button>
+    <button id="b-reload2">Перезарядка</button>
+  </div>
+</div>
+
+<div id="stats" class="panel">
+  <div class="h">Статистика</div>
+  <div id="stat-rows"></div>
+  <div id="nodecheck" class="nc ok">—</div>
+</div>
+
+<div id="hint" class="panel">
+  <b>ЛКМ</b> — вращение &nbsp;·&nbsp; <b>колесо</b> — зум &nbsp;·&nbsp; <b>ПКМ</b> — панорама &nbsp;·&nbsp; <b>Сброс камеры</b> вписывает модель в кадр по Box3
+</div>
+
+<script>
+  window.__viewerReady = false;
+  window.__viewerFail = function (msg) {
+    var b = document.getElementById('boot'), e = document.getElementById('err');
+    if (b) b.hidden = true;
+    if (e && e.hasAttribute('hidden')) { e.hidden = false; e.querySelector('.msg').textContent = String(msg); }
+  };
+  setTimeout(function () {
+    if (!window.__viewerReady) window.__viewerFail('Тайм-аут: модуль three.js не загрузился за 15 секунд.');
+  }, 15000);
+</script>
+
+<script type="module">
+// ==== МОДЕЛЬ: НАЧАЛО ====
+/* ===========================================================================
+   ПОЛЕВАЯ МЕДИЦИНСКАЯ УКЛАДКА (аптечка) — процедурная геометрия three.js
+   ---------------------------------------------------------------------------
+   ОСИ: −Z — вперёд (передняя стенка с защёлками), +Y — вверх, +X — вправо.
+   ORIGIN: центр нижней грани корпуса (y = 0).
+   ЕДИНИЦЫ: метры, mm(x) = x/1000. Все числа ниже — в МИЛЛИМЕТРАХ.
+
+   ТАБЛИЦА РАЗМЕРОВ (мм)
+   ┌────────────────────────────┬─────────────────────────────────────┐
+   │ Корпус (закрытый)        │ 220 × 140 × 90 (X × Z × Y)             │
+   │ Скругление углов          │ R8 по вертикали, фаска 1.2 по рёбрам   │
+   │ Низ (ванна)               │ высота 55, стенка 4, пол на y = 8      │
+   │ Крышка                    │ высота 35 (юбка 31 + панель 4)          │
+   │ Петля (ось)                │ x = 0, y = 57, z = +75, палец ⌀7 × 200    │
+   │ Ход крышки                │ 0…100° вокруг оси X в lidHinge            │
+   │ Защёлки (2 шт, спереди)     │ 25 × 15 × 3, x = ±62, крюк 19 × 14 × 7     │
+   │ Ответные скобы на крышке    │ 23 × 4 × 6 + два столбика 4 × 10           │
+   │ Ручка-скоба                │ 90 × 20, труба ⌀5, z = −48, резина      │
+   │ Крест на крышке             │ плечи 80 × 22, рельеф +2, центр z = +12  │
+   │ Боковой ремень              │ лента 26 × 3 на y = 20, пряжка 36 × 28 × 4 │
+   │ Бинты (2 шт)               │ ⌀40 × 42, ось X                        │
+   │ Коробочка                  │ 72 × 34 × 58                            │
+   │ Ампула                    │ ⌀16 × 44 (цилиндр + горлышко)          │
+   │ Габарит с ручкой/петлёй     │ ≈ 227 × 110 × 158                        │
+   └────────────────────────────┴─────────────────────────────────────┘
+
+   КОНТРАКТ
+   buildMedkit(THREE, opts) -> THREE.Group
+     opts.color     'olive' (0x3c4429) | 'white' (0xdedede)   по умолчанию 'olive'
+     opts.lod       0 | 1 | 2                                  по умолчанию 0
+     opts.contents  true | false — внутреннее наполнение
+   group.nodes  = { lidHinge, gripPoint, useAnchor }
+   group.parts  = { lid, strap }
+   group.motions—штатные траектории для просмотрщика (0..1)
+   group.setDeployed(bool) — показать/скрыть содержимое
+   group.dispose() — освободить геометрию и материалы
+   Бюджет: LOD0 ≈ 1.6k треуг., LOD1 ≈ 0.8k, LOD2 ≈ 0.4k. Геометрия мержится
+   по материалам внутри каждого подвижного узла: корпус 2 draw call,
+   крышка 4, ремень 2, наполнение 2. Минимум 3 draw call достигается на
+   LOD2 без наполнения: корпус+сталь, крышка, ремень.
+   =========================================================================== */
+
+function buildMedkit(THREE, opts = {}) {
+	const mm = (x) => x / 1000;                       // миллиметры -> метры
+	const O = Object.assign({ color: 'olive', lod: 0, contents: true }, opts);
+	const L = Math.max(0, Math.min(2, O.lod | 0));
+
+	// профили качества: cs — сегменты дуги, bev — сегменты фаски, det — уровень мелких деталей
+	const Q = [
+		{ cs: 2, bev: 1, cyl: 12, tube: [6, 12], det: 2 },
+		{ cs: 1, bev: 1, cyl: 8,  tube: [5, 8],  det: 1 },
+		{ cs: 1, bev: 0, cyl: 6,  tube: [4, 5],  det: 0 },
+	][L];
+
+	// --- габариты, мм ---------------------------------------------------------
+	const W = 220, D = 140, H = 90;                   // корпус в закрытом виде
+	const R = 8;                                      // радиус скругления углов
+	const LID_H = 35;                                 // высота крышки
+	const BASE_H = H - LID_H;                         // 55 — высота ванны
+	const WALL = 4;                                   // толщина стенки
+	const IN_W = W - 2 * WALL, IN_D = D - 2 * WALL;   // 212 × 132 — внутренний проём
+	const HINGE = { x: 0, y: 57, z: 75 };             // ось петли (вынесена за заднюю стенку)
+	const STRAP_P = { x: 95, y: 20, z: 68 };          // ось ремня: ниже защёлок, выше дна
+
+	// --- материалы -------------------------------------------------------------
+	const shellColor = (O.color === 'white') ? 0xdedede : 0x3c4429;
+	const MAT = {
+		shell: new THREE.MeshStandardMaterial({ name: 'medkit_shell', color: shellColor, roughness: 0.80, metalness: 0.04 }),
+		red:   new THREE.MeshStandardMaterial({ name: 'medkit_cross', color: 0xb3202a, roughness: 0.55, metalness: 0.00 }),
+		steel: new THREE.MeshStandardMaterial({ name: 'medkit_steel', color: 0xb8bec6, roughness: 0.33, metalness: 0.92 }),
+		rubber:new THREE.MeshStandardMaterial({ name: 'medkit_rubber',color: 0x191c1e, roughness: 0.95, metalness: 0.00 }),
+		gauze: new THREE.MeshStandardMaterial({ name: 'medkit_gauze', color: 0xf1ede2, roughness: 0.94, metalness: 0.00 }),
+		glass: new THREE.MeshStandardMaterial({ name: 'medkit_glass', color: 0xbfe0d6, roughness: 0.15, metalness: 0.00, transparent: true, opacity: 0.72 }),
+	};
+
+	// --- служебное: слияние геометрий (своё, без addons) --------------------
+	function mergeGeoms(list) {
+		if (list.length === 1) return list[0];
+		let vc = 0, ic = 0;
+		for (const g of list) {
+			vc += g.attributes.position.count;
+			ic += g.index ? g.index.count : g.attributes.position.count;
+		}
+		const pos = new Float32Array(vc * 3), nor = new Float32Array(vc * 3), uv = new Float32Array(vc * 2);
+		const idx = vc > 65535 ? new Uint32Array(ic) : new Uint16Array(ic);
+		let vo = 0, io = 0;
+		for (const g of list) {
+			const p = g.attributes.position, n = g.attributes.normal, u = g.attributes.uv;
+			pos.set(p.array.subarray(0, p.count * 3), vo * 3);
+			if (n) nor.set(n.array.subarray(0, n.count * 3), vo * 3);
+			if (u) uv.set(u.array.subarray(0, u.count * 2), vo * 2);
+			if (g.index) { const a = g.index.array; for (let i = 0; i < a.length; i++) idx[io + i] = a[i] + vo; io += a.length; }
+			else { for (let i = 0; i < p.count; i++) idx[io + i] = i + vo; io += p.count; }
+			vo += p.count;
+			g.dispose();
+		}
+		const out = new THREE.BufferGeometry();
+		out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+		out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+		out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+		out.setIndex(new THREE.BufferAttribute(idx, 1));
+		return out;
+	}
+
+	// --- служебное: примитивы (все аргументы — в мм) -------------------------
+	function boxG(w, h, d, x, y, z) {
+		const g = new THREE.BoxGeometry(mm(w), mm(h), mm(d));
+		g.translate(mm(x), mm(y), mm(z));
+		return g;
+	}
+	function cylG(rTop, rBot, h, seg, x, y, z, axis) {
+		const g = new THREE.CylinderGeometry(mm(rTop), mm(rBot), mm(h), seg, 1);
+		if (axis === 'x') g.rotateZ(Math.PI / 2);
+		else if (axis === 'z') g.rotateX(Math.PI / 2);
+		g.translate(mm(x), mm(y), mm(z));
+		return g;
+	}
+	// прямоугольник со скруглёнными углами (плоскость XY фигуры)
+	function rrect(w, d, r) {
+		const x = mm(w) / 2, y = mm(d) / 2;
+		const rr = Math.min(mm(r), Math.min(x, y) * 0.98);
+		const s = new THREE.Shape();
+		s.moveTo(-x + rr, -y);
+		s.lineTo(x - rr, -y);
+		s.absarc(x - rr, -y + rr, rr, -Math.PI / 2, 0, false);
+		s.lineTo(x, y - rr);
+		s.absarc(x - rr, y - rr, rr, 0, Math.PI / 2, false);
+		s.lineTo(-x + rr, y);
+		s.absarc(-x + rr, y - rr, rr, Math.PI / 2, Math.PI, false);
+		s.lineTo(-x, -y + rr);
+		s.absarc(-x + rr, -y + rr, rr, Math.PI, Math.PI * 1.5, false);
+		s.closePath();
+		return s;
+	}
+	// выдавливание вверх по Y с фаской по верхнему и нижнему ребру
+	function shellG(oW, oD, oR, iW, iD, iR, h, y0, bevel) {
+		const shape = rrect(oW, oD, oR);
+		if (iW) shape.holes.push(rrect(iW, iD, iR));
+		const bev = bevel !== false && Q.bev > 0;
+		const bt = 1.2;                                 // глубина/размер фаски, мм
+		const g = new THREE.ExtrudeGeometry(shape, {
+			depth: bev ? mm(h - 2 * bt) : mm(h),
+			bevelEnabled: bev, bevelThickness: mm(bt), bevelSize: mm(bt), bevelOffset: 0,
+			bevelSegments: Q.bev, curveSegments: Q.cs, steps: 1,
+		});
+		g.rotateX(-Math.PI / 2);                        // ось выдавливания +Z -> +Y
+		g.translate(0, mm(y0) + (bev ? mm(bt) : 0), 0);
+		return g;
+	}
+	// крест: плечи len × w, рельеф t мм над уровнем y0
+	function crossG(len, w, t, y0, z0) {
+		const a = mm(len) / 2, b = mm(w) / 2;
+		const s = new THREE.Shape();
+		s.moveTo(-b, -a); s.lineTo(b, -a); s.lineTo(b, -b); s.lineTo(a, -b);
+		s.lineTo(a, b);   s.lineTo(b, b);  s.lineTo(b, a);  s.lineTo(-b, a);
+		s.lineTo(-b, b);  s.lineTo(-a, b); s.lineTo(-a, -b); s.lineTo(-b, -b);
+		s.closePath();
+		const bev = Q.bev > 0;
+		const g = new THREE.ExtrudeGeometry(s, {
+			depth: bev ? mm(t - 0.8) : mm(t),
+			bevelEnabled: bev, bevelThickness: mm(0.4), bevelSize: mm(0.6),
+			bevelOffset: 0, bevelSegments: 1, curveSegments: 1, steps: 1,
+		});
+		g.rotateX(-Math.PI / 2);
+		g.translate(0, mm(y0) + (bev ? mm(0.4) : 0), mm(z0));
+		return g;
+	}
+	// плоская рамка в плоскости XY (пряжка), выдавливание по Z
+	function frameG(oW, oH, iW, iH, t, x, y, z) {
+		const shape = rrect(oW, oH, 3);
+		shape.holes.push(rrect(iW, iH, 2));
+		const g = new THREE.ExtrudeGeometry(shape, {
+			depth: mm(t), bevelEnabled: false, curveSegments: 1, steps: 1,
+		});
+		g.translate(mm(x), mm(y), mm(z));
+		return g;
+	}
+
+	// --- сборщики по материалам ----------------------------------------------
+	const bucket = () => ({ shell: [], red: [], steel: [], rubber: [], gauze: [], glass: [] });
+	const B_BASE = bucket(), B_LID = bucket(), B_STRAP = bucket(), B_CONT = bucket();
+	const put = (b, k, g) => b[k].push(g);
+
+	function bake(b, parent, tag, off) {
+		for (const key of Object.keys(b)) {
+			if (!b[key].length) continue;
+			const g = mergeGeoms(b[key]);
+			if (off) g.translate(-mm(off.x), -mm(off.y), -mm(off.z));
+			g.computeBoundingBox(); g.computeBoundingSphere();
+			const mesh = new THREE.Mesh(g, MAT[key]);
+			mesh.name = tag + '_' + key;
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			parent.add(mesh);
+		}
+	}
+
+	// =======================================================================
+	// 1. КОРПУС (ванна) — неподвижный узел
+	// =======================================================================
+	// стенки со скруглёнными углами и фаской по рёбрам: 220×140, высота 55
+	put(B_BASE, 'shell', shellG(W, D, R, IN_W, IN_D, R - 3, BASE_H, 0));
+	// дно-пол внутри ванны: верх на y = 8
+	put(B_BASE, 'shell', boxG(IN_W + 1, 6, IN_D + 1, 0, 5, 0));
+	if (Q.det >= 2) {
+		// рёбра жёсткости на торцах и посадочный буртик под крышку
+		put(B_BASE, 'shell', boxG(3, 34, 112, 110, 27, 0));
+		put(B_BASE, 'shell', boxG(3, 34, 112, -110, 27, 0));
+		put(B_BASE, 'shell', shellG(W - 10, D - 10, R - 3, W - 18, D - 18, R - 5, 5, BASE_H, false));
+	}
+	// петлевые проушины корпуса (стоят за задней стенкой, z = 69…81)
+	put(B_BASE, 'steel', boxG(30, 14, 12, 62, HINGE.y, 75));
+	put(B_BASE, 'steel', boxG(30, 14, 12, -62, HINGE.y, 75));
+	// палец петли ⌀7 × 200
+	put(B_BASE, 'steel', cylG(3.5, 3.5, 200, Q.det >= 1 ? 8 : 5, HINGE.x, HINGE.y, HINGE.z, 'x'));
+	// две защёлки 25×15 на передней стенке (−Z) + крюк, заходящий за скобу крышки
+	for (const sx of [-1, 1]) {
+		put(B_BASE, 'steel', boxG(25, 15, 3, 62 * sx, 42, -71.5));
+		put(B_BASE, 'steel', boxG(19, 14, 7, 62 * sx, 54, -73));
+		if (Q.det >= 2) put(B_BASE, 'steel', cylG(2, 2, 27, 6, 62 * sx, 37, -71.5, 'x'));
+	}
+
+	// =======================================================================
+	// 2. КРЫШКА — подвижный узел parts.lid (геометрия строится в закрытом
+	//    положении, потом смещается в систему координат петли)
+	// =======================================================================
+	const LID_Y0 = BASE_H;                 // 55 — низ юбки крышки
+	const LID_TOP = LID_Y0 + LID_H;        // 90 — верхняя плоскость
+	put(B_LID, 'shell', shellG(W, D, R, IN_W, IN_D, R - 3, LID_H - 4, LID_Y0));   // юбка 31 мм
+	put(B_LID, 'shell', shellG(W, D, R, 0, 0, 0, 4, LID_TOP - 4));                // панель 4 мм
+	// рельефный крест: плечи 80×22, выступ 2 мм, центр смещён назад от ручки
+	put(B_LID, 'red', crossG(80, 22, 2, LID_TOP, 12));
+	// петлевые проушины крышки (между проушинами корпуса)
+	put(B_LID, 'steel', boxG(26, 14, 12, 26, HINGE.y, 75));
+	put(B_LID, 'steel', boxG(26, 14, 12, -26, HINGE.y, 75));
+	// ответные скобы защёлок
+	for (const sx of [-1, 1]) {
+		put(B_LID, 'steel', boxG(23, 4, 6, 62 * sx, 62, -72.5));
+		if (Q.det >= 2) {
+			put(B_LID, 'steel', boxG(4, 10, 6, 62 * sx - 9.5, 67, -72.5));
+			put(B_LID, 'steel', boxG(4, 10, 6, 62 * sx + 9.5, 67, -72.5));
+		}
+	}
+	// ручка-скоба 90×20 из мягкого материала, на двух стальных пятах
+	{
+		const hx = 45, hz = -48, arch = 20;
+		if (Q.det >= 1) {
+			const v = (x, y, z) => new THREE.Vector3(mm(x), mm(y), mm(z));
+			const curve = new THREE.CatmullRomCurve3([
+				v(-hx, LID_TOP - 1, hz),
+				v(-hx, LID_TOP + arch * 0.62, hz),
+				v(-hx * 0.5, LID_TOP + arch, hz),
+				v(hx * 0.5, LID_TOP + arch, hz),
+				v(hx, LID_TOP + arch * 0.62, hz),
+				v(hx, LID_TOP - 1, hz),
+			], false, 'catmullrom', 0.25);
+			put(B_LID, 'rubber', new THREE.TubeGeometry(curve, Q.tube[1], mm(5), Q.tube[0], false));
+		} else {
+			put(B_LID, 'rubber', boxG(90, 8, 10, 0, LID_TOP + arch - 4, hz));
+			put(B_LID, 'rubber', boxG(10, 20, 10, -hx, LID_TOP + 10, hz));
+			put(B_LID, 'rubber', boxG(10, 20, 10, hx, LID_TOP + 10, hz));
+		}
+		put(B_LID, 'steel', boxG(20, 3, 18, -hx, LID_TOP + 0.5, hz));
+		put(B_LID, 'steel', boxG(20, 3, 18, hx, LID_TOP + 0.5, hz));
+	}
+
+	// =======================================================================
+	// 3. БОКОВОЙ РЕМЕНЬ С ПРЯЖКОЙ — подвижный узел parts.strap
+	// =======================================================================
+	put(B_STRAP, 'rubber', boxG(84, 26, 3, 68, STRAP_P.y, -71.5));   // лента по передней стенке
+	put(B_STRAP, 'rubber', boxG(3, 26, 141, 111.5, STRAP_P.y, 0));   // через торец
+	put(B_STRAP, 'rubber', boxG(84, 26, 3, 68, STRAP_P.y, 71.5));    // по задней стенке
+	put(B_STRAP, 'rubber', boxG(46, 17, 2.5, 2, STRAP_P.y, -73.2));  // свободный хвост в проёме пряжки
+	put(B_STRAP, 'steel', frameG(36, 28, 26, 18, 4, 26, STRAP_P.y, -77));
+	if (Q.det >= 1) put(B_STRAP, 'steel', boxG(3, 20, 3, 26, STRAP_P.y, -75));
+
+	// =======================================================================
+	// 4. НАПОЛНЕНИЕ (видно при открытой крышке)
+	// =======================================================================
+	if (Q.det >= 1) {
+		put(B_CONT, 'gauze', cylG(20, 20, 42, Q.cyl, -60, 28, -36, 'x'));   // бинт 1
+		put(B_CONT, 'gauze', cylG(20, 20, 42, Q.cyl, -60, 28, 8, 'x'));     // бинт 2
+		put(B_CONT, 'gauze', boxG(72, 34, 58, 40, 25, -30));                // коробочка
+	}
+	if (Q.det >= 2) {
+		put(B_CONT, 'glass', cylG(8, 8, 34, 8, 40, 25, 34, 'y'));           // ампула
+		put(B_CONT, 'glass', cylG(2.5, 8, 10, 8, 40, 47, 34, 'y'));         // горлышко
+	}
+
+	// =======================================================================
+	// СБОРКА ГРАФА
+	// =======================================================================
+	const group = new THREE.Group();
+	group.name = 'Medkit';
+
+	bake(B_BASE, group, 'base', null);
+
+	const lid = new THREE.Group();
+	lid.name = 'lid';
+	lid.position.set(mm(HINGE.x), mm(HINGE.y), mm(HINGE.z));
+	bake(B_LID, lid, 'lid', HINGE);
+	group.add(lid);
+
+	const strap = new THREE.Group();
+	strap.name = 'strap';
+	strap.position.set(mm(STRAP_P.x), mm(STRAP_P.y), mm(STRAP_P.z));
+	bake(B_STRAP, strap, 'strap', STRAP_P);
+	group.add(strap);
+
+	const contents = new THREE.Group();
+	contents.name = 'contents';
+	bake(B_CONT, contents, 'contents', null);
+	contents.visible = O.contents !== false;
+	group.add(contents);
+
+	// --- узлы -------------------------------------------------------------
+	const mkNode = (name, x, y, z, parent) => {
+		const n = new THREE.Object3D();
+		n.name = name;
+		n.position.set(mm(x), mm(y), mm(z));
+		parent.add(n);
+		return n;
+	};
+	const nodes = {
+		// ось петли крышки
+		lidHinge: mkNode('lidHinge', HINGE.x, HINGE.y, HINGE.z, group),
+		// точка хвата за ручку — живёт вместе с крышкой
+		gripPoint: mkNode('gripPoint', -HINGE.x, LID_TOP + 20 - HINGE.y, -48 - HINGE.z, lid),
+		// откуда идёт взаимодействие бойца (перед укладкой)
+		useAnchor: mkNode('useAnchor', 0, 40, -110, group),
+	};
+	nodes.useAnchor.rotation.y = Math.PI;             // смотрит на укладку
+
+	group.nodes = nodes;
+	group.parts = { lid, strap };
+
+	// штатные траектории для просмотрщика: t = 0..1 от исходного положения
+	group.motions = {
+		lid:   { label: 'Крышка (откид 100°)', axis: 'x', deg: 100 },
+		strap: { label: 'Ремень (снять)', move: [mm(130), mm(8), 0] },
+	};
+
+	// переключатель наполнения
+	group.setDeployed = (v) => { contents.visible = !!v; return !!v; };
+
+	group.dispose = () => {
+		group.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
+		for (const k of Object.keys(MAT)) MAT[k].dispose();
+	};
+
+	// служебная ссылка для validate(); в userData её класть нельзя — GLTFExporter
+	// сериализует userData через JSON
+	group.__THREE = THREE;
+	group.userData.lod = L;
+	group.userData.units = 'meters';
+
+	validate(group);
+	return group;
+}
+
+/** Проверка контракта модели: узлы, детали, бюджеты, габариты. */
+function validate(group) {
+	const THREE = group.__THREE;
+	const NEED_NODES = ['lidHinge', 'gripPoint', 'useAnchor'];
+	const NEED_PARTS = ['lid', 'strap'];
+	const missing = [];
+	for (const k of NEED_NODES) if (!group.nodes || !group.nodes[k]) missing.push('nodes.' + k);
+	for (const k of NEED_PARTS) if (!group.parts || !group.parts[k]) missing.push('parts.' + k);
+
+	let tris = 0, meshes = 0;
+	const mats = new Set();
+	group.traverse((o) => {
+		if (!o.isMesh) return;
+		meshes++;
+		mats.add(o.material.uuid);
+		const g = o.geometry;
+		tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+	});
+
+	const box = new THREE.Box3().setFromObject(group);
+	const size = box.getSize(new THREE.Vector3()).multiplyScalar(1000);
+	const report = {
+		ok: missing.length === 0,
+		missing,
+		triangles: Math.round(tris),
+		meshes,
+		materials: mats.size,
+		nodes: group.nodes ? Object.keys(group.nodes).length : 0,
+		parts: group.parts ? Object.keys(group.parts).length : 0,
+		sizeMm: { x: +size.x.toFixed(1), y: +size.y.toFixed(1), z: +size.z.toFixed(1) },
+		lod: group.userData.lod,
+	};
+	if (Math.abs(box.min.y) > 1e-4) report.warnOrigin = 'низ модели не на y = 0';
+	if (report.triangles > 2000) report.warnBudget = 'превышен бюджет 2k треугольников';
+	group.userData.report = report;
+	if (!report.ok) console.warn('[medkit] validate:', report);
+	else console.log('[medkit] validate OK:', report);
+	return report;
+}
+// ==== МОДЕЛЬ: КОНЕЦ ====
+const build = buildMedkit;
+window.buildMedkit = buildMedkit;
+// export { buildMedkit }
+
+// ============================================================================
+// ПРОСМОТРЩИК
+// ============================================================================
+let THREE, OrbitControls, GLTFExporter = null;
+try {
+	THREE = await import('three');
+	({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+} catch (e) {
+	window.__viewerFail((e && e.message) ? e.message : e);
+	throw e;
+}
+try {
+	({ GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js'));
+} catch (e) {
+	GLTFExporter = null;                       // экспорт отключим, остальное работает
+}
+
+const $ = (id) => document.getElementById(id);
+const AXIS = {
+	x: new THREE.Vector3(1, 0, 0),
+	y: new THREE.Vector3(0, 1, 0),
+	z: new THREE.Vector3(0, 0, 1),
+};
+
+// --- рендерер ----------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+// --- сцена -------------------------------------------------------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171a);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.01, 50);
+camera.position.set(0.32, 0.24, -0.42);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.065;
+controls.autoRotateSpeed = 1.3;
+controls.minDistance = 0.05;
+controls.maxDistance = 8;
+
+// свет: key сверху-справа-спереди, холодный fill слева, rim сзади + полусфера
+const key = new THREE.DirectionalLight(0xfff2df, 2.5);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.bias = -0.0012;
+key.shadow.normalBias = 0.0025;
+const fill = new THREE.DirectionalLight(0x9dbfff, 0.55);
+const rim = new THREE.DirectionalLight(0xffffff, 1.15);
+const hemi = new THREE.HemisphereLight(0x9fb4c8, 0x23231d, 0.45);
+scene.add(key, key.target, fill, rim, hemi);
+
+// теневая площадка и сетка
+const shadowPlane = new THREE.Mesh(
+	new THREE.PlaneGeometry(6, 6).rotateX(-Math.PI / 2),
+	new THREE.ShadowMaterial({ opacity: 0.42 })
+);
+shadowPlane.position.y = -0.0006;
+shadowPlane.receiveShadow = true;
+scene.add(shadowPlane);
+
+let grid = null;
+function rebuildGrid(radius) {
+	if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+	const s = Math.max(0.2, Math.ceil(radius * 4 * 20) / 20);
+	grid = new THREE.GridHelper(s, Math.round(s / 0.02), 0x4a525c, 0x272c33);
+	grid.material.transparent = true;
+	grid.material.opacity = 0.75;
+	grid.position.y = -0.0004;
+	grid.visible = state.grid;
+	scene.add(grid);
+}
+
+const bboxHelper = new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(-0.1, 0, -0.1), new THREE.Vector3(0.1, 0.1, 0.1)), 0x5e9fe8);
+bboxHelper.visible = false;
+scene.add(bboxHelper);
+
+// --- состояние ---------------------------------------------------------------
+const state = { wire: false, nodes: false, bbox: false, grid: true, auto: false, lod: 0 };
+const partT = new Map();       // положение слайдеров 0..1
+const baseXf = new Map();      // исходные position/quaternion деталей
+const sliders = new Map();
+let nodeHelpers = [];
+let model = null;
+let report = null;
+let busy = false;
+const _q = new THREE.Quaternion();
+const _box = new THREE.Box3();
+const _v = new THREE.Vector3();
+
+// --- модель ------------------------------------------------------------------
+function disposeModel() {
+	if (!model) return;
+	for (const h of nodeHelpers) {
+		h.traverse((o) => {
+			if (o.geometry) o.geometry.dispose();
+			if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+		});
+		if (h.parent) h.parent.remove(h);
+	}
+	nodeHelpers = [];
+	scene.remove(model);
+	if (typeof model.dispose === 'function') model.dispose();
+	model = null;
+}
+
+function buildModel(lod) {
+	disposeModel();
+	model = build(THREE, { lod, color: 'olive' });
+	model.traverse((o) => { if (o.isMesh) o.userData.__model = true; });
+	scene.add(model);
+	report = model.userData.report || {};
+
+	// запоминаем исходные трансформы подвижных деталей
+	baseXf.clear();
+	for (const [name, obj] of Object.entries(model.parts || {})) {
+		baseXf.set(name, { p: obj.position.clone(), q: obj.quaternion.clone() });
+	}
+
+	// вспомогательные оси и подписи узлов (AxesHelper 30 мм)
+	for (const [name, obj] of Object.entries(model.nodes || {})) {
+		const holder = new THREE.Group();
+		const ax = new THREE.AxesHelper(0.03);
+		ax.material.depthTest = false;
+		ax.material.transparent = true;
+		ax.renderOrder = 6;
+		holder.add(ax, makeLabel(name));
+		holder.visible = state.nodes;
+		obj.add(holder);
+		nodeHelpers.push(holder);
+	}
+
+	applyWireframe(state.wire);
+	buildAnimPanel();
+	rebuildGrid(modelSize().length() * 0.5 || 0.15);
+	updateStats(true);
+}
+
+function modelBox(target) {
+	target.makeEmpty();
+	if (!model) return target;
+	model.updateWorldMatrix(true, true);
+	model.traverse((o) => { if (o.isMesh && o.visible && o.userData.__model) target.expandByObject(o); });
+	return target;
+}
+function modelSize() { return modelBox(_box).getSize(new THREE.Vector3()); }
+
+function applyWireframe(on) {
+	const seen = new Set();
+	model.traverse((o) => {
+		if (!o.isMesh || seen.has(o.material.uuid)) return;
+		seen.add(o.material.uuid);
+		o.material.wireframe = on;
+	});
+}
+
+// подпись-спрайт из canvas (без внешних шрифтов и картинок)
+function makeLabel(text) {
+	const F = 44, PAD = 16, H = 68;
+	const probe = document.createElement('canvas').getContext('2d');
+	probe.font = '600 ' + F + 'px ui-monospace, Menlo, Consolas, monospace';
+	const w = Math.ceil(probe.measureText(text).width) + PAD * 2;
+	const c = document.createElement('canvas');
+	c.width = w; c.height = H;
+	const g = c.getContext('2d');
+	g.font = '600 ' + F + 'px ui-monospace, Menlo, Consolas, monospace';
+	g.fillStyle = 'rgba(12,14,17,0.78)';
+	g.fillRect(0, 0, w, H);
+	g.strokeStyle = 'rgba(126,208,255,0.55)';
+	g.lineWidth = 3;
+	g.strokeRect(1.5, 1.5, w - 3, H - 3);
+	g.fillStyle = '#8fd6ff';
+	g.textBaseline = 'middle';
+	g.fillText(text, PAD, H / 2 + 2);
+	const tex = new THREE.CanvasTexture(c);
+	tex.colorSpace = THREE.SRGBColorSpace;
+	tex.anisotropy = 4;
+	const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+	spr.renderOrder = 7;
+	const hMeters = 0.014;
+	spr.scale.set(hMeters * (w / H), hMeters, 1);
+	spr.position.set(0, 0.021, 0);
+	return spr;
+}
+
+// --- камера: вписывание по Box3 -------------------------------------------------
+function fitCamera() {
+	const box = modelBox(_box);
+	if (box.isEmpty()) return;
+	const center = box.getCenter(new THREE.Vector3());
+	const size = box.getSize(new THREE.Vector3());
+	const r = Math.max(size.length() * 0.5, 0.02);
+
+	const fov = THREE.MathUtils.degToRad(camera.fov);
+	const dist = (r / Math.sin(fov / 2)) * 1.15;
+	const dir = new THREE.Vector3(0.78, 0.52, -1).normalize();   // спереди-справа-сверху
+
+	camera.position.copy(center).addScaledVector(dir, dist);
+	camera.near = Math.max(dist / 900, r / 400);
+	camera.far = dist + r * 12;
+	camera.updateProjectionMatrix();
+	controls.target.copy(center);
+	controls.minDistance = r * 0.35;
+	controls.maxDistance = dist * 8;
+	controls.update();
+
+	// свет и тени под габарит модели
+	key.position.set(center.x + r * 1.7, center.y + r * 2.4, center.z - r * 1.9);
+	key.target.position.copy(center);
+	fill.position.set(center.x - r * 2.4, center.y + r * 1.0, center.z - r * 0.7);
+	rim.position.set(center.x + r * 0.3, center.y + r * 1.2, center.z + r * 2.6);
+	const sc = key.shadow.camera;
+	sc.left = -r * 1.6; sc.right = r * 1.6; sc.top = r * 1.6; sc.bottom = -r * 1.6;
+	sc.near = r * 0.2; sc.far = r * 9;
+	sc.updateProjectionMatrix();
+	rebuildGrid(r);
+}
+
+// --- анимация деталей -------------------------------------------------------
+function motionFor(name) {
+	const m = (model.motions || model.userData.motions || {})[name];
+	if (m) return m;
+	const n = String(name).toLowerCase();                        // запасные эвристики
+	if (/mag|магаз/.test(n))             return { label: name, move: [0, -0.09, 0] };
+	if (/bolt|slide|затвор|charg|взвед/.test(n)) return { label: name, move: [0, 0, 0.032] };
+	if (/trigger|спуск|safety|флаж|select/.test(n)) return { label: name, axis: 'x', deg: 28 };
+	if (/pin|spoon|скоб|ring|чек/.test(n))   return { label: name, axis: 'z', deg: 120, move: [0.02, 0, 0] };
+	if (/lid|cover|крыш|hatch/.test(n))     return { label: name, axis: 'x', deg: 100 };
+	if (/stock|приклад|fold/.test(n))       return { label: name, axis: 'y', deg: 175 };
+	if (/strap|рем|belt/.test(n))            return { label: name, move: [0.13, 0.008, 0] };
+	return { label: name, axis: 'x', deg: 45 };
+}
+
+function setPart(name, t) {
+	const p = model.parts[name], b = baseXf.get(name);
+	if (!p || !b) return;
+	t = Math.max(0, Math.min(1, t));
+	partT.set(name, t);
+	const m = motionFor(name);
+	const mv = m.move || [0, 0, 0];
+	p.position.set(b.p.x + mv[0] * t, b.p.y + mv[1] * t, b.p.z + mv[2] * t);
+	_q.setFromAxisAngle(AXIS[m.axis || 'x'], THREE.MathUtils.degToRad((m.deg || 0) * t));
+	p.quaternion.copy(b.q).multiply(_q);
+	const out = $('v-' + name);
+	if (out) out.textContent = Math.round(t * 100) + '%';
+	const s = sliders.get(name);
+	if (s && Math.abs(parseFloat(s.value) - t) > 1e-4) s.value = String(t);
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function tween(name, from, to, ms) {
+	return new Promise((res) => {
+		const t0 = performance.now();
+		const step = (now) => {
+			const k = Math.min(1, (now - t0) / ms);
+			setPart(name, from + (to - from) * k);
+			if (k < 1) requestAnimationFrame(step); else res();
+		};
+		requestAnimationFrame(step);
+	});
+}
+const partNames = () => Object.keys(model.parts || {});
+function pickPart(re) { return partNames().find((n) => re.test(n.toLowerCase())) || null; }
+
+// Цикл затвора 90 мс (45 назад + 45 вперёд). У укладки затвора нет —
+// падаем на короткий щелчок крышки той же длительности.
+async function actionShot() {
+	if (busy || !model) return;
+	const n = pickPart(/bolt|slide|затвор|charg/) || partNames()[0];
+	if (!n) return;
+	busy = true;
+	const hasBolt = /bolt|slide|затвор|charg/.test(n.toLowerCase());
+	const amp = hasBolt ? 1 : 0.1;
+	const back = partT.get(n) || 0;
+	await tween(n, back, amp, 45);
+	await tween(n, amp, back, 45);
+	busy = false;
+}
+// Магазин вниз -> пауза -> вверх -> цикл затвора.
+// Для аптечки: открыть крышку -> взять укладку -> закрыть -> щелчок защёлок.
+async function actionReload() {
+	if (busy || !model) return;
+	const main = pickPart(/mag|магаз/) || pickPart(/lid|крыш|cover/) || partNames()[0];
+	if (!main) return;
+	busy = true;
+	await tween(main, partT.get(main) || 0, 1, 420);
+	await wait(340);
+	await tween(main, 1, 0, 380);
+	const bolt = pickPart(/bolt|slide|затвор|charg/);
+	if (bolt) { await tween(bolt, 0, 1, 45); await tween(bolt, 1, 0, 45); }
+	else { await tween(main, 0, 0.1, 45); await tween(main, 0.1, 0, 45); }
+	busy = false;
+}
+
+// --- панель анимации -------------------------------------------------------
+const TOGGLES = [
+	['setReticle', 'Прицельная марка'],
+	['setBeam', 'Луч'],
+	['setLight', 'Подсветка'],
+	['setAmmo', 'Боекомплект'],
+	['setDeployed', 'Наполнение укладки'],
+];
+function buildAnimPanel() {
+	const host = $('anim-parts');
+	host.innerHTML = '';
+	sliders.clear();
+	for (const name of partNames()) {
+		const m = motionFor(name);
+		const t = partT.get(name) || 0;
+		const row = document.createElement('div');
+		row.className = 'row';
+		const lab = document.createElement('label');
+		lab.setAttribute('for', 'sl-' + name);
+		const sp = document.createElement('span');
+		sp.textContent = m.label || name;
+		const val = document.createElement('b');
+		val.id = 'v-' + name;
+		val.textContent = Math.round(t * 100) + '%';
+		lab.append(sp, val);
+		const inp = document.createElement('input');
+		inp.type = 'range'; inp.min = '0'; inp.max = '1'; inp.step = '0.005';
+		inp.id = 'sl-' + name;
+		inp.value = String(t);
+		inp.addEventListener('input', () => setPart(name, parseFloat(inp.value)));
+		sliders.set(name, inp);
+		row.append(lab, inp);
+		host.append(row);
+		setPart(name, t);
+	}
+	const th = $('anim-toggles');
+	th.innerHTML = '';
+	for (const [fn, label] of TOGGLES) {
+		if (typeof model[fn] !== 'function') continue;
+		const b = document.createElement('button');
+		let on = true;
+		b.textContent = label;
+		b.className = 'on';
+		model[fn](on);
+		b.addEventListener('click', () => {
+			on = !on;
+			model[fn](on);
+			b.classList.toggle('on', on);
+			updateStats(true);
+		});
+		th.append(b);
+	}
+}
+
+// --- статистика --------------------------------------------------------------
+const nf = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+let lastStats = 0;
+function updateStats(force) {
+	const now = performance.now();
+	if (!force && now - lastStats < 260) return;
+	lastStats = now;
+	if (!model) return;
+
+	let tris = 0, meshes = 0;
+	const mats = new Set();
+	model.traverse((o) => {
+		if (!o.isMesh || !o.visible || !o.userData.__model) return;
+		if (o.parent && o.parent.visible === false) return;
+		meshes++;
+		mats.add(o.material.uuid);
+		const g = o.geometry;
+		tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+	});
+	const b = modelBox(_box);
+	const s = b.getSize(_v).multiplyScalar(1000);
+	const rows = [
+		['Треугольники', nf(tris)],
+		['Меши', String(meshes)],
+		['Материалы', String(mats.size)],
+		['Draw calls', String(renderer.info.render.calls)],
+		['Габарит, мм', s.x.toFixed(0) + ' × ' + s.y.toFixed(0) + ' × ' + s.z.toFixed(0)],
+		['Узлы', String(report.nodes || 0) + ' шт'],
+		['Детали', String(report.parts || 0) + ' шт'],
+		['LOD', 'LOD' + state.lod],
+	];
+	$('stat-rows').innerHTML = rows
+		.map((r) => '<div class="r"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>')
+		.join('');
+
+	const nc = $('nodecheck');
+	if (report.ok) {
+		nc.className = 'nc ok';
+		nc.textContent = '✓ узлы на месте: ' + Object.keys(model.nodes).join(', ');
+	} else {
+		nc.className = 'nc bad';
+		nc.innerHTML = '✕ не хватает:<br>' + (report.missing || []).join('<br>');
+	}
+}
+
+// --- кнопки -------------------------------------------------------------------
+function toggleBtn(el, on) { el.classList.toggle('on', !!on); }
+
+$('b-wire').addEventListener('click', (e) => {
+	state.wire = !state.wire;
+	applyWireframe(state.wire);
+	toggleBtn(e.currentTarget, state.wire);
+});
+$('b-nodes').addEventListener('click', (e) => {
+	state.nodes = !state.nodes;
+	for (const h of nodeHelpers) h.visible = state.nodes;
+	toggleBtn(e.currentTarget, state.nodes);
+});
+$('b-bbox').addEventListener('click', (e) => {
+	state.bbox = !state.bbox;
+	bboxHelper.visible = state.bbox;
+	toggleBtn(e.currentTarget, state.bbox);
+});
+$('b-grid').addEventListener('click', (e) => {
+	state.grid = !state.grid;
+	if (grid) grid.visible = state.grid;
+	toggleBtn(e.currentTarget, state.grid);
+});
+$('b-auto').addEventListener('click', (e) => {
+	state.auto = !state.auto;
+	controls.autoRotate = state.auto;
+	toggleBtn(e.currentTarget, state.auto);
+});
+$('b-reset').addEventListener('click', () => fitCamera());
+
+for (const lod of [0, 1, 2]) {
+	$('b-lod' + lod).addEventListener('click', () => {
+		if (state.lod === lod) return;
+		state.lod = lod;
+		for (const l of [0, 1, 2]) toggleBtn($('b-lod' + l), l === lod);
+		buildModel(lod);
+	});
+}
+
+$('b-shot').addEventListener('click', actionShot);
+$('b-shot2').addEventListener('click', actionShot);
+$('b-reload').addEventListener('click', actionReload);
+$('b-reload2').addEventListener('click', actionReload);
+
+function saveBlob(blob, name) {
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = name;
+	document.body.appendChild(a);
+	a.click();
+	a.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+$('b-png').addEventListener('click', () => {
+	renderer.render(scene, camera);
+	renderer.domElement.toBlob((blob) => {
+		if (blob) saveBlob(blob, 'medkit_' + Date.now() + '.png');
+	}, 'image/png');
+});
+
+$('b-glb').addEventListener('click', () => {
+	if (!GLTFExporter) { alert('GLTFExporter не загрузился с CDN — экспорт недоступен.'); return; }
+	const wasNodes = state.nodes;
+	for (const h of nodeHelpers) h.visible = false;          // хелперы в GLB не нужны
+	const btn = $('b-glb');
+	btn.disabled = true;
+	new GLTFExporter().parse(
+		model,
+		(buf) => {
+			saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), 'medkit_lod' + state.lod + '.glb');
+			for (const h of nodeHelpers) h.visible = wasNodes;
+			btn.disabled = false;
+		},
+		(err) => {
+			console.error(err);
+			alert('Не удалось экспортировать GLB: ' + err);
+			for (const h of nodeHelpers) h.visible = wasNodes;
+			btn.disabled = false;
+		},
+		{ binary: true, onlyVisible: true }
+	);
+});
+
+window.addEventListener('resize', () => {
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+	renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- старт -------------------------------------------------------------------
+buildModel(0);
+fitCamera();
+
+function loop() {
+	requestAnimationFrame(loop);
+	controls.update();
+	if (state.bbox) modelBox(bboxHelper.box);
+	renderer.render(scene, camera);
+	updateStats(false);            // draw calls читаются уже после кадра
+}
+loop();
+
+$('boot').hidden = true;
+document.body.classList.add('ready');
+window.__viewerReady = true;
+window.medkit = { scene, camera, renderer, controls, get model() { return model; }, build: buildMedkit, validate, fitCamera };
+console.log('%cАптечка готова. В консоли: buildMedkit(medkit.model.__THREE, { lod: 1 })', 'color:#5e9fe8');
+</script>
+</body>
+</html>

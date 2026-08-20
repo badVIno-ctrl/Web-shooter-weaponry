@@ -1,0 +1,2956 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>GLOCK 18C</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --bg:#0b0c0e; --surface:rgba(24,25,28,.82); --raised:rgba(56,56,54,.55);
+    --line:rgba(255,255,255,.14); --line2:rgba(255,255,255,.22);
+    --tx:#fff; --tx2:rgba(255,255,255,.62); --tx3:rgba(255,255,255,.38);
+    --blue:#5E9FE8; --green:#72BC8F; --orange:#DE9255; --red:#E97366;
+    --r:10px;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #cv:active{cursor:grabbing}
+
+  .hud{position:fixed;z-index:10;user-select:none}
+
+  /* ---------- title ---------- */
+  #brand{top:22px;left:24px}
+  #brand h1{margin:0;font-size:19px;letter-spacing:.20em;font-weight:650}
+  #brand p{margin:5px 0 0;font-size:11.5px;letter-spacing:.13em;color:var(--tx3);text-transform:uppercase}
+
+  /* ---------- panel ---------- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);
+    box-shadow:0 18px 50px rgba(0,0,0,.55)}
+
+  /* ---------- bottom dock ---------- */
+  #dock{bottom:22px;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:10px;
+    padding:10px;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px)}
+
+  .seg{display:flex;background:rgba(0,0,0,.34);border:1px solid var(--line);border-radius:var(--r);padding:3px;gap:3px}
+  .seg button{appearance:none;border:0;background:transparent;color:var(--tx2);cursor:pointer;
+    font:600 11.5px/1 inherit;letter-spacing:.10em;padding:10px 15px;border-radius:7px;transition:.16s;white-space:nowrap}
+  .seg button:hover{color:var(--tx)}
+  .seg button.on{background:var(--raised);color:var(--tx);box-shadow:inset 0 0 0 1px var(--line2)}
+  .seg button.on[data-mode="auto"]{background:rgba(222,146,85,.20);color:var(--orange);box-shadow:inset 0 0 0 1px rgba(222,146,85,.45)}
+
+  .btn{appearance:none;border:1px solid var(--line);background:rgba(255,255,255,.045);color:var(--tx);
+    cursor:pointer;font:600 11.5px/1 inherit;letter-spacing:.10em;padding:0 18px;border-radius:var(--r);
+    transition:.14s;white-space:nowrap;display:flex;align-items:center;gap:8px}
+  .btn:hover{background:rgba(255,255,255,.10);border-color:var(--line2)}
+  .btn:active{transform:translateY(1px)}
+  .btn.fire{background:rgba(233,115,102,.16);border-color:rgba(233,115,102,.42);color:#ffb5ac}
+  .btn.fire:hover{background:rgba(233,115,102,.26)}
+  .btn.rel{background:rgba(94,159,232,.14);border-color:rgba(94,159,232,.38);color:#a9cdf5}
+  .btn.rel:hover{background:rgba(94,159,232,.24)}
+  .btn kbd{font:600 9.5px/1 ui-monospace,Menlo,monospace;color:var(--tx3);border:1px solid var(--line);
+    border-radius:4px;padding:3px 5px;letter-spacing:.04em}
+
+  /* ---------- ammo ---------- */
+  #ammo{display:flex;align-items:baseline;gap:3px;padding:0 16px;border-left:1px solid var(--line);
+    border-right:1px solid var(--line);min-width:104px;justify-content:center}
+  #ammoN{font:650 30px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  #ammoT{font:600 13px/1 ui-monospace,Menlo,monospace;color:var(--tx3)}
+  #ammo.low #ammoN{color:var(--orange)}
+  #ammo.empty #ammoN{color:var(--red)}
+
+  /* ---------- right rail ---------- */
+  #rail{top:22px;right:24px;padding:14px;display:flex;flex-direction:column;gap:12px;width:214px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .lab{font:600 10px/1 inherit;letter-spacing:.14em;color:var(--tx3);text-transform:uppercase}
+  .mini{display:flex;background:rgba(0,0,0,.34);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
+  .mini button{appearance:none;border:0;background:transparent;color:var(--tx2);cursor:pointer;
+    font:600 10.5px/1 ui-monospace,Menlo,monospace;padding:7px 10px;border-radius:6px;transition:.14s}
+  .mini button.on{background:var(--raised);color:var(--tx)}
+  .sw{position:relative;width:40px;height:22px;border-radius:11px;background:rgba(0,0,0,.42);
+    border:1px solid var(--line);cursor:pointer;transition:.18s;flex:none}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+    background:rgba(255,255,255,.55);transition:.18s}
+  .sw.on{background:rgba(114,188,143,.30);border-color:rgba(114,188,143,.5)}
+  .sw.on::after{left:20px;background:var(--green)}
+  .hr{height:1px;background:var(--line);margin:1px 0}
+  .hint{font:500 10.5px/1.65 inherit;color:var(--tx3);letter-spacing:.02em}
+  .hint b{color:var(--tx2);font-weight:600;font-family:ui-monospace,Menlo,monospace;font-size:10px}
+
+  /* ---------- status pill ---------- */
+  #pill{top:22px;left:50%;transform:translateX(-50%);padding:8px 16px;border-radius:999px;
+    font:600 10.5px/1 inherit;letter-spacing:.16em;text-transform:uppercase;opacity:0;transition:opacity .25s;
+    color:var(--orange);border-color:rgba(222,146,85,.4);background:rgba(222,146,85,.14)}
+  #pill.show{opacity:1}
+
+  #load{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    background:#0b0c0e;font:600 11px/1 inherit;letter-spacing:.22em;color:var(--tx3);transition:opacity .5s}
+  #load.gone{opacity:0;pointer-events:none}
+  #err{position:fixed;left:0;right:0;top:0;z-index:99;margin:0;padding:14px 18px;background:#3a1512;
+    color:#ffb3a8;font:12px/1.55 ui-monospace,Menlo,monospace;white-space:pre-wrap;display:none;max-height:60vh;overflow:auto}
+
+  @media (max-width:900px){
+    #rail{display:none}
+    #brand{top:14px;left:14px}
+    #dock{bottom:14px;gap:8px;padding:8px}
+    #ammoN{font-size:24px}
+    .btn,.seg button{padding-left:12px;padding-right:12px}
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<pre id="err"></pre>
+
+<div id="brand" class="hud">
+  <h1>GLOCK 18C</h1>
+  <p>Selective fire &middot; 9&times;19</p>
+</div>
+
+<div id="pill" class="hud panel">Перезарядка</div>
+
+<div id="rail" class="hud panel">
+  <div class="row"><span class="lab">Магазин</span>
+    <div class="mini" id="magSel">
+      <button data-mag="17">17</button><button data-mag="33" class="on">33</button>
+    </div>
+  </div>
+  <div class="row"><span class="lab">Звук</span><div class="sw on" id="sndSw"></div></div>
+  <div class="row"><span class="lab">Вращение</span><div class="sw on" id="spinSw"></div></div>
+  <div class="hr"></div>
+  <div class="hint">
+    <b>ЛКМ</b> / <b>Пробел</b> — огонь<br>
+    <b>R</b> — перезарядка<br>
+    <b>V</b> — режим огня<br>
+    <b>M</b> — магазин 17 / 33<br>
+    <b>Мышь</b> — поворот, <b>колесо</b> — зум
+  </div>
+</div>
+
+<div id="dock" class="hud panel">
+  <div class="seg" id="modeSel">
+    <button data-mode="semi" class="on">ОДИНОЧНЫЙ</button>
+    <button data-mode="auto">АВТО</button>
+  </div>
+  <div id="ammo"><span id="ammoN">33</span><span id="ammoT">/33</span></div>
+  <button class="btn fire" id="btnFire">ОГОНЬ <kbd>SPACE</kbd></button>
+  <button class="btn rel" id="btnRel">ПЕРЕЗАРЯДКА <kbd>R</kbd></button>
+</div>
+
+<div id="load">ЗАГРУЗКА</div>
+
+<script>
+(function(){
+"use strict";
+var __err = document.getElementById('err');
+function fail(m){ try{ __err.style.display='block'; __err.textContent += m + "\n"; document.title = 'ERR: ' + m; }catch(e){} }
+window.addEventListener('error', function(e){ fail((e.message||'error') + ' @' + (e.lineno||'?')); });
+window.addEventListener('unhandledrejection', function(e){ fail('promise: ' + (e.reason && e.reason.message || e.reason)); });
+try{
+/* ============================================================================
+   MATH  (column-major mat4, same layout as WebGL)
+============================================================================ */
+const PI = Math.PI, TAU = PI * 2, D2R = PI / 180;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp  = (a, b, t) => a + (b - a) * t;
+const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const rnd   = (a, b) => a + Math.random() * (b - a);
+
+function m4() { return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
+function m4copy(a, o) { o = o || m4(); o.set(a); return o; }
+
+function m4mul(a, b, o) {
+  o = o || m4();
+  const a00=a[0],a01=a[1],a02=a[2],a03=a[3], a10=a[4],a11=a[5],a12=a[6],a13=a[7],
+        a20=a[8],a21=a[9],a22=a[10],a23=a[11], a30=a[12],a31=a[13],a32=a[14],a33=a[15];
+  for (let i = 0; i < 4; i++) {
+    const b0=b[i*4], b1=b[i*4+1], b2=b[i*4+2], b3=b[i*4+3];
+    o[i*4  ] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+    o[i*4+1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+    o[i*4+2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+    o[i*4+3] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+  }
+  return o;
+}
+
+/* translate * Rz * Ry * Rx * scale  */
+function m4trs(tx, ty, tz, rx, ry, rz, sx, sy, sz, o) {
+  o = o || m4();
+  if (sy === undefined) { sy = sx; sz = sx; }
+  if (sx === undefined) { sx = sy = sz = 1; }
+  const cx=Math.cos(rx||0), sxx=Math.sin(rx||0), cy=Math.cos(ry||0), syy=Math.sin(ry||0), cz=Math.cos(rz||0), szz=Math.sin(rz||0);
+  const m00 = cy*cz, m01 = cy*szz, m02 = -syy;
+  const m10 = sxx*syy*cz - cx*szz, m11 = sxx*syy*szz + cx*cz, m12 = sxx*cy;
+  const m20 = cx*syy*cz + sxx*szz, m21 = cx*syy*szz - sxx*cz, m22 = cx*cy;
+  o[0]=m00*sx; o[1]=m01*sx; o[2]=m02*sx; o[3]=0;
+  o[4]=m10*sy; o[5]=m11*sy; o[6]=m12*sy; o[7]=0;
+  o[8]=m20*sz; o[9]=m21*sz; o[10]=m22*sz; o[11]=0;
+  o[12]=tx||0; o[13]=ty||0; o[14]=tz||0; o[15]=1;
+  return o;
+}
+
+function m4perspective(fovy, aspect, near, far, o) {
+  o = o || m4();
+  const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+  o.fill(0);
+  o[0] = f / aspect; o[5] = f; o[10] = (far + near) * nf; o[11] = -1; o[14] = 2 * far * near * nf;
+  return o;
+}
+
+function m4ortho(l, r, b, t, n, f, o) {
+  o = o || m4(); o.fill(0);
+  o[0] = 2/(r-l); o[5] = 2/(t-b); o[10] = -2/(f-n); o[15] = 1;
+  o[12] = -(r+l)/(r-l); o[13] = -(t+b)/(t-b); o[14] = -(f+n)/(f-n);
+  return o;
+}
+
+function m4lookAt(ex, ey, ez, cx, cy, cz, ux, uy, uz, o) {
+  o = o || m4();
+  let zx = ex-cx, zy = ey-cy, zz = ez-cz;
+  let l = Math.hypot(zx, zy, zz) || 1; zx/=l; zy/=l; zz/=l;
+  let xx = uy*zz - uz*zy, xy = uz*zx - ux*zz, xz = ux*zy - uy*zx;
+  l = Math.hypot(xx, xy, xz) || 1; xx/=l; xy/=l; xz/=l;
+  const yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+  o[0]=xx; o[1]=yx; o[2]=zx; o[3]=0;
+  o[4]=xy; o[5]=yy; o[6]=zy; o[7]=0;
+  o[8]=xz; o[9]=yz; o[10]=zz; o[11]=0;
+  o[12]=-(xx*ex+xy*ey+xz*ez); o[13]=-(yx*ex+yy*ey+yz*ez); o[14]=-(zx*ex+zy*ey+zz*ez); o[15]=1;
+  return o;
+}
+
+function m4invert(a, o) {
+  o = o || m4();
+  const b00=a[0]*a[5]-a[1]*a[4], b01=a[0]*a[6]-a[2]*a[4], b02=a[0]*a[7]-a[3]*a[4],
+        b03=a[1]*a[6]-a[2]*a[5], b04=a[1]*a[7]-a[3]*a[5], b05=a[2]*a[7]-a[3]*a[6],
+        b06=a[8]*a[13]-a[9]*a[12], b07=a[8]*a[14]-a[10]*a[12], b08=a[8]*a[15]-a[11]*a[12],
+        b09=a[9]*a[14]-a[10]*a[13], b10=a[9]*a[15]-a[11]*a[13], b11=a[10]*a[15]-a[11]*a[14];
+  let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if (!det) return o; det = 1/det;
+  o[0]=(a[5]*b11-a[6]*b10+a[7]*b09)*det;  o[1]=(a[2]*b10-a[1]*b11-a[3]*b09)*det;
+  o[2]=(a[13]*b05-a[14]*b04+a[15]*b03)*det; o[3]=(a[10]*b04-a[9]*b05-a[11]*b03)*det;
+  o[4]=(a[6]*b08-a[4]*b11-a[7]*b07)*det;  o[5]=(a[0]*b11-a[2]*b08+a[3]*b07)*det;
+  o[6]=(a[14]*b02-a[12]*b05-a[15]*b01)*det; o[7]=(a[8]*b05-a[10]*b02+a[11]*b01)*det;
+  o[8]=(a[4]*b10-a[5]*b08+a[7]*b06)*det;  o[9]=(a[1]*b08-a[0]*b10-a[3]*b06)*det;
+  o[10]=(a[12]*b04-a[13]*b02+a[15]*b00)*det; o[11]=(a[9]*b02-a[8]*b04-a[11]*b00)*det;
+  o[12]=(a[5]*b07-a[4]*b09-a[6]*b06)*det; o[13]=(a[0]*b09-a[1]*b07+a[2]*b06)*det;
+  o[14]=(a[13]*b01-a[12]*b03-a[14]*b00)*det; o[15]=(a[8]*b03-a[9]*b01+a[10]*b00)*det;
+  return o;
+}
+
+/* upper-left 3x3 of inverse-transpose, packed as mat3 (9 floats) */
+function m3normal(a, o) {
+  o = o || new Float32Array(9);
+  const inv = m4invert(a);
+  o[0]=inv[0]; o[1]=inv[4]; o[2]=inv[8];
+  o[3]=inv[1]; o[4]=inv[5]; o[5]=inv[9];
+  o[6]=inv[2]; o[7]=inv[6]; o[8]=inv[10];
+  return o;
+}
+
+function xformPoint(m, x, y, z, out) {
+  out[0] = m[0]*x + m[4]*y + m[8]*z + m[12];
+  out[1] = m[1]*x + m[5]*y + m[9]*z + m[13];
+  out[2] = m[2]*x + m[6]*y + m[10]*z + m[14];
+  return out;
+}
+
+/* ============================================================================
+   GEOMETRY  — a mesh is { p:[x,y,z...], n:[...], i:[...] }, units are mm
+============================================================================ */
+function Mesh() { return { p: [], n: [], i: [] }; }
+
+function meshTri(M, ax,ay,az, bx,by,bz, cx,cy,cz) {
+  const ux=bx-ax, uy=by-ay, uz=bz-az, vx=cx-ax, vy=cy-ay, vz=cz-az;
+  let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+  const l = Math.hypot(nx,ny,nz);
+  if (l < 1e-12) return;
+  nx/=l; ny/=l; nz/=l;
+  const b = M.p.length / 3;
+  M.p.push(ax,ay,az, bx,by,bz, cx,cy,cz);
+  M.n.push(nx,ny,nz, nx,ny,nz, nx,ny,nz);
+  M.i.push(b, b+1, b+2);
+}
+function meshQuad(M, a, b, c, d) {
+  meshTri(M, a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]);
+  meshTri(M, a[0],a[1],a[2], c[0],c[1],c[2], d[0],d[1],d[2]);
+}
+
+function meshMerge(dst, src, mtx) {
+  const base = dst.p.length / 3;
+  if (!mtx) {
+    for (let k = 0; k < src.p.length; k++) { dst.p.push(src.p[k]); dst.n.push(src.n[k]); }
+  } else {
+    const nm = m3normal(mtx);
+    for (let k = 0; k < src.p.length; k += 3) {
+      const x=src.p[k], y=src.p[k+1], z=src.p[k+2];
+      dst.p.push(mtx[0]*x+mtx[4]*y+mtx[8]*z+mtx[12], mtx[1]*x+mtx[5]*y+mtx[9]*z+mtx[13], mtx[2]*x+mtx[6]*y+mtx[10]*z+mtx[14]);
+      const a=src.n[k], b=src.n[k+1], c=src.n[k+2];
+      let nx=nm[0]*a+nm[3]*b+nm[6]*c, ny=nm[1]*a+nm[4]*b+nm[7]*c, nz=nm[2]*a+nm[5]*b+nm[8]*c;
+      const l = Math.hypot(nx,ny,nz) || 1;
+      dst.n.push(nx/l, ny/l, nz/l);
+    }
+  }
+  for (let k = 0; k < src.i.length; k++) dst.i.push(src.i[k] + base);
+  return dst;
+}
+
+/* --- weld + angle-threshold smoothing: hard edges stay crisp -------------- */
+function meshSmooth(M, angleDeg) {
+  const cosT = Math.cos((angleDeg === undefined ? 38 : angleDeg) * D2R);
+  const Q = 1e3;                                   // 0.001 mm weld tolerance
+  const map = new Map();
+  const nv = M.p.length / 3;
+  const groups = [];                               // per welded position: list of vertex indices
+  const owner = new Int32Array(nv);
+  for (let v = 0; v < nv; v++) {
+    const key = Math.round(M.p[v*3]*Q) + '|' + Math.round(M.p[v*3+1]*Q) + '|' + Math.round(M.p[v*3+2]*Q);
+    let g = map.get(key);
+    if (g === undefined) { g = groups.length; map.set(key, g); groups.push([]); }
+    groups[g].push(v); owner[v] = g;
+  }
+  const outN = new Float32Array(nv * 3);
+  for (let g = 0; g < groups.length; g++) {
+    const list = groups[g];
+    for (let a = 0; a < list.length; a++) {
+      const va = list[a];
+      const ax = M.n[va*3], ay = M.n[va*3+1], az = M.n[va*3+2];
+      let sx = 0, sy = 0, sz = 0;
+      for (let b = 0; b < list.length; b++) {
+        const vb = list[b];
+        const bx = M.n[vb*3], by = M.n[vb*3+1], bz = M.n[vb*3+2];
+        if (ax*bx + ay*by + az*bz >= cosT) { sx += bx; sy += by; sz += bz; }
+      }
+      const l = Math.hypot(sx, sy, sz) || 1;
+      outN[va*3] = sx/l; outN[va*3+1] = sy/l; outN[va*3+2] = sz/l;
+    }
+  }
+  for (let k = 0; k < nv*3; k++) M.n[k] = outN[k];
+  return M;
+}
+
+/* --- polygon helpers ------------------------------------------------------ */
+function polyArea(p) { let a = 0; for (let i = 0, n = p.length; i < n; i++) { const q = p[(i+1)%n]; a += p[i][0]*q[1] - q[0]*p[i][1]; } return a/2; }
+function polyCCW(p) { return polyArea(p) > 0 ? p : p.slice().reverse(); }
+function polyCW (p) { return polyArea(p) < 0 ? p : p.slice().reverse(); }
+
+/* offset every vertex to the LEFT of the traversal direction by d */
+function polyOffset(p, d) {
+  const n = p.length, out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = p[(i-1+n)%n], b = p[i], c = p[(i+1)%n];
+    let e0x = b[0]-a[0], e0y = b[1]-a[1]; let l0 = Math.hypot(e0x,e0y)||1; e0x/=l0; e0y/=l0;
+    let e1x = c[0]-b[0], e1y = c[1]-b[1]; let l1 = Math.hypot(e1x,e1y)||1; e1x/=l1; e1y/=l1;
+    const n0x = -e0y, n0y = e0x, n1x = -e1y, n1y = e1x;
+    let bx = n0x+n1x, by = n0y+n1y; const bl = Math.hypot(bx,by);
+    if (bl < 1e-6) { out[i] = [b[0]+n0x*d, b[1]+n0y*d]; continue; }
+    bx/=bl; by/=bl;
+    const cosHalf = Math.max(0.25, bx*n0x + by*n0y);
+    out[i] = [b[0] + bx*d/cosHalf, b[1] + by*d/cosHalf];
+  }
+  return out;
+}
+
+function circlePoly(cx, cy, r, seg, cw) {
+  const p = [];
+  for (let i = 0; i < seg; i++) { const t = (cw ? -1 : 1) * i / seg * TAU; p.push([cx + Math.cos(t)*r, cy + Math.sin(t)*r]); }
+  return p;
+}
+
+function roundRectPoly(x0, y0, x1, y1, r, seg) {
+  seg = seg || 4; const p = [];
+  const C = [[x1-r, y0+r, -90], [x1-r, y1-r, 0], [x0+r, y1-r, 90], [x0+r, y0+r, 180]];
+  for (const [cx, cy, a0] of C) {
+    for (let i = 0; i <= seg; i++) { const a = (a0 + i/seg*90) * D2R; p.push([cx + Math.cos(a)*r, cy + Math.sin(a)*r]); }
+  }
+  return p;
+}
+
+/* --- bridge holes into a single simple polygon ---------------------------- */
+function bridgeHoles(outer, holes) {
+  let poly = polyCCW(outer).slice();
+  const hs = holes.map(h => polyCW(h)).slice();
+  hs.sort((a, b) => Math.max(...b.map(v => v[0])) - Math.max(...a.map(v => v[0])));
+  for (const hole of hs) {
+    let mi = 0; for (let i = 1; i < hole.length; i++) if (hole[i][0] > hole[mi][0]) mi = i;
+    const M = hole[mi];
+    // ray +X from M -> closest edge intersection
+    let bestX = Infinity, bestEdge = -1;
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const A = poly[i], B = poly[(i+1)%n];
+      if ((A[1] > M[1]) === (B[1] > M[1])) continue;
+      const t = (M[1]-A[1]) / (B[1]-A[1]);
+      const x = A[0] + t*(B[0]-A[0]);
+      if (x > M[0] - 1e-9 && x < bestX) { bestX = x; bestEdge = i; }
+    }
+    if (bestEdge < 0) continue;
+    const A = poly[bestEdge], B = poly[(bestEdge+1) % poly.length];
+    let pIdx = (A[0] > B[0]) ? bestEdge : (bestEdge+1) % poly.length;
+    // refine: reflex vertex inside triangle (M, I, P) with the smallest angle
+    const P0 = poly[pIdx];
+    let best = pIdx, bestAng = Infinity;
+    const inTri = (px, py) => {
+      const s = (x1,y1,x2,y2,x3,y3) => (x1-x3)*(y2-y3)-(x2-x3)*(y1-y3);
+      const d1 = s(px,py, M[0],M[1], bestX,M[1]), d2 = s(px,py, bestX,M[1], P0[0],P0[1]), d3 = s(px,py, P0[0],P0[1], M[0],M[1]);
+      const neg = (d1<0)||(d2<0)||(d3<0), pos = (d1>0)||(d2>0)||(d3>0);
+      return !(neg && pos);
+    };
+    for (let i = 0, n = poly.length; i < n; i++) {
+      const V = poly[i];
+      if (V[0] < M[0]) continue;
+      if (!inTri(V[0], V[1])) continue;
+      const ang = Math.abs(Math.atan2(V[1]-M[1], V[0]-M[0]));
+      if (ang < bestAng) { bestAng = ang; best = i; }
+    }
+    pIdx = bestAng === Infinity ? pIdx : best;
+    const ring = [];
+    for (let k = 0; k <= hole.length; k++) ring.push(hole[(mi + k) % hole.length]);
+    poly = poly.slice(0, pIdx+1).concat(ring, [poly[pIdx]], poly.slice(pIdx+1));
+  }
+  return poly;
+}
+
+/* --- ear clipping (simple polygon) ---------------------------------------- */
+function triangulate(poly) {
+  const n = poly.length; const out = [];
+  if (n < 3) return out;
+  const V = [];
+  if (polyArea(poly) > 0) { for (let i = 0; i < n; i++) V.push(i); } else { for (let i = 0; i < n; i++) V.push(n-1-i); }
+  const inside = (ax,ay,bx,by,cx,cy,px,py) => {
+    const a1 = (cx-bx)*(py-by)-(cy-by)*(px-bx);
+    const a2 = (ax-cx)*(py-cy)-(ay-cy)*(px-cx);
+    const a3 = (bx-ax)*(py-ay)-(by-ay)*(px-ax);
+    return a1 >= 0 && a2 >= 0 && a3 >= 0;
+  };
+  let nv = n, count = 2*nv;
+  for (let v = nv-1; nv > 2;) {
+    if (count-- <= 0) break;
+    let u = v; if (nv <= u) u = 0;
+    v = u+1;   if (nv <= v) v = 0;
+    let w = v+1; if (nv <= w) w = 0;
+    const A = poly[V[u]], B = poly[V[v]], C = poly[V[w]];
+    const cross = (B[0]-A[0])*(C[1]-A[1]) - (B[1]-A[1])*(C[0]-A[0]);
+    let ok = cross > 1e-12;
+    if (ok) for (let k = 0; k < nv; k++) {
+      if (k === u || k === v || k === w) continue;
+      const P = poly[V[k]];
+      if (inside(A[0],A[1],B[0],B[1],C[0],C[1],P[0],P[1])) { ok = false; break; }
+    }
+    if (ok) {
+      out.push(V[u], V[v], V[w]);
+      for (let s = v, t = v+1; t < nv; s++, t++) V[s] = V[t];
+      nv--; count = 2*nv;
+    }
+  }
+  return out;
+}
+
+/* --- extrude a 2D shape along local +Z ------------------------------------
+   shape : { outer:[[x,y]..], holes:[[[x,y]..]] }
+   opt   : { z0, z1, bevel, capA, capB }
+---------------------------------------------------------------------------- */
+function extrude(shape, opt) {
+  const z0 = opt.z0, z1 = opt.z1, span = Math.abs(z1 - z0);
+  const def = opt.bevel === undefined ? 0 : opt.bevel;
+  const bA = Math.min(opt.bevelA === undefined ? def : opt.bevelA, span * 0.35);
+  const bB = Math.min(opt.bevelB === undefined ? def : opt.bevelB, span * 0.35);
+  const capA = opt.capA !== false, capB = opt.capB !== false;
+  const M = Mesh();
+  const outer = polyCCW(shape.outer);
+  const holes = (shape.holes || []).map(polyCW);
+  const rings = [outer].concat(holes);
+  const inA = rings.map(r => bA > 0 ? polyOffset(r, bA) : r);
+  const inB = rings.map(r => bB > 0 ? polyOffset(r, bB) : r);
+
+  const za = z0 + bA, zb = z1 - bB;
+  for (let ri = 0; ri < rings.length; ri++) {
+    const R = rings[ri], Ra = inA[ri], Rb = inB[ri], n = R.length;
+    for (let i = 0; i < n; i++) {
+      const a = R[i], b = R[(i+1)%n];
+      if (bA > 0) { const ai = Ra[i], bi = Ra[(i+1)%n];
+        meshQuad(M, [ai[0],ai[1],z0], [bi[0],bi[1],z0], [b[0],b[1],za], [a[0],a[1],za]); }
+      if (bB > 0) { const ai = Rb[i], bi = Rb[(i+1)%n];
+        meshQuad(M, [a[0],a[1],zb], [b[0],b[1],zb], [bi[0],bi[1],z1], [ai[0],ai[1],z1]); }
+      meshQuad(M, [a[0],a[1],za], [b[0],b[1],za], [b[0],b[1],zb], [a[0],a[1],zb]);
+    }
+  }
+  const cap = (ringSet, z, flip) => {
+    const poly = holes.length ? bridgeHoles(ringSet[0], ringSet.slice(1)) : polyCCW(ringSet[0]);
+    const tri = triangulate(poly);
+    for (let k = 0; k < tri.length; k += 3) {
+      const A = poly[tri[k]], B = poly[tri[k+1]], C = poly[tri[k+2]];
+      if (flip) meshTri(M, C[0],C[1],z, B[0],B[1],z, A[0],A[1],z);
+      else      meshTri(M, A[0],A[1],z, B[0],B[1],z, C[0],C[1],z);
+    }
+  };
+  if (capB) cap(inB, z1, false);
+  if (capA) cap(inA, z0, true);
+  return M;
+}
+
+/* cut every convex corner of a CCW polygon by r (machined edge break) */
+function chamferPoly(p, r) {
+  const n = p.length, out = [];
+  const P = polyCCW(p);
+  for (let i = 0; i < n; i++) {
+    const a = P[(i-1+n)%n], b = P[i], c = P[(i+1)%n];
+    let e0x = b[0]-a[0], e0y = b[1]-a[1]; const l0 = Math.hypot(e0x,e0y)||1;
+    let e1x = c[0]-b[0], e1y = c[1]-b[1]; const l1 = Math.hypot(e1x,e1y)||1;
+    e0x/=l0; e0y/=l0; e1x/=l1; e1y/=l1;
+    const cross = e0x*e1y - e0y*e1x;
+    const dot = e0x*e1x + e0y*e1y;
+    if (cross <= 0.0001 || dot > 0.985) { out.push(b); continue; }   // concave or nearly straight
+    const k = Math.min(r, l0*0.45, l1*0.45);
+    out.push([b[0]-e0x*k, b[1]-e0y*k], [b[0]+e1x*k, b[1]+e1y*k]);
+  }
+  return out;
+}
+
+/* extrude along X (side profiles given as [z,y]) */
+function extrudeX(shape, x0, x1, bevel) {
+  const M = extrude(shape, { z0: x0, z1: x1, bevel: bevel });
+  // local (u=z, v=y, w=x)  ->  world (x=w, y=v, z=u)
+  const R = new Float32Array([0,0,1,0,  0,1,0,0,  1,0,0,0,  0,0,0,1]);
+  const O = Mesh(); meshMerge(O, M, R);
+  for (let k = 0; k < O.i.length; k += 3) { const t = O.i[k]; O.i[k] = O.i[k+2]; O.i[k+2] = t; }
+  for (let k = 0; k < O.n.length; k++) O.n[k] = -O.n[k];
+  return O;
+}
+
+/* extrude along Y (top profiles given as [x,z]) */
+function extrudeY(shape, y0, y1, bevel) {
+  const M = extrude(shape, { z0: y0, z1: y1, bevel: bevel });
+  const R = new Float32Array([1,0,0,0,  0,0,1,0,  0,1,0,0,  0,0,0,1]);
+  const O = Mesh(); meshMerge(O, M, R);
+  for (let k = 0; k < O.i.length; k += 3) { const t = O.i[k]; O.i[k] = O.i[k+2]; O.i[k+2] = t; }
+  for (let k = 0; k < O.n.length; k++) O.n[k] = -O.n[k];
+  return O;
+}
+
+/* --- surface of revolution around Y; profile = [[r,y]..] ------------------ */
+function lathe(profile, seg, arcStart, arcLen) {
+  const M = Mesh();
+  const a0 = arcStart || 0, aL = arcLen === undefined ? TAU : arcLen;
+  const closed = Math.abs(aL - TAU) < 1e-6;
+  const N = seg;
+  const pt = (i, j) => { const a = a0 + aL * (i / N); return [Math.cos(a)*profile[j][0], profile[j][1], Math.sin(a)*profile[j][0]]; };
+  for (let i = 0; i < (closed ? N : N); i++) {
+    for (let j = 0; j < profile.length - 1; j++) {
+      const a = pt(i, j), b = pt((i+1)%(closed?N:N+1), j), c = pt((i+1)%(closed?N:N+1), j+1), d = pt(i, j+1);
+      meshQuad(M, a, b, c, d);
+    }
+  }
+  return M;
+}
+
+/* --- loft: rings of equal length, each ring = [[x,y,z]..] ----------------- */
+function loft(rings, capA, capB) {
+  const M = Mesh(), R = rings.length, N = rings[0].length;
+  for (let r = 0; r < R-1; r++) for (let i = 0; i < N; i++) {
+    const j = (i+1)%N;
+    meshQuad(M, rings[r][i], rings[r][j], rings[r+1][j], rings[r+1][i]);
+  }
+  const capRing = (ring, flip) => {
+    let cx = 0, cy = 0, cz = 0;
+    for (const p of ring) { cx += p[0]; cy += p[1]; cz += p[2]; }
+    cx /= N; cy /= N; cz /= N;
+    for (let i = 0; i < N; i++) {
+      const a = ring[i], b = ring[(i+1)%N];
+      if (flip) meshTri(M, cx,cy,cz, b[0],b[1],b[2], a[0],a[1],a[2]);
+      else      meshTri(M, cx,cy,cz, a[0],a[1],a[2], b[0],b[1],b[2]);
+    }
+  };
+  if (capA) capRing(rings[0], true);
+  if (capB) capRing(rings[R-1], false);
+  return M;
+}
+
+function boxMesh(x0, x1, y0, y1, z0, z1, bevel) {
+  return extrude({ outer: [[x0,y0],[x1,y0],[x1,y1],[x0,y1]] }, { z0: z0, z1: z1, bevel: bevel === undefined ? 0.18 : bevel });
+}
+
+/* cylinder along Z */
+function cylZ(r, z0, z1, seg, bevel) {
+  return extrude({ outer: circlePoly(0, 0, r, seg) }, { z0: z0, z1: z1, bevel: bevel === undefined ? 0.2 : bevel });
+}
+/* cylinder along X */
+function cylX(r, x0, x1, seg, bevel) {
+  return extrudeX({ outer: circlePoly(0, 0, r, seg) }, x0, x1, bevel === undefined ? 0.2 : bevel);
+}
+/* cylinder along Y */
+function cylY(r, y0, y1, seg, bevel) {
+  return extrudeY({ outer: circlePoly(0, 0, r, seg) }, y0, y1, bevel === undefined ? 0.2 : bevel);
+}
+
+function meshTranslate(M, x, y, z) {
+  for (let k = 0; k < M.p.length; k += 3) { M.p[k] += x; M.p[k+1] += y; M.p[k+2] += z; }
+  return M;
+}
+function meshMirrorX(M) {
+  const O = Mesh();
+  meshMerge(O, M, new Float32Array([-1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]));
+  for (let k = 0; k < O.i.length; k += 3) { const t = O.i[k]; O.i[k] = O.i[k+2]; O.i[k+2] = t; }
+  return O;
+}
+function bothSides(M) { const O = Mesh(); meshMerge(O, M); meshMerge(O, meshMirrorX(M)); return O; }
+/* ============================================================================
+   WebGL2 renderer — zero dependencies.
+   Forward PBR (GGX + analytic studio env) + shadow map + baked vertex AO
+   + supersampling + bloom + ACES tonemap.
+============================================================================ */
+
+const VS_MAIN = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in float aAO;
+uniform mat4 uVP, uM, uLVP;
+uniform mat3 uN;
+out vec3 vW; out vec3 vN; out float vAO; out vec4 vLS; out vec3 vObj; out vec3 vTz; out vec3 vTy;
+void main(){
+  vec4 w = uM * vec4(aPos, 1.0);
+  vW = w.xyz; vN = normalize(uN * aNrm); vAO = aAO; vLS = uLVP * w;
+  vObj = aPos;
+  vTz = normalize(uN * vec3(0.0, 0.0, 1.0));
+  vTy = normalize(uN * vec3(0.0, 1.0, 0.0));
+  gl_Position = uVP * w;
+}`;
+
+const FS_MAIN = `#version 300 es
+precision highp float; precision highp sampler2DShadow;
+in vec3 vW; in vec3 vN; in float vAO; in vec4 vLS; in vec3 vObj; in vec3 vTz; in vec3 vTy;
+out vec4 oCol;
+uniform vec3 uCam, uAlbedo, uEmis;
+uniform float uMetal, uRough, uClearcoat, uEnvInt, uShadowOn, uGround, uAOStr;
+uniform float uDetail, uMark;
+uniform sampler2D uMarks;
+uniform vec3 uL0d, uL0c, uL1d, uL1c, uL2d, uL2c;
+uniform vec3 uMuzzlePos, uMuzzleCol;
+uniform sampler2DShadow uShadow;
+
+const float PI = 3.14159265;
+
+// analytic studio environment: two softboxes over a dark table.  Kept low and
+// neutral on purpose -- a real GLOCK slide is a dark mirror, its brightness
+// comes from what it reflects, not from any glow of its own.
+vec3 envColor(vec3 d, float rough){
+  float up = d.y * 0.5 + 0.5;
+  vec3 sky   = mix(vec3(0.030,0.033,0.039), vec3(0.088,0.095,0.108), pow(up, 0.85));
+  vec3 floorC= vec3(0.021,0.020,0.019);
+  vec3 base  = mix(floorC, sky, smoothstep(-0.28, 0.10, d.y));
+  // main softbox: upper-left-front
+  vec3 kd = normalize(vec3(-0.45, 0.80, 0.40));
+  float k = pow(max(dot(d, kd), 0.0), mix(150.0, 2.0, rough));
+  base += vec3(1.00,0.975,0.935) * k * mix(4.6, 0.70, rough);
+  // long strip box straight overhead-behind: draws the classic slide streak
+  vec3 sd = normalize(vec3(-0.06, 0.95, -0.30));
+  float t2 = pow(max(dot(d, sd), 0.0), mix(52.0, 2.0, rough));
+  base += vec3(0.93,0.95,1.00) * t2 * mix(1.55, 0.28, rough);
+  // cool kicker from behind-right
+  vec3 rd = normalize(vec3(0.78, 0.22, -0.60));
+  float r = pow(max(dot(d, rd), 0.0), mix(90.0, 2.0, rough));
+  base += vec3(0.60,0.68,0.86) * r * mix(1.10, 0.18, rough);
+  // warm table bounce
+  vec3 bdir = normalize(vec3(0.55,-0.60, 0.32));
+  float b = pow(max(dot(d, bdir), 0.0), mix(26.0, 2.0, rough));
+  base += vec3(0.80,0.58,0.38) * b * mix(0.40, 0.09, rough);
+  return base;
+}
+
+// value noise -- molded polymer stipple / bead-blasted nitride grain
+float h31(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453123); }
+float n3(vec3 p){
+  vec3 i = floor(p), f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(mix(h31(i), h31(i+vec3(1,0,0)), f.x),
+                 mix(h31(i+vec3(0,1,0)), h31(i+vec3(1,1,0)), f.x), f.y),
+             mix(mix(h31(i+vec3(0,0,1)), h31(i+vec3(1,0,1)), f.x),
+                 mix(h31(i+vec3(0,1,1)), h31(i+vec3(1,1,1)), f.x), f.y), f.z);
+}
+
+float D_GGX(float NoH, float a){ float a2=a*a; float d=NoH*NoH*(a2-1.0)+1.0; return a2/max(PI*d*d, 1e-7); }
+float V_Smith(float NoV, float NoL, float a){
+  float a2=a*a;
+  float gv = NoL*sqrt(NoV*NoV*(1.0-a2)+a2);
+  float gl = NoV*sqrt(NoL*NoL*(1.0-a2)+a2);
+  return 0.5/max(gv+gl, 1e-7);
+}
+vec3 F_S(vec3 f0, float u){ return f0 + (1.0-f0)*pow(1.0-u, 5.0); }
+
+float shadowFactor(){
+  if (uShadowOn < 0.5) return 1.0;
+  vec3 p = vLS.xyz / vLS.w;
+  p = p * 0.5 + 0.5;
+  if (p.z > 1.0 || p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) return 1.0;
+  float bias = 0.0018;
+  float s = 0.0;
+  float t = 1.0/2048.0;
+  for (int y=-1; y<=1; y++)
+    for (int x=-1; x<=1; x++)
+      s += texture(uShadow, vec3(p.xy + vec2(float(x),float(y))*t, p.z - bias));
+  return s/9.0;
+}
+
+vec3 lightContrib(vec3 N, vec3 V, vec3 L, vec3 C, vec3 alb, float metal, float a, vec3 f0){
+  float NoL = max(dot(N,L), 0.0);
+  if (NoL <= 0.0) return vec3(0.0);
+  vec3 H = normalize(V+L);
+  float NoV = max(dot(N,V), 1e-4), NoH = max(dot(N,H), 0.0), VoH = max(dot(V,H), 0.0);
+  vec3 F = F_S(f0, VoH);
+  vec3 spec = F * D_GGX(NoH, a) * V_Smith(NoV, NoL, a);
+  vec3 kd = (1.0 - F) * (1.0 - metal);
+  return (kd*alb/PI + spec) * C * NoL;
+}
+
+void main(){
+  vec3 N = normalize(vN);
+  vec3 V = normalize(uCam - vW);
+  if (!gl_FrontFacing) N = -N;
+
+  float ao = mix(1.0, clamp(vAO, 0.0, 1.0), uAOStr);
+  float rough = clamp(uRough, 0.045, 1.0);
+  vec3 alb = uAlbedo;
+
+  if (uGround > 0.5){
+    float sh = shadowFactor();
+    float d = length(vW.xz - vec2(0.0, 0.0));
+    float fade = 1.0 - smoothstep(90.0, 330.0, d);
+    vec3 c = vec3(0.052) * mix(0.28, 1.0, sh) * fade;
+    oCol = vec4(c, 1.0);
+    return;
+  }
+
+  /* ---- micro surface -------------------------------------------------
+     1 = injection-moulded polymer  2 = nitrided steel  3 = grip stipple.
+     Real parts are never algebraically smooth: this is what finally makes
+     the frame read as plastic and the slide as metal.                   */
+  if (uDetail > 0.5) {
+    float sc  = (uDetail < 1.5) ? 3.40 : (uDetail < 2.5 ? 7.00 : 6.20);
+    float amp = (uDetail < 1.5) ? 0.085: (uDetail < 2.5 ? 0.055: 0.290);
+    float rv  = (uDetail < 1.5) ? 0.045: (uDetail < 2.5 ? 0.030: 0.090);
+    vec3 q = vObj * sc;
+    float e = 0.55;
+    float n0 = n3(q);
+    vec3 g = vec3(n3(q + vec3(e,0.0,0.0)) - n0,
+                  n3(q + vec3(0.0,e,0.0)) - n0,
+                  n3(q + vec3(0.0,0.0,e)) - n0);
+    g -= N * dot(g, N);
+    N = normalize(N - g * amp);
+    rough = clamp(rough + (n0 - 0.5) * rv, 0.05, 1.0);
+  }
+
+  /* ---- factory roll marks: GLOCK 18C / AUSTRIA 9x19 on the left flank,
+     serial on the right.  Box-projected on the slide sides only.       */
+  if (uMark > 0.5 && abs(N.x) > 0.55 && abs(vObj.x) > 11.2) {
+    vec2 uv = vec2((vObj.z + 72.0) / 112.0, (vObj.y + 9.0) / 14.0);
+    if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+      float side = step(0.0, N.x);                       // 1 = right flank
+      vec2 t = vec2(mix(uv.x, 1.0 - uv.x, side), (1.0 - uv.y) * 0.5 + side * 0.5);
+      float m  = smoothstep(0.34, 0.72, texture(uMarks, t).r);
+      float mx = smoothstep(0.34, 0.72, texture(uMarks, t + vec2(1.0/1024.0, 0.0)).r);
+      float my = smoothstep(0.34, 0.72, texture(uMarks, t + vec2(0.0, 1.0/256.0)).r);
+      vec3 tz = normalize(vTz) * mix(1.0, -1.0, side);
+      vec3 ty = normalize(vTy);
+      N = normalize(N + (tz * (mx - m) - ty * (my - m)) * 2.2);
+      alb   = mix(alb, vec3(0.150, 0.152, 0.158), m * 0.90);
+      rough = mix(rough, 0.58, m * 0.90);
+    }
+  }
+
+  float a = rough * rough;
+  vec3 f0 = mix(vec3(0.04), alb, uMetal);
+
+  float sh = shadowFactor();
+  vec3 col = vec3(0.0);
+  col += lightContrib(N,V,normalize(uL0d), uL0c*mix(0.25,1.0,sh), alb, uMetal, a, f0);
+  col += lightContrib(N,V,normalize(uL1d), uL1c, alb, uMetal, a, f0);
+  col += lightContrib(N,V,normalize(uL2d), uL2c, alb, uMetal, a, f0);
+
+  // muzzle flash point light
+  if (uMuzzleCol.r + uMuzzleCol.g + uMuzzleCol.b > 0.001){
+    vec3 dl = uMuzzlePos - vW;
+    float dist = length(dl);
+    vec3 L = dl/max(dist,1e-4);
+    float att = 1.0/(1.0 + dist*dist*0.00055);
+    col += lightContrib(N,V,L, uMuzzleCol*att, alb, uMetal, a, f0);
+  }
+
+  /* ---- ambient ---------------------------------------------------------
+     Split-sum IBL with horizon occlusion.  The old build added a fat blue
+     grazing-angle wash on top of a near-black albedo, which is exactly what
+     made solid steel and polymer read as smoked glass -- it is gone.      */
+  vec3 R = reflect(-V, N);
+  float NoV = max(dot(N,V), 1e-4);
+  vec3 irr = envColor(N, 1.0) * uEnvInt;
+  vec3 pre = envColor(R, rough) * uEnvInt;
+  vec2 ab = vec2(-1.04, 1.04)*a*a + vec2(1.04, 0.0);
+  float aa = min(ab.x*ab.x, exp2(-9.28*NoV))*ab.x + ab.y;
+  vec2 AB = vec2(-1.04, 1.04)*aa + vec2(1.04, 0.0);
+  float ho = clamp(1.0 + dot(R, normalize(vN)), 0.0, 1.0); ho *= ho;
+  vec3 specEnv = pre * (f0*AB.x + AB.y) * mix(0.30, 1.0, ao) * mix(0.45, 1.0, ho);
+  vec3 diffEnv = irr * alb * (1.0 - uMetal) * ao;
+  col += diffEnv + specEnv;
+
+  // thin factory clearcoat on the polymer
+  if (uClearcoat > 0.001){
+    float cr = 0.13; float ca = cr*cr;
+    vec3 H0 = normalize(V + normalize(uL0d));
+    float NoH = max(dot(N,H0), 0.0);
+    float f = 0.04 + 0.96*pow(1.0-max(dot(V,H0),0.0), 5.0);
+    col += uClearcoat * f * D_GGX(NoH, ca) * 0.18 * uL0c * mix(0.25,1.0,sh) * ao;
+    col += uClearcoat * envColor(R, 0.22) * (0.04 + 0.34*pow(1.0-NoV, 5.0)) * 0.35 * ao * ho;
+  }
+
+  col *= mix(0.58, 1.0, ao);          // contact darkening
+  col += uEmis;
+  oCol = vec4(max(col, 0.0), 1.0);
+}`;
+
+const VS_DEPTH = `#version 300 es
+layout(location=0) in vec3 aPos;
+uniform mat4 uLVP, uM;
+void main(){ gl_Position = uLVP * uM * vec4(aPos,1.0); }`;
+const FS_DEPTH = `#version 300 es
+precision highp float;
+void main(){}`;
+
+const VS_QUAD = `#version 300 es
+out vec2 vUv;
+void main(){
+  vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2);
+  vUv = p; gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
+}`;
+
+const FS_BG = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform vec2 uRes;
+void main(){
+  vec2 uv = vUv;
+  float d = length((uv - vec2(0.5, 0.56)) * vec2(uRes.x/uRes.y, 1.0));
+  vec3 c = mix(vec3(0.062,0.066,0.075), vec3(0.014,0.015,0.018), smoothstep(0.05, 0.95, d));
+  c += vec3(0.030,0.036,0.048) * pow(max(0.0, 1.0 - d*1.35), 3.0);
+  o = vec4(c, 1.0);
+}`;
+
+const FS_BRIGHT = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform float uThr;
+void main(){
+  vec3 c = texture(uTex, vUv).rgb;
+  float l = dot(c, vec3(0.2126,0.7152,0.0722));
+  float k = max(l - uThr, 0.0) / max(l, 1e-4);
+  o = vec4(c*k, 1.0);
+}`;
+
+const FS_BLUR = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform vec2 uDir;
+void main(){
+  vec3 s = texture(uTex, vUv).rgb * 0.2270270270;
+  s += texture(uTex, vUv + uDir*1.3846153846).rgb * 0.3162162162;
+  s += texture(uTex, vUv - uDir*1.3846153846).rgb * 0.3162162162;
+  s += texture(uTex, vUv + uDir*3.2307692308).rgb * 0.0702702703;
+  s += texture(uTex, vUv - uDir*3.2307692308).rgb * 0.0702702703;
+  o = vec4(s, 1.0);
+}`;
+
+const FS_COMPOSITE = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uScene, uBloom;
+uniform float uBloomI, uExp, uTime, uGrain;
+vec3 aces(vec3 x){
+  const float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14;
+  return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
+}
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+void main(){
+  vec3 c = texture(uScene, vUv).rgb;
+  c += texture(uBloom, vUv).rgb * uBloomI;
+  c *= uExp;
+  c = aces(c);
+  c = pow(c, vec3(1.0/2.2));
+  float v = 1.0 - 0.34*pow(length(vUv-0.5)*1.32, 2.4);
+  c *= v;
+  c += (hash(vUv*vec2(1920.0,1080.0) + uTime) - 0.5) * uGrain;
+  o = vec4(c, 1.0);
+}`;
+
+const VS_SPRITE = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec2 aUv;
+layout(location=2) in vec4 aCol;
+layout(location=3) in float aKind;
+uniform mat4 uVP;
+out vec2 vUv; out vec4 vCol; out float vKind;
+void main(){ vUv=aUv; vCol=aCol; vKind=aKind; gl_Position = uVP*vec4(aPos,1.0); }`;
+
+const FS_SPRITE = `#version 300 es
+precision highp float;
+in vec2 vUv; in vec4 vCol; in float vKind; out vec4 o;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y);
+}
+float fbm(vec2 p){ float s=0.0, a=0.5; for(int k=0;k<4;k++){ s += a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+void main(){
+  vec2 d = vUv*2.0 - 1.0;
+  float r = length(d);
+  float al;
+  if (vKind < 0.5){
+    float ang = atan(d.y, d.x);
+    float spikes = 0.62 + 0.38*pow(abs(cos(ang*3.0 + 0.6)), 3.0) + 0.30*pow(abs(cos(ang*7.0)), 6.0);
+    float core = pow(max(0.0, 1.0 - r/max(spikes,0.02)), 2.3);
+    al = core;
+  } else if (vKind < 1.5){
+    float n = fbm(vUv*3.4 + vCol.a*7.0);
+    float m = pow(max(0.0, 1.0 - r), 1.5);
+    al = m * (0.35 + 0.85*n);
+    al *= m;
+  } else {
+    al = pow(max(0.0, 1.0 - r), 2.6);
+  }
+  if (al <= 0.002) discard;
+  o = vec4(vCol.rgb * al, al);
+}`;
+
+/* ------------------------------------------------------------------ utils */
+function compile(gl, type, src, tag) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(tag + ': ' + gl.getShaderInfoLog(s));
+  return s;
+}
+function program(gl, vs, fs, tag) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vs, tag + '.vs'));
+  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs, tag + '.fs'));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(tag + ': ' + gl.getProgramInfoLog(p));
+  p.u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); p.u[info.name.replace('[0]','')] = gl.getUniformLocation(p, info.name); }
+  return p;
+}
+
+function makeVAO(gl, mesh, ao) {
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const nv = mesh.p.length / 3;
+
+  const pb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.p), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+
+  const nb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, nb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(mesh.n), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+
+  const ab = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, ab);
+  gl.bufferData(gl.ARRAY_BUFFER, ao || new Float32Array(nv).fill(1), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+
+  const big = nv > 65000;
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(mesh.i) : new Uint16Array(mesh.i), gl.STATIC_DRAW);
+
+  gl.bindVertexArray(null);
+  return { vao: vao, count: mesh.i.length, type: big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT };
+}
+
+/* ------------------------------------------------------- baked vertex AO */
+function bakeAO(meshes, opt) {
+  opt = opt || {};
+  const cell = opt.cell || 2.8, dist = opt.dist || 34, rays = opt.rays || 9;
+  let minx=1e9,miny=1e9,minz=1e9,maxx=-1e9,maxy=-1e9,maxz=-1e9;
+  for (const M of meshes.concat(opt.occluders || [])) for (let k = 0; k < M.p.length; k += 3) {
+    if (M.p[k]<minx)minx=M.p[k]; if (M.p[k]>maxx)maxx=M.p[k];
+    if (M.p[k+1]<miny)miny=M.p[k+1]; if (M.p[k+1]>maxy)maxy=M.p[k+1];
+    if (M.p[k+2]<minz)minz=M.p[k+2]; if (M.p[k+2]>maxz)maxz=M.p[k+2];
+  }
+  const pad = cell*2;
+  minx-=pad; miny-=pad; minz-=pad; maxx+=pad; maxy+=pad; maxz+=pad;
+  const nx = Math.max(1, Math.ceil((maxx-minx)/cell)), ny = Math.max(1, Math.ceil((maxy-miny)/cell)), nz = Math.max(1, Math.ceil((maxz-minz)/cell));
+  const grid = new Uint8Array(nx*ny*nz);
+  const IDX = (i,j,k) => (k*ny + j)*nx + i;
+  const mark = (x,y,z) => {
+    const i = (x-minx)/cell|0, j = (y-miny)/cell|0, k = (z-minz)/cell|0;
+    if (i>=0&&j>=0&&k>=0&&i<nx&&j<ny&&k<nz) grid[IDX(i,j,k)] = 1;
+  };
+  // rasterize triangles into the grid
+  for (const M of (opt.occluders || meshes)) {
+    for (let t = 0; t < M.i.length; t += 3) {
+      const a = M.i[t]*3, b = M.i[t+1]*3, c = M.i[t+2]*3;
+      const ax=M.p[a],ay=M.p[a+1],az=M.p[a+2], bx=M.p[b],by=M.p[b+1],bz=M.p[b+2], cx=M.p[c],cy=M.p[c+1],cz=M.p[c+2];
+      const e0 = Math.hypot(bx-ax,by-ay,bz-az), e1 = Math.hypot(cx-ax,cy-ay,cz-az);
+      const n = Math.max(1, Math.ceil(Math.max(e0, e1) / (cell*0.55)));
+      for (let u = 0; u <= n; u++) for (let v = 0; v <= n-u; v++) {
+        const su = u/n, sv = v/n, sw = 1-su-sv;
+        mark(ax*sw+bx*su+cx*sv, ay*sw+by*su+cy*sv, az*sw+bz*su+cz*sv);
+      }
+    }
+  }
+  // fibonacci hemisphere directions
+  const dirs = [];
+  for (let i = 0; i < rays; i++) {
+    const y = 1 - (i + 0.5)/rays;
+    const r = Math.sqrt(Math.max(0, 1 - y*y));
+    const th = Math.PI * (1 + Math.sqrt(5)) * i;
+    dirs.push([Math.cos(th)*r, y, Math.sin(th)*r]);
+  }
+  const steps = Math.max(4, Math.round(dist / cell));
+  const out = [];
+  for (const M of meshes) {
+    const nv = M.p.length/3, res = new Float32Array(nv);
+    for (let v = 0; v < nv; v++) {
+      const px=M.p[v*3], py=M.p[v*3+1], pz=M.p[v*3+2];
+      let Nx=M.n[v*3], Ny=M.n[v*3+1], Nz=M.n[v*3+2];
+      // tangent frame
+      let tx, ty, tz;
+      if (Math.abs(Ny) < 0.9) { tx = -Nz; ty = 0; tz = Nx; } else { tx = 1; ty = 0; tz = 0; }
+      let l = Math.hypot(tx,ty,tz)||1; tx/=l; ty/=l; tz/=l;
+      const bx2 = Ny*tz - Nz*ty, by2 = Nz*tx - Nx*tz, bz2 = Nx*ty - Ny*tx;
+      let open = 0;
+      for (let d = 0; d < rays; d++) {
+        const D = dirs[d];
+        const dx = tx*D[0] + Nx*D[1] + bx2*D[2];
+        const dy = ty*D[0] + Ny*D[1] + by2*D[2];
+        const dz = tz*D[0] + Nz*D[1] + bz2*D[2];
+        let hit = 0;
+        const ox = px + Nx*cell*0.85, oy = py + Ny*cell*0.85, oz = pz + Nz*cell*0.85;
+        for (let s = 1; s <= steps; s++) {
+          const f = s*cell;
+          const i = (ox + dx*f - minx)/cell|0, j = (oy + dy*f - miny)/cell|0, k = (oz + dz*f - minz)/cell|0;
+          if (i<0||j<0||k<0||i>=nx||j>=ny||k>=nz) break;
+          if (grid[IDX(i,j,k)]) { hit = 1 - (s-1)/steps; break; }
+        }
+        open += 1 - hit;
+      }
+      res[v] = Math.pow(Math.min(1, open/rays), 1.15);
+    }
+    out.push(res);
+  }
+  return out;
+}
+/* ============================================================================
+   GLOCK 18C — parametric model
+   Coordinate system (mm):  X = right, Y = up, -Z = muzzle direction
+   Origin = breech face on the bore axis.  Muzzle Z = -114, tang rear Z = +91.
+============================================================================ */
+
+function flipMesh(M) {
+  for (let k = 0; k < M.i.length; k += 3) { const t = M.i[k]; M.i[k] = M.i[k+2]; M.i[k+2] = t; }
+  for (let k = 0; k < M.n.length; k++) M.n[k] = -M.n[k];
+  return M;
+}
+
+/* weld duplicated (position, normal) pairs -> indexed mesh */
+function meshWeld(M) {
+  const map = new Map(), p = [], n = [], idx = [];
+  const Q = 200, QN = 500;
+  for (let k = 0; k < M.i.length; k++) {
+    const v = M.i[k] * 3;
+    const key = Math.round(M.p[v]*Q) + ',' + Math.round(M.p[v+1]*Q) + ',' + Math.round(M.p[v+2]*Q) + ';' +
+                Math.round(M.n[v]*QN) + ',' + Math.round(M.n[v+1]*QN) + ',' + Math.round(M.n[v+2]*QN);
+    let id = map.get(key);
+    if (id === undefined) {
+      id = p.length / 3; map.set(key, id);
+      p.push(M.p[v], M.p[v+1], M.p[v+2]);
+      n.push(M.n[v], M.n[v+1], M.n[v+2]);
+    }
+    idx.push(id);
+  }
+  M.p = p; M.n = n; M.i = idx;
+  return M;
+}
+
+/* ============================================================================
+   MATERIALS  --  real GLOCK finish reference
+   slide/barrel : nDLC / Tenifer nitride  -- very dark, semi-matte, metallic
+   frame/grip   : Polymer 2               -- dark charcoal, rough, faint sheen
+   Linear albedo. Deliberately raised vs. the old 0.033 values: those were so
+   close to black that the diffuse term vanished and every part read as
+   smoked glass instead of solid material.
+============================================================================ */
+const MAT = {
+  // nDLC slide: a metal, so its colour lives in F0 -- dark, but a real mirror
+  slide : { a:[0.108,0.111,0.118], m:0.92, r:0.315, cc:0.00, d:2, mk:1 },
+  slideT: { a:[0.086,0.089,0.095], m:0.92, r:0.455, cc:0.00, d:2 },
+  // Polymer 2: dielectric, charcoal, matte, faint mould sheen
+  poly  : { a:[0.0225,0.0231,0.0256], m:0.00, r:0.630, cc:0.055, d:1 },
+  grip  : { a:[0.0192,0.0197,0.0219], m:0.00, r:0.800, cc:0.014, d:3 },
+  steel : { a:[0.540,0.552,0.568],    m:1.00, r:0.215, cc:0.0 },
+  steelD: { a:[0.152,0.158,0.170],    m:1.00, r:0.325, cc:0.0, d:2 },
+  steelB: { a:[0.096,0.100,0.108],    m:1.00, r:0.420, cc:0.0, d:2 },
+  black : { a:[0.0180,0.0180,0.0196], m:0.12, r:0.600, cc:0.0, d:1 },
+  bore  : { a:[0.0092,0.0092,0.0100], m:0.60, r:0.380, cc:0.0 },
+  brass : { a:[0.575,0.432,0.176],    m:1.00, r:0.330, cc:0.0, d:2 },
+  copper: { a:[0.625,0.355,0.196],    m:1.00, r:0.295, cc:0.0 },
+  white : { a:[0.840,0.846,0.822],    m:0.00, r:0.340, cc:0.0 },
+  mag   : { a:[0.0298,0.0308,0.0342], m:0.28, r:0.440, cc:0.0, d:1 },
+};
+
+/* ============================================================================
+   GLOCK 18C  --  dimensional master   (1 unit = 1 mm)
+   axes:  -Z = muzzle      +Y = up      +X = shooter's right
+   spec:  OAL 186 . height 139 . width 30 . barrel 114
+          slide 186 x 25.5 x 28 . sight radius 165 . grip circumference 118
+============================================================================ */
+const SW     =   12.75;   // slide half width  -> 25.5 mm
+const S_TOP  =   12.20;
+const S_BOT  =  -15.80;   // -> 28.0 mm tall slide
+const Z_MUZ  = -114.00;
+const Z_BRE  =   72.00;
+const BORE_R =    7.55;   // slide bore clearance
+const ROD_R  =    3.30;   // recoil-rod tunnel
+const ROD_Y  =  -11.50;   // top -8.20, clears bore bottom -7.55 by 0.65
+const DC_BOT =  -30.20;   // dust-cover underside
+const G_TOP  =  -22.00;
+const G_BOT  = -127.00;   // magwell mouth -> total height 12.2+127 = 139.2
+const RAKE   =    0.2070; // tan of grip / magazine rake
+const MW_HW  =   11.25;   // magwell interior half width
+const MW_HD  =   17.10;   // magwell interior half depth
+const MAG_HW =   10.40;   // magazine body half width  -> 20.8 mm
+const MAG_HD =   16.30;   // magazine body half depth  -> 32.6 mm
+function mwCenter(y) { return 18.60 + (y + 124.0) * RAKE; }
+
+/* triangle wave, range -1..1, period 1 */
+function triw(x) { x -= Math.floor(x); return 1 - Math.abs(x * 2 - 1) * 2; }
+
+/* ---------------------------------------------------------------- rings -- */
+/* super-ellipse ring in the XY plane at z (frame loft) */
+function seRingXY(z, yBot, yTop, hw, p, n) {
+  const cy = (yBot + yTop) * 0.5, hh = (yTop - yBot) * 0.5, ring = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / n * TAU, c = Math.cos(t), s = Math.sin(t);
+    ring.push([ hw * Math.sign(s) * Math.pow(Math.abs(s), p),
+                cy + hh * Math.sign(c) * Math.pow(Math.abs(c), p), z ]);
+  }
+  return ring;
+}
+/* super-ellipse ring in the XZ plane at y, with optional radial displacement.
+   t = 0 -> backstrap (+Z),  t = PI/2 -> right (+X),  t = PI -> frontstrap  */
+function seRingXZ(y, zF, zB, hw, p, n, disp) {
+  const cz = (zF + zB) * 0.5, hd = (zB - zF) * 0.5, ring = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / n * TAU, c = Math.cos(t), s = Math.sin(t);
+    let x = hw * Math.sign(s) * Math.pow(Math.abs(s), p);
+    let z = hd * Math.sign(c) * Math.pow(Math.abs(c), p);
+    if (disp) {
+      const d = disp(t, y), L = Math.hypot(x, z) || 1;
+      x += x / L * d; z += z / L * d;
+    }
+    ring.push([x, y, cz + z]);
+  }
+  return ring;
+}
+/* sweep a rounded section along a path in the ZY plane (trigger guard) */
+function sweepZY(path, halfW, halfT, seg, power) {
+  const rings = [], n = path.length, P = power === undefined ? 0.55 : power;
+  for (let i = 0; i < n; i++) {
+    const a = path[Math.max(0, i - 1)], b = path[Math.min(n - 1, i + 1)];
+    let tz = b[0] - a[0], ty = b[1] - a[1];
+    const L = Math.hypot(tz, ty) || 1; tz /= L; ty /= L;
+    const nz = -ty, ny = tz;
+    const u = n > 1 ? i / (n - 1) : 0;
+    const hw = typeof halfW === 'function' ? halfW(u) : halfW;
+    const ht = typeof halfT === 'function' ? halfT(u) : halfT;
+    const ring = [];
+    for (let k = 0; k < seg; k++) {
+      const t = k / seg * TAU, c = Math.cos(t), s = Math.sin(t);
+      const dn = Math.sign(c) * Math.pow(Math.abs(c), P) * ht;
+      const dx = Math.sign(s) * Math.pow(Math.abs(s), P) * hw;
+      ring.push([ dx, path[i][1] + ny * dn, path[i][0] + nz * dn ]);
+    }
+    rings.push(ring);
+  }
+  return loft(rings, true, true);
+}
+/* smooth-step interpolation through a descending key table */
+function keySample(keys, k) {
+  if (k >= keys[0][0]) return keys[0].slice(1);
+  const last = keys[keys.length - 1];
+  if (k <= last[0]) return last.slice(1);
+  for (let i = 0; i < keys.length - 1; i++) {
+    const A = keys[i], B = keys[i + 1];
+    if (k <= A[0] && k >= B[0]) {
+      let u = (A[0] - k) / (A[0] - B[0]);
+      u = u * u * (3 - 2 * u);
+      const o = [];
+      for (let j = 1; j < A.length; j++) o.push(A[j] + (B[j] - A[j]) * u);
+      return o;
+    }
+  }
+  return last.slice(1);
+}
+
+/* ============================ SLIDE CROSS SECTIONS ========================
+   Glock slide from the front: vertical flanks, chamfered top corners, flat
+   underside. `inset` pulls the flanks in to cut the cocking serrations.
+========================================================================== */
+const SER0 = 34.0, SER_P = 3.60, SER_W = 2.05, SER_N = 10, SER_D = 0.62;
+const SLOT_HW = 4.30;
+const SLOT_Y  = Math.sqrt(BORE_R * BORE_R - SLOT_HW * SLOT_HW);
+
+function slideOutline(inset) {
+  const w = SW - (inset || 0);
+  return [ [-11.05, S_BOT], [11.05, S_BOT], [w, S_BOT + 1.85], [w, 8.05],
+           [8.60, S_TOP], [-8.60, S_TOP], [-w, 8.05], [-w, S_BOT + 1.85] ];
+}
+function xsSolid(inset) {
+  return { outer: chamferPoly(slideOutline(inset), 0.55),
+           holes: [ circlePoly(0, 0, BORE_R, 30), circlePoly(0, ROD_Y, ROD_R, 20) ] };
+}
+function xsBlock(inset) { return { outer: chamferPoly(slideOutline(inset), 0.55) }; }
+
+/* compensator slot: roof opened straight down into the bore */
+function xsSlot() {
+  const p = [], a0 = Math.atan2(SLOT_Y, SLOT_HW), AN = 34;
+  p.push([-11.05, S_BOT], [11.05, S_BOT], [SW, S_BOT + 1.85], [SW, 8.05],
+         [8.60, S_TOP], [SLOT_HW, S_TOP]);
+  for (let i = 0; i <= AN; i++) {
+    const a = a0 - (PI + 2 * a0) * (i / AN);
+    p.push([Math.cos(a) * BORE_R, Math.sin(a) * BORE_R]);
+  }
+  p.push([-SLOT_HW, S_TOP], [-8.60, S_TOP], [-SW, 8.05], [-SW, S_BOT + 1.85]);
+  return { outer: chamferPoly(p, 0.55), holes: [ circlePoly(0, ROD_Y, ROD_R, 20) ] };
+}
+
+/* ejection port: right flank + top-right corner opened into a real chamber,
+   so the port shows genuine wall thickness instead of a painted rectangle  */
+function xsPort() {
+  const CX = 9.60, CT = 9.70, CB = -14.10, CR = 2.60, PY = -8.60, PX = 5.20;
+  const arc = (cx, cy, a0, a1, n) => {
+    const o = [];
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (a1 - a0) * (i / n);
+      o.push([cx + Math.cos(a) * CR, cy + Math.sin(a) * CR]);
+    }
+    return o;
+  };
+  let p = [ [PX, S_TOP], [-8.60, S_TOP], [-SW, 8.05], [-SW, S_BOT + 1.85],
+            [-11.05, S_BOT], [11.05, S_BOT], [SW, S_BOT + 1.85], [SW, PY],
+            [CX, PY], [CX, CB + CR] ];
+  p = p.concat(arc(CX - CR, CB + CR, 0, -PI / 2, 5));
+  p = p.concat(arc(-CX + CR, CB + CR, -PI / 2, -PI, 5));
+  p = p.concat(arc(-CX + CR, CT - CR, PI, PI / 2, 5));
+  p.push([PX, CT]);
+  return { outer: chamferPoly(p, 0.55) };
+}
+
+/* annulus with the roof slotted between x = -hw .. +hw  (ported barrel) */
+function slottedRing(rO, rI, hw, nO, nI) {
+  const p  = [];
+  const yO = Math.sqrt(Math.max(1e-4, rO * rO - hw * hw));
+  const yI = Math.sqrt(Math.max(1e-4, rI * rI - hw * hw));
+  const tO = Math.atan2(yO, hw), tI = Math.atan2(yI, hw);
+  for (let i = 0; i <= nO; i++) {
+    const a = (PI - tO) + (PI + 2 * tO) * (i / nO);
+    p.push([Math.cos(a) * rO, Math.sin(a) * rO]);
+  }
+  for (let i = 0; i <= nI; i++) {
+    const a = tI - (PI + 2 * tI) * (i / nI);
+    p.push([Math.cos(a) * rI, Math.sin(a) * rI]);
+  }
+  return p;
+}
+
+/* ============================ FRAME KEY TABLES =========================== */
+/* z, yTop, yBot, halfWidth, superellipse exponent  (descending z) */
+const FRAME_KEYS = [
+  [  88.0, -18.20, -23.40,  9.60, 0.46 ],
+  [  85.0, -15.40, -25.20, 11.80, 0.42 ],
+  [  81.0, -13.80, -26.60, 13.20, 0.38 ],
+  [  76.0, -13.60, -27.60, 14.10, 0.35 ],
+  [  71.5, -15.85, -28.40, 14.60, 0.33 ],
+  [  62.0, -15.85, -29.20, 14.85, 0.32 ],
+  [  44.0, -15.85, -30.00, 14.60, 0.32 ],
+  [  26.0, -15.85, -30.60, 14.10, 0.32 ],
+  [  12.0, -15.85, -31.20, 13.50, 0.32 ],
+  [   0.0, -15.85, -31.80, 13.10, 0.32 ],
+  [ -18.0, -15.85, -31.60, 12.85, 0.32 ],
+  [ -34.0, -15.85, -31.20, 12.65, 0.32 ],
+  [ -40.0, -15.85, -30.70, 12.60, 0.32 ],
+  [ -46.0, -15.85, -30.20, 12.55, 0.32 ],
+  [ -58.0, -15.85, -30.20, 12.55, 0.32 ],
+  [ -78.0, -15.85, -30.20, 12.55, 0.32 ],
+  [ -87.0, -15.90, -30.00, 12.45, 0.34 ],
+  [ -89.6, -16.90, -28.90, 11.70, 0.38 ],
+  [ -91.2, -18.60, -26.60, 10.20, 0.44 ],
+];
+
+/* y, zFront, zBack, halfWidth  -- grip circumference at mid-grip = 117.5 mm */
+const GRIP_KEYS = [
+  [  -22.0,  13.2,  71.0, 14.35 ],
+  [  -26.0,  12.4,  67.0, 15.05 ],
+  [  -31.0,  11.6,  61.5, 15.32 ],
+  [  -38.0,  10.5,  56.6, 15.44 ],
+  [  -46.0,   9.4,  53.8, 15.50 ],
+  [  -54.0,   8.4,  52.1, 15.50 ],
+  [  -62.0,   7.4,  50.7, 15.45 ],
+  [  -70.0,   6.3,  49.4, 15.40 ],
+  [  -78.0,   5.2,  48.0, 15.35 ],
+  [  -86.0,   4.1,  46.6, 15.28 ],
+  [  -94.0,   2.9,  45.2, 15.22 ],
+  [ -102.0,   1.7,  43.8, 15.16 ],
+  [ -110.0,   0.5,  42.4, 15.14 ],
+  [ -117.0,  -0.6,  41.2, 15.24 ],
+  [ -122.0,  -1.4,  40.3, 15.48 ],
+  [ -125.4,  -1.8,  39.7, 15.62 ],
+  [ -127.0,  -0.8,  38.8, 14.70 ],
+];
+
+/* Gen3 surface relief: finger grooves, backstrap swell, checkering, stipple */
+function gripDisp(t, y) {
+  const c = Math.cos(t), s = Math.sin(t);
+  const front = Math.max(0, -c), back = Math.max(0, c), side = Math.abs(s);
+  const f2 = front * front, b2 = back * back;
+  let d = 0;
+  const groove = (yc, w, dep) => -dep * Math.exp(-Math.pow((y - yc) / w, 2));
+  d += f2 * (groove(-57.0, 5.2, 1.00) + groove(-73.5, 5.2, 1.00) + groove(-90.0, 5.4, 0.90));
+  d += b2 * 0.90 * Math.exp(-Math.pow((y + 50) / 19, 2));
+  d -= b2 * 0.55 * Math.exp(-Math.pow((y + 25) / 7, 2));
+  if (y < -31 && y > -123) {
+    const chk = f2 + b2, u = y * 0.80, v = t * 9.0;
+    d += chk * (triw(u + v) * triw(u - v)) * 0.32;
+  }
+  if (y < -35 && y > -118) {
+    const panel = smoothstep(0.42, 0.68, side);
+    d += panel * (triw(y * 1.10) * triw(t * 15.0 + y * 0.30)) * 0.18;
+  }
+  return d;
+}
+
+function buildGlock() {
+  const parts = [];
+  const add = (node, mat, mesh) => { if (mesh && mesh.i.length) parts.push({ node, mat, mesh }); };
+
+  /* ======================= SLIDE ========================================
+     186 mm long, 25.5 wide, 28 tall. Four compensator slots in the roof,
+     real ejection-port cavity on the right, ten rear cocking serrations.  */
+  const slideBody = Mesh();
+  const SLOTS  = [[-103.5,-96.5], [-92.5,-85.5], [-81.5,-74.5], [-70.5,-63.5]];
+  const BRIDGE = [[-114.0,-103.5], [-96.5,-92.5], [-85.5,-81.5], [-74.5,-70.5], [-63.5,-47.0]];
+
+  meshMerge(slideBody, extrude(xsSolid(0), { z0: BRIDGE[0][0], z1: BRIDGE[0][1], bevelA: 0.80, bevelB: 0 }));
+  for (let i = 1; i < BRIDGE.length; i++)
+    meshMerge(slideBody, extrude(xsSolid(0), { z0: BRIDGE[i][0], z1: BRIDGE[i][1], bevel: 0 }));
+  for (const s of SLOTS)
+    meshMerge(slideBody, extrude(xsSlot(), { z0: s[0], z1: s[1], bevel: 0.22 }));
+  meshMerge(slideBody, extrude(xsPort(), { z0: -47.0, z1: 3.0, bevel: 0 }));
+  {
+    let zc = 3.0;
+    for (let i = 0; i < SER_N; i++) {
+      const a = SER0 + i * SER_P, b = a + SER_W;
+      if (a - zc > 0.03) meshMerge(slideBody, extrude(xsBlock(0), { z0: zc, z1: a, bevel: 0 }));
+      meshMerge(slideBody, extrude(xsBlock(SER_D), { z0: a, z1: b, bevel: 0.26 }));
+      zc = b;
+    }
+    meshMerge(slideBody, extrude(xsBlock(0), { z0: zc, z1: Z_BRE, bevelA: 0, bevelB: 0.70 }));
+  }
+  add('slide', MAT.slide, slideBody);
+
+  /* ---- breech face: case-head recess + firing-pin bore ---------------- */
+  const bfR = cylZ(5.05, 2.50, 2.98, 22, 0.12); meshTranslate(bfR, 0, 0, 0);
+  add('slide', MAT.steelD, bfR);
+  const fpH = cylZ(1.28, 2.30, 3.05, 14, 0.05);
+  add('slide', MAT.bore, fpH);
+
+  /* ---- extractor / loaded-chamber indicator (right flank) ------------- */
+  add('slide', MAT.steelD, boxMesh(11.55, 13.10, -2.60, 3.10, -1.50, 10.60, 0.35));
+
+  /* ---- sights: U-notch rear + post front, 170 mm radius --------------- */
+  const sight = Mesh(), sightW = Mesh();
+  {
+    const NW = 2.05, NY = 13.75, TY = 17.30;
+    const o = [[-8.30,12.05],[8.30,12.05],[8.30,TY],[NW,TY],[NW,NY],[-NW,NY],[-NW,TY],[-8.30,TY]];
+    meshMerge(sight, extrude({ outer: chamferPoly(o, 0.32) }, { z0: 58.6, z1: 64.4, bevelA: 0.30, bevelB: 0.20 }));
+    meshMerge(sightW, boxMesh(-3.20, -2.12, 13.30, 17.10, 64.30, 64.56, 0.05));
+    meshMerge(sightW, boxMesh( 2.12,  3.20, 13.30, 17.10, 64.30, 64.56, 0.05));
+    meshMerge(sightW, boxMesh(-3.20,  3.20, 12.55, 13.30, 64.30, 64.56, 0.05));
+  }
+  {
+    const o = [[-2.75,12.05],[2.75,12.05],[2.10,17.55],[-2.10,17.55]];
+    meshMerge(sight, extrude({ outer: chamferPoly(o, 0.30) }, { z0: -110.2, z1: -105.8, bevelA: 0.22, bevelB: 0.22 }));
+    const dot = cylZ(1.16, -105.92, -105.62, 18, 0.05);
+    meshTranslate(dot, 0, 15.05, 0);
+    meshMerge(sightW, dot);
+  }
+  add('slide', MAT.black, sight);
+  add('slide', MAT.white, sightW);
+
+  /* ---- fire selector, rear-left of the slide (pivot -13.5, -3, 40) ---- */
+  {
+    const sel = Mesh();
+    const boss = cylX(4.35, -15.30, -12.55, 22, 0.30);
+    meshTranslate(boss, 0, -3.0, 40.0);
+    meshMerge(sel, boss);
+    const armP = [[37.0,-2.4],[43.4,-2.4],[43.4,-11.6],[41.9,-13.5],[38.5,-13.5],[37.0,-11.6]];
+    meshMerge(sel, extrudeX({ outer: chamferPoly(armP, 0.75) }, -15.55, -13.20, 0.32));
+    for (let i = 0; i < 5; i++)
+      meshMerge(sel, boxMesh(-15.75, -15.45, -12.4, -4.0, 38.0 + i * 1.25, 38.55 + i * 1.25, 0.05));
+    add('selector', MAT.steelD, sel);
+  }
+
+  /* ======================= BARREL =======================================
+     114 mm, four ports matching the slide slots, polygonal rifling, crown */
+  const barrel = Mesh();
+  {
+    const rI = 4.62;
+    const band = (z0, z1, rO, slot) => {
+      const sh = slot ? { outer: slottedRing(rO, rI, 3.05, 30, 18) }
+                      : { outer: circlePoly(0, 0, rO, 34), holes: [circlePoly(0, 0, rI, 26)] };
+      meshMerge(barrel, extrude(sh, { z0: z0, z1: z1, bevel: slot ? 0.18 : 0 }));
+    };
+    band(-114.6, -113.2, 7.05, false);
+    band(-113.2, -103.5, 7.18, false);
+    band(-103.5,  -96.5, 7.18, true);
+    band( -96.5,  -92.5, 7.18, false);
+    band( -92.5,  -85.5, 7.18, true);
+    band( -85.5,  -81.5, 7.18, false);
+    band( -81.5,  -74.5, 7.18, true);
+    band( -74.5,  -70.5, 7.18, false);
+    band( -70.5,  -63.5, 7.18, true);
+    band( -63.5,  -60.0, 7.18, false);
+    band( -60.0,  -56.0, 7.62, false);
+    band( -56.0,  -33.0, 8.05, false);
+    band( -33.0,  -29.0, 8.48, false);
+    band( -29.0,   -3.0, 8.85, false);
+    /* chamber hood + lockup lug */
+    meshMerge(barrel, extrude({ outer: chamferPoly([[-8.6,-2.0],[8.6,-2.0],[8.6,8.6],[-8.6,8.6]], 1.6) },
+                              { z0: -3.0, z1: 2.55, bevel: 0.3 }));
+    meshMerge(barrel, boxMesh(-6.4, 6.4, -14.6, -7.6, -44.0, -30.0, 0.5));
+  }
+  add('barrel', MAT.steelD, barrel);
+  {
+    const rif = [];
+    for (let i = 0; i < 54; i++) { const a = i / 54 * TAU, r = 4.56 + 0.15 * Math.cos(6 * a); rif.push([Math.cos(a) * r, Math.sin(a) * r]); }
+    add('barrel', MAT.bore, flipMesh(extrude({ outer: rif }, { z0: -114.7, z1: -60.0, bevel: 0, capA: false, capB: false })));
+  }
+
+  /* ---- recoil assembly: true helical spring around a guide rod -------- */
+  {
+    const rod = Mesh();
+    meshMerge(rod, cylZ(1.95, -112.0, -14.0, 16, 0.2));
+    meshMerge(rod, cylZ(3.15, -112.6, -109.4, 18, 0.3));
+    meshMerge(rod, cylZ(3.05, -18.0, -13.0, 18, 0.3));
+    meshTranslate(rod, 0, ROD_Y, 0);
+    add('rsa', MAT.steelB, rod);
+
+    const coil = Mesh(), TURNS = 26, CR = 2.72, WR = 0.62, SEG = 13;
+    const z0 = -108.5, z1 = -19.5, ring = [];
+    for (let i = 0; i <= TURNS * SEG; i++) {
+      const u = i / (TURNS * SEG), a = u * TURNS * TAU, z = z0 + (z1 - z0) * u;
+      const cy = ROD_Y + Math.sin(a) * CR, cx = Math.cos(a) * CR;
+      const tz = (z1 - z0) / (TURNS * TAU), tx = -Math.sin(a) * CR, ty = Math.cos(a) * CR;
+      const L = Math.hypot(tx, ty, tz) || 1;
+      const ux = -ty / Math.hypot(tx, ty), uy = tx / Math.hypot(tx, ty);
+      const vx = (uy * tz / L) - 0, vy = -(ux * tz / L), vz = (ux * ty - uy * tx) / L;
+      const r = [];
+      for (let k = 0; k < 8; k++) {
+        const b = k / 8 * TAU, c = Math.cos(b) * WR, s = Math.sin(b) * WR;
+        r.push([cx + ux * c + vx * s, cy + uy * c + vy * s, z + vz * s]);
+      }
+      ring.push(r);
+    }
+    meshMerge(coil, loft(ring, true, true));
+    add('rsa', MAT.steelB, coil);
+  }
+
+  /* ======================= FRAME ========================================
+     One continuous polymer body lofted along Z with a genuinely varying
+     width, so it no longer reads as a flat cardboard slab.               */
+  const frame = Mesh(), FN = 64;
+  {
+    const rings = [], zA = FRAME_KEYS[0][0], zB = FRAME_KEYS[FRAME_KEYS.length - 1][0];
+    for (let z = zA; z >= zB; z -= 1.6) {
+      const k = keySample(FRAME_KEYS, z);
+      rings.push(seRingXY(z, k[1], k[0], k[2], k[3], FN));
+    }
+    const k2 = keySample(FRAME_KEYS, zB);
+    rings.push(seRingXY(zB, k2[1], k2[0], k2[2], k2[3], FN));
+    meshMerge(frame, loft(rings, true, true));
+  }
+
+  /* ---- Gen3 accessory rail with its transverse notch ------------------ */
+  {
+    const rx = { outer: chamferPoly([[-10.6,-29.4],[10.6,-29.4],[10.6,-31.5],[8.6,-33.6],[-8.6,-33.6],[-10.6,-31.5]], 0.35) };
+    meshMerge(frame, extrude(rx, { z0: -86.0, z1: -68.0, bevel: 0.30 }));
+    meshMerge(frame, extrude(rx, { z0: -63.6, z1: -46.0, bevel: 0.30 }));
+    meshMerge(frame, boxMesh(-8.4, 8.4, -31.6, -29.4, -68.0, -63.6, 0.25));
+  }
+
+  /* ---- trigger guard: swept solid with a rounded section -------------- */
+  {
+    const GP = [
+      [-38.0,-30.2],[-36.8,-35.6],[-35.8,-41.8],[-34.4,-47.8],[-31.6,-52.8],
+      [-27.0,-56.0],[-20.0,-57.6],[-12.0,-57.8],[ -4.6,-56.4],[  1.2,-53.2],
+      [  5.2,-47.8],[  7.0,-41.0],[  8.0,-34.6],[  9.4,-29.5] ];
+    const gwK = [[1.0,13.7],[0.90,8.4],[0.75,6.4],[0.55,5.7],[0.35,5.7],[0.18,6.6],[0.08,9.6],[0.0,12.6]];
+    const gtK = [[1.0,4.9],[0.85,3.6],[0.60,3.0],[0.40,3.0],[0.20,3.3],[0.0,3.9]];
+    meshMerge(frame, sweepZY(GP, u => keySample(gwK, u)[0], u => keySample(gtK, u)[0], 26, 0.52));
+  }
+
+  /* ---- takedown lever, mag catch, three frame pins -------------------- */
+  {
+    const tdP = [[-39.4,-19.2],[-30.2,-19.2],[-29.3,-22.0],[-31.2,-24.4],[-38.2,-24.2],[-40.0,-21.6]];
+    meshMerge(frame, extrudeX({ outer: chamferPoly(tdP, 0.60) }, -13.45, 13.45, 0.40));
+    const mcP = [[10.4,-31.0],[16.8,-31.0],[16.8,-38.4],[10.4,-38.4]];
+    meshMerge(frame, extrudeX({ outer: chamferPoly(mcP, 0.90) }, -16.55, -14.10, 0.35));
+  }
+  add('frame', MAT.poly, frame);
+  {
+    const pins = Mesh();
+    for (const q of [[-27.5,-22.0],[-12.0,-24.8],[24.0,-27.4]]) {
+      const hw = keySample(FRAME_KEYS, q[0])[2] + 0.18;
+      const pn = cylX(1.65, -hw, hw, 14, 0.15);
+      meshTranslate(pn, 0, q[1], q[0]);
+      meshMerge(pins, pn);
+    }
+    add('frame', MAT.steelD, pins);
+    const rails = Mesh();
+    meshMerge(rails, boxMesh(-11.45, -9.95, -15.55, -13.15, -30.0, 40.0, 0.18));
+    meshMerge(rails, boxMesh(  9.95, 11.45, -15.55, -13.15, -30.0, 40.0, 0.18));
+    add('frame', MAT.steelD, rails);
+  }
+
+  /* ---- slide stop lever (pivot 0, -23, -17) --------------------------- */
+  {
+    const ssP = [[-33.0,-19.4],[-14.0,-18.2],[-4.2,-18.6],[-1.2,-21.2],[-3.4,-24.6],[-16.0,-24.8],[-31.0,-23.4]];
+    const ss = extrudeX({ outer: chamferPoly(ssP, 0.70) }, -15.20, -12.90, 0.45);
+    for (let i = 0; i < 7; i++)
+      meshMerge(ss, boxMesh(-15.42, -15.12, -24.0, -19.2, -30.0 + i * 1.5, -29.4 + i * 1.5, 0.05));
+    add('slideStop', MAT.steelD, ss);
+  }
+
+  /* ---- trigger + Safe Action trigger safety (pivot 0, -30, -8) -------- */
+  {
+    const tP = [[-12.6,-29.0],[-4.6,-29.0],[-3.6,-35.0],[-4.4,-43.4],[-7.6,-48.4],[-12.0,-47.2],[-13.4,-39.0],[-13.6,-32.0]];
+    add('trigger', MAT.black, extrudeX({ outer: chamferPoly(tP, 0.75) }, -2.95, 2.95, 0.55));
+    const sP = tP.map(q => [q[0] - 0.62, q[1]]);
+    add('trigger', MAT.steelB, extrudeX({ outer: chamferPoly(sP, 0.60) }, -1.05, 1.05, 0.28));
+  }
+
+  /* ======================= GRIP =========================================
+     Closed annulus shell: outer skin down, rim across the magwell mouth,
+     interior skin back up, top annulus closes it. Fully watertight.      */
+  {
+    const GN = 88, rings = [];
+    for (let y = G_TOP; y >= G_BOT; y -= 1.25) {
+      const k = keySample(GRIP_KEYS, y);
+      rings.push(seRingXZ(y, k[0], k[1], k[2], 0.40, GN, gripDisp));
+    }
+    const kb = keySample(GRIP_KEYS, G_BOT);
+    rings.push(seRingXZ(G_BOT, kb[0], kb[1], kb[2], 0.40, GN, gripDisp));
+    for (let y = G_BOT + 1.0; y <= G_TOP; y += 3.4)
+      rings.push(seRingXZ(y, mwCenter(y) - MW_HD, mwCenter(y) + MW_HD, MW_HW, 0.42, GN));
+    rings.push(seRingXZ(G_TOP, mwCenter(G_TOP) - MW_HD, mwCenter(G_TOP) + MW_HD, MW_HW, 0.42, GN));
+    const kt = keySample(GRIP_KEYS, G_TOP);
+    rings.push(seRingXZ(G_TOP, kt[0], kt[1], kt[2], 0.40, GN, gripDisp));
+    add('frame', MAT.grip, loft(rings, false, false));
+  }
+
+  /* ======================= MAGAZINES ==================================== */
+  function magMesh(yBot) {
+    const M = Mesh(), N = 44, top = -20.0, rings = [];
+    const push = (y, hw, hd, p) => {
+      const cz = mwCenter(y), r = [];
+      for (let i = 0; i < N; i++) {
+        const t = i / N * TAU, c = Math.cos(t), s = Math.sin(t);
+        r.push([ hw * Math.sign(s) * Math.pow(Math.abs(s), p), y,
+                 cz + hd * Math.sign(c) * Math.pow(Math.abs(c), p) ]);
+      }
+      rings.push(r);
+    };
+    push(top,       MAG_HW - 1.6, MAG_HD - 1.2, 0.46);
+    push(top - 2.2, MAG_HW - 0.3, MAG_HD - 0.2, 0.40);
+    for (let y = top - 6; y > yBot + 8; y -= 5) push(y, MAG_HW, MAG_HD, 0.38);
+    push(yBot + 6.2, MAG_HW,        MAG_HD,        0.38);
+    push(yBot + 4.5, MAG_HW + 0.72, MAG_HD + 0.72, 0.34);
+    push(yBot + 1.1, MAG_HW + 0.72, MAG_HD + 0.72, 0.34);
+    push(yBot,       MAG_HW - 0.1,  MAG_HD - 0.1,  0.46);
+    meshMerge(M, loft(rings, true, true));
+    return M;
+  }
+  function magHoles(yBot) {
+    const H = Mesh();
+    for (let i = 0; i < 7; i++) {
+      const y = -36 - i * 13;
+      if (y < yBot + 14) break;
+      const c = cylZ(1.55, -2.4, 0.4, 14, 0.10);
+      meshTranslate(c, 0, y, mwCenter(y) + MAG_HD);
+      meshMerge(H, c);
+    }
+    return H;
+  }
+  for (const cfg of [['mag', -184.0], ['magShort', -131.0]]) {
+    add(cfg[0], MAT.mag,   magMesh(cfg[1]));
+    add(cfg[0], MAT.bore,  magHoles(cfg[1]));
+    const fol = Mesh();
+    const cz = mwCenter(-23.5);
+    meshMerge(fol, boxMesh(-8.4, 8.4, -25.4, -22.6, cz - 13.5, cz + 13.5, 0.6));
+    add(cfg[0], MAT.black, fol);
+  }
+
+  /* ---- top cartridge, visible at the feed lips ------------------------ */
+  {
+    const y = -20.6, cz = mwCenter(y), cs = Mesh(), bl = Mesh();
+    const c1 = cylZ(4.80, cz - 1.0, cz + 14.0, 22, 0.25);
+    meshTranslate(c1, 0, y, 0); meshMerge(cs, c1);
+    const bp = [[cz - 1.0, 4.58],[cz - 3.6, 4.58],[cz - 6.2, 4.06],[cz - 8.4, 2.86],[cz - 9.5, 1.25]];
+    meshMerge(bl, loft(bp.map(q => {
+      const r = [];
+      for (let i = 0; i < 22; i++) { const a = i / 22 * TAU; r.push([Math.cos(a) * q[1], y + Math.sin(a) * q[1], q[0]]); }
+      return r;
+    }), true, true));
+    add('topRound', MAT.brass,  cs);
+    add('topRound', MAT.copper, bl);
+  }
+
+  /* ======================= EJECTED CASE (template) ====================== */
+  {
+    const prof = [[-9.90,4.05],[-9.62,4.62],[5.60,4.82],[6.60,4.28],[8.00,4.28],[8.40,5.16],[9.40,5.16]];
+    const shell = loft(prof.map(q => {
+      const r = [];
+      for (let i = 0; i < 22; i++) { const a = i / 22 * TAU; r.push([Math.cos(a) * q[1], Math.sin(a) * q[1], q[0]]); }
+      return r;
+    }), true, true);
+    add('shellProto', MAT.brass, shell);
+    const mouth = cylZ(4.05, -9.85, -9.05, 18, 0.05);
+    add('shellProto', MAT.bore, mouth);
+  }
+
+  for (const p of parts) { meshSmooth(p.mesh, p.node === 'frame' && p.mat === MAT.grip ? 26 : 36); meshWeld(p.mesh); }
+  return parts;
+}
+
+/* ============================================================================
+   SCENE  — GL setup, node graph, camera, post chain, render loop
+============================================================================ */
+
+const NODES = {};                       // name -> mat4 (written by Game)
+const NODE_NAMES = ['frame','slide','barrel','rsa','trigger','mag','magShort','selector','slideStop','topRound','shellProto'];
+for (const n of NODE_NAMES) NODES[n] = m4();
+
+const View = {
+  az: 118 * D2R, el: 15 * D2R, dist: 480,
+  azT: 118 * D2R, elT: 15 * D2R, distT: 480,
+  tx: 0, ty: -74, tz: -8,
+  spin: true, dragging: false
+};
+
+let gl, canvas, CW = 1, CH = 1, RW = 1, RH = 1, SS = 1;
+let pMain, pDepth, pBg, pBright, pBlur, pComp, pSprite;
+let fbScene, txScene, rbDepth, fbBright, txBright, fbBlurA, txBlurA, fbBlurB, txBlurB;
+let fbShadow, txShadow, txMarks;
+const SHADOW_RES = 2048;
+let DRAW = [];                            // { node, mat, gpu, ground }
+let spriteVAO, spriteVBO, spriteBuf, SPRITE_MAX = 720;
+let emptyVAO;
+
+const LIGHTS = {
+  key:  { d: [-0.40, 0.82, 0.42], c: [6.60, 6.30, 5.85] },
+  rim:  { d: [ 0.82, 0.26, -0.58], c: [1.10, 1.28, 1.72] },
+  fill: { d: [ 0.48, -0.30, 0.68], c: [0.62, 0.60, 0.58] }
+};
+const MUZZLE = { pos: [0, 0, -120], col: [0, 0, 0] };
+
+/* ------------------------------------------------------------------ init */
+function initGL() {
+  canvas = document.getElementById('cv');
+  gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: true,
+                                     powerPreference: 'high-performance', preserveDrawingBuffer: true });
+  if (!gl) throw new Error('WebGL2 не поддерживается этим браузером');
+  gl.getExtension('EXT_color_buffer_float');
+  gl.getExtension('EXT_color_buffer_half_float');
+  gl.getExtension('OES_texture_float_linear');
+
+  pMain   = program(gl, VS_MAIN, FS_MAIN, 'main');
+  pDepth  = program(gl, VS_DEPTH, FS_DEPTH, 'depth');
+  pBg     = program(gl, VS_QUAD, FS_BG, 'bg');
+  pBright = program(gl, VS_QUAD, FS_BRIGHT, 'bright');
+  pBlur   = program(gl, VS_QUAD, FS_BLUR, 'blur');
+  pComp   = program(gl, VS_QUAD, FS_COMPOSITE, 'comp');
+  pSprite = program(gl, VS_SPRITE, FS_SPRITE, 'sprite');
+  emptyVAO = gl.createVertexArray();
+  txMarks = makeMarkTexture();
+
+  // shadow map
+  txShadow = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, txShadow);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, SHADOW_RES, SHADOW_RES);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+  fbShadow = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbShadow);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, txShadow, 0);
+  gl.drawBuffers([gl.NONE]); gl.readBuffer(gl.NONE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+  // sprite buffer
+  spriteBuf = new Float32Array(SPRITE_MAX * 6 * 10);
+  spriteVAO = gl.createVertexArray();
+  gl.bindVertexArray(spriteVAO);
+  spriteVBO = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, spriteVBO);
+  gl.bufferData(gl.ARRAY_BUFFER, spriteBuf.byteLength, gl.DYNAMIC_DRAW);
+  const ST = 40;
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, ST, 0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, ST, 12);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, ST, 20);
+  gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, ST, 36);
+  gl.bindVertexArray(null);
+}
+
+/* ------------------------------------------------- factory roll marks ----
+   GLOCK slides carry a laser-etched mark on the left flank -- the logo, the
+   model and "AUSTRIA 9x19" -- plus a serial on the right.  Baked here into a
+   two-row atlas and box-projected onto the slide sides by the main shader.  */
+function makeMarkTexture() {
+  const W = 1024, H = 256;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#fff';
+  c.textBaseline = 'alphabetic';
+  const spaced = (txt, x, y, sp) => {
+    let cx = x;
+    for (const ch of txt) { c.fillText(ch, cx, y); cx += c.measureText(ch).width + sp; }
+    return cx;
+  };
+  /* --- row 0 (v 0.0-0.5): left flank --- */
+  c.font = '700 40px "Helvetica Neue", Helvetica, Arial, sans-serif';
+  let x = spaced('GLOCK', 296, 58, 2.2);
+  c.font = '600 38px "Helvetica Neue", Helvetica, Arial, sans-serif';
+  spaced('18C', x + 16, 58, 1.6);
+  c.font = '600 27px "Helvetica Neue", Helvetica, Arial, sans-serif';
+  x = spaced('AUSTRIA', 298, 100, 3.4);
+  spaced('9x19', x + 20, 100, 2.4);
+  /* --- row 1 (v 0.5-1.0): right flank, serial --- */
+  c.font = '600 26px "Helvetica Neue", Helvetica, Arial, sans-serif';
+  spaced('AFC274', 600, 214, 3.0);
+
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+
+function tex2D(w, h, internal, filter) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, internal, w, h);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function fbo(t) {
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  return f;
+}
+
+let HDR = true;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  CW = Math.max(2, Math.round(canvas.clientWidth  * dpr));
+  CH = Math.max(2, Math.round(canvas.clientHeight * dpr));
+  canvas.width = CW; canvas.height = CH;
+  SS = (CW * CH > 2600000) ? 1.0 : 1.45;
+  RW = Math.max(2, Math.round(CW * SS));
+  RH = Math.max(2, Math.round(CH * SS));
+
+  const kill = (o) => { if (o) gl.deleteTexture(o); };
+  [txScene, txBright, txBlurA, txBlurB].forEach(kill);
+  [fbScene, fbBright, fbBlurA, fbBlurB].forEach(f => { if (f) gl.deleteFramebuffer(f); });
+  if (rbDepth) gl.deleteRenderbuffer(rbDepth);
+
+  const fmt = HDR ? gl.RGBA16F : gl.RGBA8;
+  txScene = tex2D(RW, RH, fmt, gl.LINEAR);
+  fbScene = fbo(txScene);
+  rbDepth = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, rbDepth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, RW, RH);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbDepth);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE && HDR) {
+    HDR = false; gl.bindFramebuffer(gl.FRAMEBUFFER, null); return resize();
+  }
+
+  const bw = Math.max(2, RW >> 2), bh = Math.max(2, RH >> 2);
+  txBright = tex2D(bw, bh, fmt, gl.LINEAR); fbBright = fbo(txBright);
+  txBlurA  = tex2D(bw, bh, fmt, gl.LINEAR); fbBlurA  = fbo(txBlurA);
+  txBlurB  = tex2D(bw, bh, fmt, gl.LINEAR); fbBlurB  = fbo(txBlurB);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+/* --------------------------------------------------------------- scene -- */
+function buildScene() {
+  const parts = buildGlock();
+  const isShort = p => p.node === 'magShort';
+  const isLong  = p => p.node === 'mag';
+  const mainSet  = parts.filter(p => !isShort(p) && p.node !== 'shellProto');
+  const shortSet = parts.filter(isShort);
+
+  const aoMain  = bakeAO(mainSet.map(p => p.mesh),  { cell: 2.7, dist: 34, rays: 9, occluders: mainSet.map(p => p.mesh) });
+  const aoShort = bakeAO(shortSet.map(p => p.mesh), { cell: 2.7, dist: 34, rays: 9,
+                    occluders: parts.filter(p => !isLong(p) && p.node !== 'shellProto').map(p => p.mesh) });
+
+  DRAW = [];
+  let mi = 0, si = 0;
+  for (const p of parts) {
+    let ao = null;
+    if (isShort(p)) ao = aoShort[si++];
+    else if (p.node !== 'shellProto') ao = aoMain[mi++];
+    DRAW.push({ node: p.node, mat: p.mat, gpu: makeVAO(gl, p.mesh, ao), ground: false });
+  }
+
+  // shadow-catcher floor
+  const g = boxMesh(-460, 460, -3, 0, -460, 460, 0);
+  meshTranslate(g, 0, -198, 0);
+  meshSmooth(g, 30);
+  DRAW.push({ node: 'world', mat: { a: [0,0,0], m: 0, r: 1, cc: 0 }, gpu: makeVAO(gl, g, null), ground: true });
+  NODES.world = m4();
+
+  window.__tri = DRAW.reduce((s, d) => s + d.gpu.count / 3, 0) | 0;
+}
+
+/* --------------------------------------------------------------- camera - */
+function camEye() {
+  const ce = Math.cos(View.el), se = Math.sin(View.el);
+  return [View.tx + View.dist * Math.sin(View.az) * ce,
+          View.ty + View.dist * se,
+          View.tz + View.dist * Math.cos(View.az) * ce];
+}
+
+function bindControls() {
+  let px = 0, py = 0, id = null, pinch = 0;
+  const dn = e => {
+    if (e.target.closest && e.target.closest('.hud')) return;
+    id = e.pointerId; px = e.clientX; py = e.clientY; View.dragging = true;
+    canvas.setPointerCapture && canvas.setPointerCapture(id);
+  };
+  const mv = e => {
+    if (id !== e.pointerId) return;
+    const dx = e.clientX - px, dy = e.clientY - py; px = e.clientX; py = e.clientY;
+    View.azT -= dx * 0.0072;
+    View.elT = clamp(View.elT + dy * 0.0060, -1.32, 1.32);
+  };
+  const up = e => { if (id === e.pointerId) { id = null; View.dragging = false; } };
+  canvas.addEventListener('pointerdown', dn);
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    View.distT = clamp(View.distT * Math.pow(1.0016, e.deltaY), 165, 1150);
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (pinch) View.distT = clamp(View.distT * (pinch / d), 165, 1150);
+      pinch = d; e.preventDefault();
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => { pinch = 0; });
+  window.addEventListener('resize', resize);
+}
+
+/* --------------------------------------------------------------- sprites */
+const SPRITES = [];        // { p:[x,y,z], s:size, c:[r,g,b], a:alpha, kind, rot }
+function pushSprites(vp, eye) {
+  if (!SPRITES.length) return 0;
+  // camera basis
+  const fwd = [View.tx - eye[0], View.ty - eye[1], View.tz - eye[2]];
+  let l = Math.hypot(fwd[0], fwd[1], fwd[2]) || 1; fwd[0]/=l; fwd[1]/=l; fwd[2]/=l;
+  let rt = [-fwd[2], 0, fwd[0]]; l = Math.hypot(rt[0], rt[1], rt[2]) || 1; rt[0]/=l; rt[1]/=l; rt[2]/=l;
+  const up = [rt[1]*fwd[2]-rt[2]*fwd[1], rt[2]*fwd[0]-rt[0]*fwd[2], rt[0]*fwd[1]-rt[1]*fwd[0]];
+
+  let n = 0, o = 0;
+  // newest first: a muzzle flash must never lose its slot to old smoke
+  const first = Math.max(0, SPRITES.length - SPRITE_MAX);
+  for (let si = first; si < SPRITES.length; si++) {
+    const s = SPRITES[si];
+    if (n >= SPRITE_MAX) break;
+    const ca = Math.cos(s.rot || 0), sa = Math.sin(s.rot || 0);
+    const ex = (rt[0]*ca + up[0]*sa) * s.s, ey = (rt[1]*ca + up[1]*sa) * s.s, ez = (rt[2]*ca + up[2]*sa) * s.s;
+    const fx = (-rt[0]*sa + up[0]*ca) * s.s, fy = (-rt[1]*sa + up[1]*ca) * s.s, fz = (-rt[2]*sa + up[2]*ca) * s.s;
+    const C = [[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];
+    for (const [u, v] of C) {
+      spriteBuf[o++] = s.p[0] + ex*u + fx*v;
+      spriteBuf[o++] = s.p[1] + ey*u + fy*v;
+      spriteBuf[o++] = s.p[2] + ez*u + fz*v;
+      spriteBuf[o++] = u*0.5 + 0.5;
+      spriteBuf[o++] = v*0.5 + 0.5;
+      spriteBuf[o++] = s.c[0]*s.a; spriteBuf[o++] = s.c[1]*s.a; spriteBuf[o++] = s.c[2]*s.a;
+      spriteBuf[o++] = s.seed || 0;
+      spriteBuf[o++] = s.kind;
+    }
+    n++;
+  }
+  gl.bindVertexArray(spriteVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, spriteVBO);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, spriteBuf, 0, n * 60);
+  return n * 6;
+}
+
+/* ---------------------------------------------------------------- render */
+const VP = m4(), LVP = m4(), NRM = new Float32Array(9);
+let lastT = 0, timeAcc = 0;
+
+function drawGeometry(prog, depthOnly) {
+  for (const d of DRAW) {
+    if (!Game.visible(d.node)) continue;
+    if (depthOnly && d.ground) continue;
+    const M = NODES[d.node] || NODES.world;
+    gl.uniformMatrix4fv(prog.u.uM, false, M);
+    if (!depthOnly) {
+      m3normal(M, NRM);
+      gl.uniformMatrix3fv(prog.u.uN, false, NRM);
+      const m = d.mat;
+      gl.uniform3f(prog.u.uAlbedo, m.a[0], m.a[1], m.a[2]);
+      gl.uniform1f(prog.u.uMetal, m.m);
+      gl.uniform1f(prog.u.uRough, m.r);
+      gl.uniform1f(prog.u.uClearcoat, m.cc || 0);
+      gl.uniform1f(prog.u.uDetail, m.d || 0);
+      gl.uniform1f(prog.u.uMark, m.mk || 0);
+      gl.uniform3f(prog.u.uEmis, 0, 0, 0);
+      gl.uniform1f(prog.u.uGround, d.ground ? 1 : 0);
+    }
+    gl.bindVertexArray(d.gpu.vao);
+    gl.drawElements(gl.TRIANGLES, d.gpu.count, d.gpu.type, 0);
+  }
+  if (!depthOnly) Game.drawExtra(prog);
+  else Game.drawExtraDepth(prog);
+}
+
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
+  lastT = t; timeAcc += dt;
+
+  if (View.spin && !View.dragging) View.azT += dt * 0.20;
+  const k = 1 - Math.pow(0.0016, dt);
+  View.az   += (View.azT   - View.az)   * k;
+  View.el   += (View.elT   - View.el)   * k;
+  View.dist += (View.distT - View.dist) * k;
+
+  Game.update(dt);
+
+  const eye = camEye();
+  const proj = m4perspective(30 * D2R, CW / CH, 25, 2400);
+  const view = m4lookAt(eye[0], eye[1], eye[2], View.tx, View.ty, View.tz, 0, 1, 0);
+  m4mul(proj, view, VP);
+
+  /* ---- shadow pass ---- */
+  const L = LIGHTS.key.d, LD = Math.hypot(L[0], L[1], L[2]);
+  const lex = View.tx + L[0]/LD*520, ley = -40 + L[1]/LD*520, lez = View.tz + L[2]/LD*520;
+  m4mul(m4ortho(-185, 185, -185, 185, 40, 1000),
+        m4lookAt(lex, ley, lez, View.tx, -55, View.tz, 0, 1, 0), LVP);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbShadow);
+  gl.viewport(0, 0, SHADOW_RES, SHADOW_RES);
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.BLEND);
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.CULL_FACE); gl.cullFace(gl.FRONT);
+  gl.useProgram(pDepth);
+  gl.uniformMatrix4fv(pDepth.u.uLVP, false, LVP);
+  drawGeometry(pDepth, true);
+  gl.cullFace(gl.BACK);
+
+  /* ---- scene pass ---- */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbScene);
+  gl.viewport(0, 0, RW, RH);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+  gl.useProgram(pBg);
+  gl.uniform2f(pBg.u.uRes, RW, RH);
+  gl.bindVertexArray(emptyVAO);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+  gl.useProgram(pMain);
+  gl.uniformMatrix4fv(pMain.u.uVP, false, VP);
+  gl.uniformMatrix4fv(pMain.u.uLVP, false, LVP);
+  gl.uniform3f(pMain.u.uCam, eye[0], eye[1], eye[2]);
+  gl.uniform3fv(pMain.u.uL0d, LIGHTS.key.d);  gl.uniform3fv(pMain.u.uL0c, LIGHTS.key.c);
+  gl.uniform3fv(pMain.u.uL1d, LIGHTS.rim.d);  gl.uniform3fv(pMain.u.uL1c, LIGHTS.rim.c);
+  gl.uniform3fv(pMain.u.uL2d, LIGHTS.fill.d); gl.uniform3fv(pMain.u.uL2c, LIGHTS.fill.c);
+  gl.uniform1f(pMain.u.uEnvInt, 1.0);
+  gl.uniform1f(pMain.u.uAOStr, 0.92);
+  gl.uniform1f(pMain.u.uShadowOn, 1);
+  gl.uniform3fv(pMain.u.uMuzzlePos, MUZZLE.pos);
+  gl.uniform3fv(pMain.u.uMuzzleCol, MUZZLE.col);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, txShadow);
+  gl.uniform1i(pMain.u.uShadow, 0);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, txMarks);
+  gl.uniform1i(pMain.u.uMarks, 1);
+  drawGeometry(pMain, false);
+
+  /* ---- sprites (additive) ---- */
+  const sv = pushSprites(VP, eye);
+  if (sv) {
+    gl.useProgram(pSprite);
+    gl.uniformMatrix4fv(pSprite.u.uVP, false, VP);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);          // camera-facing quads: winding is arbitrary
+    gl.bindVertexArray(spriteVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, sv);
+    gl.enable(gl.CULL_FACE);
+    gl.depthMask(true); gl.disable(gl.BLEND);
+  }
+
+  /* ---- post ---- */
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.bindVertexArray(emptyVAO);
+  const bw = Math.max(2, RW >> 2), bh = Math.max(2, RH >> 2);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbBright);
+  gl.viewport(0, 0, bw, bh);
+  gl.useProgram(pBright);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, txScene);
+  gl.uniform1i(pBright.u.uTex, 0); gl.uniform1f(pBright.u.uThr, 1.32);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.useProgram(pBlur);
+  let srcT = txBright;
+  for (let pass = 0; pass < 2; pass++) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbBlurA);
+    gl.viewport(0, 0, bw, bh);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcT);
+    gl.uniform1i(pBlur.u.uTex, 0);
+    gl.uniform2f(pBlur.u.uDir, 1 / bw, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbBlurB);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, txBlurA);
+    gl.uniform1i(pBlur.u.uTex, 0);
+    gl.uniform2f(pBlur.u.uDir, 0, 1 / bh);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    srcT = txBlurB;
+  }
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, CW, CH);
+  gl.useProgram(pComp);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, txScene);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, txBlurB);
+  gl.uniform1i(pComp.u.uScene, 0);
+  gl.uniform1i(pComp.u.uBloom, 1);
+  gl.uniform1f(pComp.u.uBloomI, 0.54);
+  gl.uniform1f(pComp.u.uExp, 1.12);
+  gl.uniform1f(pComp.u.uTime, timeAcc);
+  gl.uniform1f(pComp.u.uGrain, 0.014);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.enable(gl.CULL_FACE);
+}
+
+function applyQuery() {
+  let Q;
+  try { Q = new URLSearchParams(location.search); } catch (e) { return; }
+  if (Q.has('az'))   View.az   = View.azT   = +Q.get('az') * D2R;
+  if (Q.has('el'))   View.el   = View.elT   = +Q.get('el') * D2R;
+  if (Q.has('dist')) View.dist = View.distT = +Q.get('dist');
+  if (Q.has('ty'))   View.ty = +Q.get('ty');
+  if (Q.get('spin') === '0') {
+    View.spin = false;
+    const s = document.getElementById('spinSw'); if (s) s.classList.remove('on');
+  }
+  if (Q.get('hud') === '0')
+    ['brand','rail','dock','pill'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; });
+  if (Q.has('mag'))  Game.setMag(+Q.get('mag'));
+  if (Q.get('mode') === 'auto') Game.setMode('auto');
+  if (Q.has('shots')) {
+    const n = +Q.get('shots');
+    for (let i = 0; i < n; i++) setTimeout(() => Game.fire(), 500 + i * 55);
+  }
+  if (Q.has('lock')) { Game.state.ammo = 0; Game.state.slideLocked = true; }
+  if (Q.has('reload')) setTimeout(() => Game.reload(), +Q.get('reload'));
+}
+
+function boot() {
+  initGL();
+  resize();
+  buildScene();
+  Game.init();
+  bindControls();
+  applyQuery();
+  gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  const ld = document.getElementById('load');
+  if (ld) { ld.classList.add('gone'); setTimeout(() => ld.remove(), 600); }
+  requestAnimationFrame(t => { lastT = t; frame(t); });
+}
+/* ============================================================================
+   AUDIO ENGINE  —  "бдшшш"
+   Everything is built from filtered / shaped NOISE. There is not a single
+   sine or triangle oscillator anywhere in this file — that is exactly what
+   made the old version sound like a cartoon bell.
+
+   Anatomy of one gunshot:
+     Б  low-frequency punch   (resonant low-pass sweep 230 -> 65 Hz)
+     Д  transient crack       (high-passed noise -> hard tanh saturation)
+        body                  (band-passed 430 Hz, saturated)
+        air                   (high-passed 4.5 kHz needle)
+     Ш  tail / отголосок     (broadband decay + two slap delays + short verb)
+     mech clack  +11 ms       (slide unlocking, band-passed noise burst)
+     slide slam  +36 ms       (slide returning to battery)
+
+   The whole bus is glued with a fast compressor followed by a brickwall
+   limiter so rapid full-auto fire stays loud but never clips.
+============================================================================ */
+
+const Audio18C = (function () {
+  /* =======================================================================
+     GLOCK 18C -- synthesised acoustics.
+
+     A 9x19 round leaving a 114 mm barrel is a ~157 dB pressure step.  What
+     the ear actually gets is four things stacked in the first 400 ms:
+       1. the ignition CRACK      - broadband, over in ~2 ms
+       2. the muzzle BLAST        - saturated noise sweeping 3 kHz -> 200 Hz
+       3. the SUB                 - the chest punch, 160 -> 45 Hz
+       4. the ROOM                - dense early reflections plus a long,
+                                    dark, slapping tail.  This is the part
+                                    that makes a gunshot sound *big*; a shot
+                                    without it always sounds like a toy.
+     On top of that sits the mechanism: unlock, slide to the rear, brass
+     out, spring, return to battery.
+     ===================================================================== */
+  let ctx = null, ok = false, enabled = true, initTried = false;
+  let master, comp, lim, bus, shotIn, foleyIn, satShot;
+  let convRoom, convFar, roomG, farG, roomSend, farSend, foleySend, farLP, farDly;
+  let nzW = null, nzB = null;
+  let lastShot = -10;
+
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const clamp01 = v => v < 0 ? 0 : (v > 1 ? 1 : v);
+
+  /* ---------------------------------------------------------- buffers -- */
+  function whiteBuf(dur) {
+    const n = Math.floor(ctx.sampleRate * dur);
+    const b = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  function brownBuf(dur) {
+    const n = Math.floor(ctx.sampleRate * dur);
+    const b = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = b.getChannelData(0);
+    let v = 0, peak = 1e-6;
+    for (let i = 0; i < n; i++) {
+      v = (v + (Math.random() * 2 - 1) * 0.055) * 0.994;
+      d[i] = v;
+      const a = Math.abs(v); if (a > peak) peak = a;
+    }
+    const k = 0.92 / peak;
+    for (let i = 0; i < n; i++) d[i] *= k;
+    return b;
+  }
+  /* Synthetic room impulse.  `refl` seeds discrete early reflections so the
+     tail has walls in it instead of being an amorphous wash.            */
+  function makeIR(dur, decay, damp, refl, spread) {
+    const n = Math.floor(ctx.sampleRate * dur);
+    const b = ctx.createBuffer(2, n, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(c), det = c ? 1.06 : 0.94;
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / n;
+        const e = Math.pow(1 - t, decay);
+        lp += ((Math.random() * 2 - 1) * e - lp) * damp;
+        d[i] = lp;
+      }
+      for (const r of refl) {
+        const i0 = Math.floor(r[0] * det * ctx.sampleRate);
+        if (i0 > 0 && i0 < n - 2) {
+          const g = r[1] * (c ? spread : 1);
+          d[i0] += g; d[i0 + 1] += g * -0.55; d[i0 + 2] += g * 0.22;
+        }
+      }
+    }
+    return b;
+  }
+  function satCurve(k) {
+    const n = 4096, c = new Float32Array(n), d = Math.tanh(k);
+    for (let i = 0; i < n; i++) c[i] = Math.tanh(((i / (n - 1)) * 2 - 1) * k) / d;
+    return c;
+  }
+
+  /* ------------------------------------------------------------- init -- */
+  function init() {
+    if (ok) return true;
+    if (initTried && !ctx) return false;
+    initTried = true;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+    } catch (e) { return false; }
+
+    master = ctx.createGain(); master.gain.value = enabled ? 0.95 : 0.0;
+
+    lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -1.2; lim.knee.value = 0.0; lim.ratio.value = 20;
+    lim.attack.value = 0.0008;  lim.release.value = 0.09;
+
+    /* slow-ish attack on purpose: a fast compressor eats the crack, which is
+       precisely how a gunshot ends up sounding like a cough.            */
+    comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -13; comp.knee.value = 12; comp.ratio.value = 3.6;
+    comp.attack.value = 0.007;  comp.release.value = 0.26;
+
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass';
+    hp.frequency.value = 26; hp.Q.value = 0.6;
+    const air = ctx.createBiquadFilter(); air.type = 'highshelf';
+    air.frequency.value = 5200; air.gain.value = 2.2;
+
+    bus = ctx.createGain(); bus.gain.value = 1.0;
+    bus.connect(hp); hp.connect(comp); comp.connect(air); air.connect(lim);
+    lim.connect(master); master.connect(ctx.destination);
+
+    nzW = whiteBuf(1.4);
+    nzB = brownBuf(1.4);
+
+    /* the shot bus runs through a saturator: real blast overloads whatever
+       records it, and that harmonic mush is a big part of "loud".       */
+    satShot = ctx.createWaveShaper();
+    satShot.curve = satCurve(2.1); satShot.oversample = '4x';
+    shotIn = ctx.createGain(); shotIn.gain.value = 0.62;
+    const satOut = ctx.createGain(); satOut.gain.value = 1.45;
+    shotIn.connect(satShot); satShot.connect(satOut); satOut.connect(bus);
+
+    foleyIn = ctx.createGain(); foleyIn.gain.value = 1.0;
+    foleyIn.connect(bus);
+
+    convRoom = ctx.createConvolver(); convRoom.normalize = true;
+    convRoom.buffer = makeIR(1.05, 2.6, 0.42,
+      [[0.0075,0.62],[0.0131,-0.50],[0.0212,0.44],[0.0298,-0.36],
+       [0.0417,0.30],[0.0563,-0.25],[0.0781,0.20],[0.1024,0.15]], 0.82);
+    roomG = ctx.createGain(); roomG.gain.value = 0.90;
+    convRoom.connect(roomG); roomG.connect(bus);
+
+    /* the distant half: arrives late, dark, and keeps ringing -- this is the
+       "gulkiy" part the gun was missing.                                */
+    convFar = ctx.createConvolver(); convFar.normalize = true;
+    convFar.buffer = makeIR(2.6, 3.4, 0.17,
+      [[0.048,0.55],[0.083,-0.44],[0.121,0.38],[0.166,-0.30],
+       [0.214,0.26],[0.283,-0.21],[0.361,0.17],[0.447,0.13],[0.552,0.10]], 0.70);
+    farLP = ctx.createBiquadFilter(); farLP.type = 'lowpass';
+    farLP.frequency.value = 900; farLP.Q.value = 0.5;
+    farDly = ctx.createDelay(0.5); farDly.delayTime.value = 0.028;
+    farG = ctx.createGain(); farG.gain.value = 1.05;
+    farDly.connect(farLP); farLP.connect(convFar); convFar.connect(farG); farG.connect(bus);
+
+    roomSend  = ctx.createGain(); roomSend.gain.value = 0.55;
+    farSend   = ctx.createGain(); farSend.gain.value  = 0.62;
+    foleySend = ctx.createGain(); foleySend.gain.value = 0.30;
+    shotIn.connect(roomSend);  roomSend.connect(convRoom);
+    shotIn.connect(farSend);   farSend.connect(farDly);
+    foleyIn.connect(foleySend); foleySend.connect(convRoom);
+
+    ok = true;
+    return true;
+  }
+
+  function ready() {
+    if (!ok && !init()) return false;
+    if (!enabled) return false;
+    if (ctx.state === 'suspended') ctx.resume();
+    return true;
+  }
+
+  /* ------------------------------------------------------------ voices - */
+  function nsrc(t, o) {
+    const s = ctx.createBufferSource();
+    s.buffer = o.brown ? nzB : nzW;
+    s.playbackRate.value = o.rate || 1;
+    let node = s;
+    if (o.type) {
+      const f = ctx.createBiquadFilter();
+      f.type = o.type;
+      f.Q.value = o.q == null ? 1 : o.q;
+      f.frequency.setValueAtTime(o.freq, t);
+      if (o.freq2) f.frequency.exponentialRampToValueAtTime(o.freq2, t + (o.sweep || o.dec));
+      node.connect(f); node = f;
+    }
+    if (o.hp) {
+      const h = ctx.createBiquadFilter();
+      h.type = 'highpass'; h.frequency.value = o.hp; h.Q.value = 0.7;
+      node.connect(h); node = h;
+    }
+    const atk = o.atk == null ? 0.0012 : o.atk;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(Math.max(0.0002, o.peak), t + atk);
+    g.gain.exponentialRampToValueAtTime(0.0003, t + atk + o.dec);
+    node.connect(g); g.connect(o.dest || shotIn);
+    s.start(t, Math.random() * 0.3);
+    s.stop(t + atk + o.dec + 0.06);
+    return g;
+  }
+  function tone(t, o) {
+    const s = ctx.createOscillator();
+    s.type = o.type || 'sine';
+    s.frequency.setValueAtTime(o.f0, t);
+    if (o.f1) s.frequency.exponentialRampToValueAtTime(o.f1, t + (o.pdec || o.dec));
+    const atk = o.atk == null ? 0.0025 : o.atk;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, o.peak), t + atk);
+    g.gain.exponentialRampToValueAtTime(0.0003, t + atk + o.dec);
+    s.connect(g); g.connect(o.dest || shotIn);
+    s.start(t); s.stop(t + atk + o.dec + 0.06);
+    return g;
+  }
+  /* steel on steel: a click is only convincing with a body under it */
+  function clack(t, freq, peak, dec, body, dest) {
+    const d = dest || foleyIn;
+    nsrc(t, { type: 'bandpass', freq: freq, q: 1.4, peak: peak, atk: 0.0006, dec: dec, dest: d });
+    nsrc(t, { type: 'highpass', freq: freq * 2.4, peak: peak * 0.5, atk: 0.0004, dec: dec * 0.45, dest: d });
+    if (body) tone(t, { type: 'sine', f0: body, f1: body * 0.55, peak: peak * 0.85, atk: 0.002, dec: dec * 4.5, dest: d });
+  }
+
+  /* ============================== THE SHOT ============================== */
+  function shot(opt) {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    const last = !!(opt && opt.last);
+    /* rapid fire: the ear (and the room) never fully recovers between rounds
+       at 1200 rpm, so pull the tail and the sub back a little.          */
+    const gap = t - lastShot;
+    const rp = 0.55 + 0.45 * clamp01((gap - 0.035) / 0.11);
+    lastShot = t;
+    const v = rnd(0.94, 1.06);
+
+    // 1 --- ignition crack: broadband, ~2 ms, this is the "snap"
+    nsrc(t, { hp: 1900, peak: 1.25 * v, atk: 0.0007, dec: 0.055, rate: rnd(0.97, 1.05) });
+    nsrc(t, { type: 'bandpass', freq: 3600 * v, q: 0.8, peak: 0.85, atk: 0.0006, dec: 0.028 });
+    // supersonic bullet: a thin whip-crack riding on top
+    nsrc(t + 0.0012, { type: 'highpass', freq: 5200, q: 0.7, peak: 0.42, atk: 0.0004, dec: 0.014 });
+
+    // 2 --- muzzle blast: saturated noise sweeping down into the floor
+    nsrc(t, { brown: true, type: 'lowpass', freq: 3400 * v, freq2: 300, sweep: 0.13, q: 0.8,
+              peak: 1.55, atk: 0.0018, dec: 0.30, rate: rnd(0.93, 1.04) });
+    nsrc(t + 0.004, { brown: true, type: 'lowpass', freq: 900, freq2: 150, sweep: 0.34, q: 0.6,
+                      peak: 0.95 * rp, atk: 0.006, dec: 0.42 });
+
+    // 3 --- the sub: chest punch, plus an octave up so it survives laptops
+    tone(t, { f0: rnd(158, 176), f1: 46, pdec: 0.10, peak: 1.10 * rp, atk: 0.0035, dec: 0.34 });
+    tone(t, { f0: rnd(300, 330), f1: 104, pdec: 0.09, peak: 0.45 * rp, atk: 0.003, dec: 0.20 });
+
+    // 4 --- port blast: the compensator vents up and sideways, adding a
+    //       hard mid smack that a stock barrel does not have
+    nsrc(t + 0.0016, { type: 'bandpass', freq: rnd(1150, 1320), q: 1.2, peak: 0.72, atk: 0.001, dec: 0.075 });
+    nsrc(t + 0.0030, { type: 'bandpass', freq: rnd(2300, 2600), q: 1.6, peak: 0.34, atk: 0.001, dec: 0.045 });
+
+    // 5 --- the mechanism, on the real timeline of the cycle
+    const F = foleyIn;
+    clack(t + 0.0165, 2500, 0.15 * rp, 0.016, 240, F);              // unlock / slide to the rear
+    nsrc(t + 0.020, { type: 'bandpass', freq: 1700, q: 0.9, peak: 0.10 * rp, atk: 0.002, dec: 0.030, dest: F });
+    tone(t + 0.024, { type: 'triangle', f0: rnd(2900, 3300), f1: 1800, peak: 0.055 * rp, dec: 0.055, dest: F }); // spring
+    if (last) {
+      clack(t + 0.041, 1250, 0.30, 0.030, 170, F);                  // slide stop catches
+      tone(t + 0.041, { f0: 132, f1: 74, peak: 0.20, dec: 0.14, dest: F });
+    } else {
+      clack(t + 0.0385, 1500, 0.26 * rp, 0.024, 195, F);            // return to battery
+      nsrc(t + 0.0395, { type: 'bandpass', freq: 620, q: 1.0, peak: 0.13 * rp, atk: 0.002, dec: 0.05, dest: F });
+    }
+  }
+
+  /* striker on an empty chamber -- no bang, just a hard little snap */
+  function dry() {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    clack(t, 2950, 0.30, 0.011, 320);
+    nsrc(t + 0.001, { type: 'highpass', freq: 5200, peak: 0.14, atk: 0.0005, dec: 0.010, dest: foleyIn });
+    clack(t + 0.020, 1750, 0.10, 0.014, 180);
+  }
+
+  /* ============================== FOLEY ================================= */
+  function magRelease() {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    clack(t, 3200, 0.22, 0.009, 420);                                // catch button
+    nsrc(t + 0.006, { type: 'bandpass', freq: 1450, q: 1.1, peak: 0.09, atk: 0.002, dec: 0.030, dest: foleyIn });
+  }
+  function magDrop() {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    // polymer body scraping clear of the magwell
+    nsrc(t, { type: 'bandpass', freq: 900, freq2: 1900, sweep: 0.10, q: 0.7,
+              peak: 0.13, atk: 0.008, dec: 0.11, dest: foleyIn });
+    // and hitting the deck: a hollow polymer knock, then two settling bounces
+    clack(t + 0.030, 780, 0.34, 0.036, 128);
+    nsrc(t + 0.030, { type: 'lowpass', freq: 420, q: 0.8, peak: 0.22, atk: 0.003, dec: 0.13, dest: foleyIn });
+    clack(t + 0.128, 1020, 0.15, 0.026, 150);
+    clack(t + 0.196, 1240, 0.07, 0.020, 176);
+    nsrc(t + 0.205, { type: 'bandpass', freq: 2600, q: 1.4, peak: 0.05, atk: 0.002, dec: 0.05, dest: foleyIn }); // rounds rattle
+  }
+  function magIn() {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    // brass rattling in the mag as it comes up, then the body entering the well
+    nsrc(t, { type: 'bandpass', freq: 2400, q: 1.6, peak: 0.10, atk: 0.004, dec: 0.055, dest: foleyIn });
+    nsrc(t + 0.010, { type: 'bandpass', freq: 1100, freq2: 700, sweep: 0.07, q: 0.8,
+                      peak: 0.16, atk: 0.006, dec: 0.075, dest: foleyIn });
+    // seated hard with the palm: the satisfying part
+    clack(t + 0.072, 1350, 0.42, 0.030, 165);
+    tone(t + 0.072, { f0: 118, f1: 62, peak: 0.30, atk: 0.003, dec: 0.16, dest: foleyIn });
+    clack(t + 0.086, 2700, 0.10, 0.012, 0);                          // catch snaps over
+  }
+  function slideRelease() {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    clack(t, 2600, 0.20, 0.010, 300);                                // lever trips
+    tone(t + 0.002, { type: 'triangle', f0: 3050, f1: 1650, peak: 0.075, dec: 0.075, dest: foleyIn }); // spring twang
+    nsrc(t + 0.004, { type: 'bandpass', freq: 820, q: 0.9, peak: 0.14, atk: 0.003, dec: 0.028, dest: foleyIn });
+    // 26 mm of steel slamming into battery, chambering a round on the way
+    clack(t + 0.030, 1400, 0.52, 0.034, 158);
+    tone(t + 0.030, { f0: 104, f1: 56, peak: 0.34, atk: 0.003, dec: 0.20, dest: foleyIn });
+    nsrc(t + 0.033, { type: 'highpass', freq: 4200, peak: 0.13, atk: 0.001, dec: 0.020, dest: foleyIn });
+  }
+  function selector() {
+    if (!ready()) return;
+    clack(ctx.currentTime + 0.002, 2350, 0.14, 0.007, 520);
+  }
+  /* a fired case landing on concrete a metre away */
+  function shellHit(n) {
+    if (!ready()) return;
+    const t = ctx.currentTime + 0.002;
+    const g = n ? 0.085 : 0.16, p = rnd(0.9, 1.15);
+    nsrc(t, { type: 'bandpass', freq: 3400 * p, q: 6.0, peak: g, atk: 0.0004, dec: 0.055, dest: foleyIn });
+    nsrc(t + 0.0008, { type: 'bandpass', freq: 5400 * p, q: 5.0, peak: g * 0.6, atk: 0.0004, dec: 0.035, dest: foleyIn });
+    nsrc(t, { type: 'highpass', freq: 7000, peak: g * 0.35, atk: 0.0003, dec: 0.012, dest: foleyIn });
+  }
+
+  /* ============================= CONTROL ================================ */
+  function unlock() {
+    if (!ok && !init()) return;
+    if (ctx.state === 'suspended') ctx.resume();
+  }
+  function setEnabled(v) {
+    enabled = !!v;
+    if (ok) master.gain.setTargetAtTime(enabled ? 0.95 : 0.0, ctx.currentTime, 0.02);
+  }
+
+  return { unlock, setEnabled, shot, dry, magRelease, magDrop, magIn, slideRelease, selector, shellHit };
+})();
+/* ============================================================================
+   GAME LOGIC — fire modes, short-recoil cycle, reload, ejection, effects
+============================================================================ */
+
+const Game = (function () {
+
+  const CYCLE_BACK = 0.019, CYCLE_FWD = 0.028;         // slide timing, seconds
+  const SLIDE_TRAVEL = 26.0;                            // mm
+  const BARREL_TRAVEL = 3.5;                            // mm of locked travel
+  const BARREL_TILT = 1.95 * D2R;                       // chamber drop at full recoil
+  const RPM_AUTO = 1200;                                // factory cyclic rate
+  const AUTO_DT = 60 / RPM_AUTO;                        // 0.050 s between rounds
+  const SEMI_DT = 0.085;
+  const TAN14 = RAKE;
+
+  const S = {
+    mode: 'semi', magType: 33, cap: 33, ammo: 33,
+    trigger: false, triggerLatched: false,
+    tSinceShot: 99, cycleT: -1, lastShot: false,
+    slideLocked: false, magVisible: true,
+    recoil: 0, recoilV: 0, rise: 0, riseV: 0, roll: 0, rollV: 0,
+    shake: 0, shakeT: 0,
+    triggerA: 0, selA: 0, selT: 0,
+    reload: -1, magY: 0, magHidden: false,
+    flashT: 0, muzzleI: 0,
+    shells: [], soundOn: true
+  };
+
+  let shellGpu = null;
+  const ROOT = m4(), TMP = m4(), TMP2 = m4(), LOC = m4();
+  const wp = [0, 0, 0];
+
+  /* ------------------------------------------------------------ helpers */
+  function rootMatrix() {
+    const px = 0, py = -42, pz = 62;                   // pivot: web of the hand
+    /* A pistol does not simply slide backwards: the bore sits above the wrist,
+       so the impulse becomes rotation.  Muzzle rise dominates, with a little
+       roll and a decaying tremor from the hand absorbing the shock.       */
+    let jr = 0, jy = 0, jp = 0, jz = 0;
+    if (S.shake > 0.0005) {
+      const q = S.shakeT * 58.0, k = S.shake * S.shake;
+      jp = Math.sin(q * 2.31 + 1.7) * k * 0.0085;
+      jy = Math.sin(q * 1.73 + 0.4) * k * 0.0070;
+      jr = Math.sin(q * 1.97 + 2.6) * k * 0.0130;
+      jz = Math.sin(q * 2.90 + 0.9) * k * 0.55;
+    }
+    m4trs(px, py, pz, S.rise + jp, jy, S.roll + jr, 1, 1, 1, TMP);
+    m4trs(-px, -py, -pz + S.recoil + jz, 0, 0, 0, 1, 1, 1, TMP2);
+    return m4mul(TMP, TMP2, ROOT);
+  }
+
+  function slideZ() {
+    if (S.slideLocked && S.cycleT < 0) return SLIDE_TRAVEL;
+    if (S.cycleT < 0) return 0;
+    if (S.cycleT < CYCLE_BACK) {
+      const u = S.cycleT / CYCLE_BACK;
+      return SLIDE_TRAVEL * (1 - (1 - u) * (1 - u));    // ease-out rearward
+    }
+    const u = clamp((S.cycleT - CYCLE_BACK) / CYCLE_FWD, 0, 1);
+    return SLIDE_TRAVEL * (1 - u * u);                  // ease-in return
+  }
+
+  /* --------------------------------------------------------------- fire */
+  function canFire() { return S.ammo > 0 && S.reload < 0 && !S.slideLocked; }
+
+  function fire() {
+    if (!canFire()) {
+      if (S.reload < 0 && S.ammo <= 0) Audio18C.dry();
+      return;
+    }
+    S.ammo--;
+    S.tSinceShot = 0;
+    S.cycleT = 0;
+    S.lastShot = (S.ammo === 0);
+    Audio18C.shot({ last: S.lastShot });
+
+    /* impulse: 9x19 out of a 620 g pistol.  The compensator bleeds roughly a
+       third of the muzzle rise, which is the whole point of the 18C.     */
+    S.recoilV += 415;
+    S.riseV += 3.55;
+    S.rollV += rnd(-1.35, -0.35);
+    S.shake = Math.min(1.0, S.shake + 0.80);
+    S.flashT = 1;
+    S.muzzleI = 1;
+
+    spawnFlash();
+    setTimeout(spawnShell, 14);
+    updateHUD();
+  }
+
+  /* ------------------------------------------------------------- reload */
+  const R_DROP = 0.00, R_THUNK = 0.42, R_IN0 = 0.70, R_IN1 = 1.15, R_REL = 1.34, R_END = 1.62;
+  function reload() {
+    if (S.reload >= 0 || S.ammo === S.cap) return;
+    S.reload = 0; S.magY = 0; S.magHidden = false;
+    Audio18C.magRelease();
+    pill('Перезарядка', true);
+  }
+
+  function stepReload(dt) {
+    const t0 = S.reload;
+    S.reload += dt;
+    const t = S.reload;
+    if (t0 < R_THUNK && t >= R_THUNK) Audio18C.magDrop();
+    if (t0 < R_IN1 && t >= R_IN1) Audio18C.magIn();
+    if (t0 < R_REL && t >= R_REL) {
+      if (S.slideLocked) { S.slideLocked = false; S.cycleT = CYCLE_BACK; Audio18C.slideRelease(); S.recoilV += 90; }
+      S.ammo = S.cap; updateHUD();
+    }
+    if (t < R_IN0) {                                    // falling out
+      const u = Math.max(0, t - R_DROP);
+      S.magY = -0.5 * 3400 * u * u;
+      S.magHidden = S.magY < -240;
+    } else if (t < R_IN1) {                             // sliding home
+      const u = (t - R_IN0) / (R_IN1 - R_IN0);
+      S.magHidden = false;
+      S.magY = -175 * (1 - u * u * u);
+    } else {
+      S.magY = 0; S.magHidden = false;
+    }
+    if (t >= R_END) { S.reload = -1; pill('', false); }
+  }
+
+  /* -------------------------------------------------------------- shell */
+  function spawnShell() {
+    if (S.shells.length > 22) S.shells.shift();
+    rootMatrix();
+    xformPoint(ROOT, 11.5, 2.0, -1.0, wp);
+    const rx = ROOT[0], ry = ROOT[1], rz = ROOT[2];      // gun's +X in world
+    const ux = ROOT[4], uy = ROOT[5], uz = ROOT[6];      // gun's +Y in world
+    const fx = ROOT[8], fy = ROOT[9], fz = ROOT[10];     // gun's +Z in world
+    const sr = rnd(1250, 1600), su = rnd(620, 980), sf = rnd(80, 320);
+    S.shells.push({
+      p: [wp[0], wp[1], wp[2]],
+      v: [rx * sr + ux * su + fx * sf, ry * sr + uy * su + fy * sf, rz * sr + uz * su + fz * sf],
+      r: [rnd(0, TAU), rnd(0, TAU), rnd(0, TAU)],
+      w: [rnd(-26, 26), rnd(-14, 14), rnd(-30, 30)],
+      life: 0, bounced: 0
+    });
+  }
+
+  function stepShells(dt) {
+    for (let i = S.shells.length - 1; i >= 0; i--) {
+      const s = S.shells[i];
+      s.life += dt;
+      s.v[1] -= 9810 * dt;
+      for (let k = 0; k < 3; k++) { s.p[k] += s.v[k] * dt; s.r[k] += s.w[k] * dt; }
+      if (s.p[1] < -195 && s.v[1] < 0) {
+        if (s.bounced < 3) { Audio18C.shellHit(s.bounced); s.v[1] = -s.v[1] * 0.36; s.v[0] *= 0.62; s.v[2] *= 0.62; for (let k = 0; k < 3; k++) s.w[k] *= 0.55; s.bounced++; s.p[1] = -195; }
+        else { s.v[1] = 0; s.p[1] = -195; }
+      }
+      if (s.life > 4.2) S.shells.splice(i, 1);
+    }
+  }
+
+  /* ------------------------------------------------------------ effects */
+  function spawnFlash() {
+    rootMatrix();
+    const P = (x, y, z, o) => { xformPoint(ROOT, x, y, z, wp);
+      o.p = [wp[0], wp[1], wp[2]]; o.t = 0; if (o.rot == null) o.rot = rnd(0, TAU);
+      if (o.seed == null) o.seed = Math.random(); SPRITES.push(o); return o; };
+
+    /* ---- 1. the flash itself ------------------------------------------
+       Burning powder leaving the crown at ~1500 K.  It is small, it is
+       white-hot in the middle, and it is over in two frames -- the eye
+       reads peak intensity, never duration.                            */
+    P(0, 0, -115, { s: rnd(12, 17), c: [11.5, 8.4, 4.6], a: 1, kind: 0,
+                    life: rnd(0.050, 0.068), grow: rnd(85, 130) });
+    // four-lobed star: gas escaping the crown is never a clean sphere
+    for (let k = 0; k < 4; k++) {
+      const an = k * (TAU / 4) + rnd(-0.22, 0.22), rr = rnd(9, 17);
+      P(Math.cos(an) * rr * 0.35, Math.sin(an) * rr * 0.35, -117, {
+        s: rnd(6, 11), c: [6.8, 4.4, 1.9], a: 1, kind: 0,
+        life: rnd(0.044, 0.060), grow: rnd(150, 260),
+        vel: [Math.cos(an) * rnd(220, 460), Math.sin(an) * rnd(220, 460), rnd(-160, -40)] });
+    }
+    /* forward plume, staggered down the bore line so it has depth */
+    for (let k = 0; k < 5; k++) {
+      P(rnd(-1.8, 1.8), rnd(-1.5, 1.5), -119 - k * 8, {
+        s: rnd(15, 27) * (1 - k * 0.12), c: [4.9, 3.05, 1.22], a: 1, kind: 0,
+        life: rnd(0.062, 0.098), grow: rnd(130, 250),
+        vel: [rnd(-34, 34), rnd(-22, 22), rnd(-320, -140)] });
+    }
+    /* soft halo + expanding shock ring */
+    P(0, 1, -122, { s: 33, c: [1.45, 0.92, 0.40], a: 1, kind: 2, rot: 0, seed: 0,
+                    life: 0.100, grow: 150, fall: 2.6 });
+    P(0, 1, -124, { s: 16, c: [0.30, 0.22, 0.14], a: 1, kind: 2, rot: 0, seed: 0,
+                    life: 0.120, grow: 900, fall: 3.2 });
+
+    /* ---- 2. compensator jets -- the signature of the C model ----------
+       Four ports bleed gas straight up through matching slots in the
+       slide.  Front port sees peak pressure, so the jets taper rearward. */
+    const PORTS = [-100, -89, -78, -67];
+    for (let i = 0; i < PORTS.length; i++) {
+      const k = 1 - i * 0.185;
+      P(0, 13.8, PORTS[i], { s: rnd(5, 9) * k, c: [3.4 * k, 2.25 * k, 0.96 * k], a: 1, kind: 1,
+        life: rnd(0.052, 0.080), grow: rnd(60, 110),
+        vel: [rnd(-20, 20), rnd(470, 760) * k, rnd(-70, 10)] });
+      P(0, 13.0, PORTS[i], { s: rnd(3.2, 5.4) * k, c: [6.0 * k, 4.1 * k, 1.9 * k], a: 1, kind: 1,
+        life: rnd(0.034, 0.050), grow: rnd(35, 70),
+        vel: [0, rnd(330, 520) * k, 0] });
+    }
+
+    /* ---- 3. ejection port: light spills sideways as the case clears --- */
+    P(12, 2, 4, { s: rnd(4.5, 7.5), c: [1.25, 0.80, 0.35], a: 1, kind: 1,
+      life: rnd(0.040, 0.056), grow: rnd(40, 70),
+      vel: [rnd(200, 340), rnd(50, 130), 0] });
+
+    /* ---- 4. unburnt powder: the sparks that sell the whole thing ------ */
+    const NS = SPRITES.length > 420 ? 7 : 16;
+    for (let i = 0; i < NS; i++) {
+      const an = rnd(0, TAU), sp = rnd(0.25, 1.0);
+      P(rnd(-2, 2), rnd(-2, 2), -116, {
+        s: rnd(1.5, 3.0), c: [7.5, 3.4, 0.85], a: 1, kind: 2, rot: 0, seed: 0,
+        life: rnd(0.14, 0.42), grow: -1.2, fall: 1.2, g: 2600, drag: 1.1,
+        vel: [Math.cos(an) * 260 * sp, Math.sin(an) * 260 * sp + rnd(20, 160), rnd(-1500, -420)] });
+    }
+    for (let i = 0; i < 5; i++) {                       // a few out of the ports
+      const z = PORTS[(i * 3) % 4];
+      P(rnd(-1, 1), 14, z, {
+        s: rnd(1.2, 2.4), c: [7.0, 3.0, 0.7], a: 1, kind: 2, rot: 0, seed: 0,
+        life: rnd(0.12, 0.30), grow: -1.0, fall: 1.2, g: 2600, drag: 1.2,
+        vel: [rnd(-90, 90), rnd(520, 1050), rnd(-120, 60)] });
+    }
+
+    /* ---- 5. smoke: thin, drifting, lingers well after the light ------- */
+    for (let k = 0; k < 4; k++) {
+      P(rnd(-3, 3), rnd(-2, 3), -118 + rnd(-8, 8), {
+        s: rnd(11, 19), c: [0.085, 0.088, 0.098], a: 0.8, kind: 1,
+        life: rnd(0.9, 1.7), grow: rnd(75, 140), drag: 1.1,
+        vel: [rnd(-45, 45), rnd(30, 85), rnd(-170, -70)], spin: rnd(-1.4, 1.4) });
+    }
+    for (const z of [-100, -78]) {
+      P(rnd(-2, 2), 14, z, {
+        s: rnd(6, 11), c: [0.072, 0.075, 0.084], a: 0.65, kind: 1,
+        life: rnd(0.6, 1.1), grow: rnd(65, 120), drag: 1.2,
+        vel: [rnd(-28, 28), rnd(140, 240), rnd(-35, 35)], spin: rnd(-1.6, 1.6) });
+    }
+  }
+
+  function stepSprites(dt) {
+    if (SPRITES.length > 900) SPRITES.splice(0, SPRITES.length - 900);
+    for (let i = SPRITES.length - 1; i >= 0; i--) {
+      const s = SPRITES[i];
+      s.t += dt;
+      const u = s.t / s.life;
+      if (u >= 1) { SPRITES.splice(i, 1); continue; }
+      if (s.vel) {
+        if (s.g) s.vel[1] -= s.g * dt;
+        s.p[0] += s.vel[0] * dt; s.p[1] += s.vel[1] * dt; s.p[2] += s.vel[2] * dt;
+        const dg = s.drag == null ? 1.8 : s.drag;
+        s.vel[0] *= 1 - dg * dt; s.vel[1] *= 1 - dg * 0.78 * dt; s.vel[2] *= 1 - dg * dt;
+      }
+      if (s.spin) s.rot += s.spin * dt;
+      s.s += (s.grow || 0) * dt;
+      s.a = s.kind === 1 ? 0.58 * Math.pow(1 - u, 1.5) * Math.min(1, u * 6)
+                         : Math.pow(1 - u, s.fall || 1.9);
+    }
+  }
+
+  /* ---------------------------------------------------------------- HUD */
+  const $ = id => document.getElementById(id);
+  function updateHUD() {
+    const n = $('ammoN'), t = $('ammoT'), box = $('ammo');
+    if (!n) return;
+    n.textContent = S.ammo; t.textContent = '/' + S.cap;
+    box.classList.toggle('low', S.ammo > 0 && S.ammo <= Math.max(3, S.cap * 0.25));
+    box.classList.toggle('empty', S.ammo === 0);
+  }
+  let pillTimer = 0;
+  function pill(text, show) {
+    const p = $('pill'); if (!p) return;
+    if (show) { p.textContent = text; p.classList.add('show'); }
+    else p.classList.remove('show');
+  }
+  function setMode(m) {
+    if (S.mode === m) return;
+    S.mode = m; S.selT = (m === 'auto') ? -30 * D2R : 0;
+    Audio18C.selector();
+    document.querySelectorAll('#modeSel button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  }
+  function setMag(cap) {
+    if (S.cap === cap) return;
+    S.magType = cap; S.cap = cap; S.ammo = Math.min(S.ammo, cap);
+    if (S.ammo === 0) { S.ammo = cap; S.slideLocked = false; }
+    Audio18C.magIn();
+    document.querySelectorAll('#magSel button').forEach(b => b.classList.toggle('on', +b.dataset.mag === cap));
+    updateHUD();
+  }
+
+  /* --------------------------------------------------------------- init */
+  function init() {
+    for (const d of DRAW) if (d.node === 'shellProto') shellGpu = d.gpu;
+
+    document.querySelectorAll('#modeSel button').forEach(b =>
+      b.addEventListener('click', () => { Audio18C.unlock(); setMode(b.dataset.mode); }));
+    document.querySelectorAll('#magSel button').forEach(b =>
+      b.addEventListener('click', () => { Audio18C.unlock(); setMag(+b.dataset.mag); }));
+
+    const snd = $('sndSw');
+    snd.addEventListener('click', () => { S.soundOn = !S.soundOn; snd.classList.toggle('on', S.soundOn); Audio18C.setEnabled(S.soundOn); });
+    const spn = $('spinSw');
+    spn.addEventListener('click', () => { View.spin = !View.spin; spn.classList.toggle('on', View.spin); });
+
+    const bf = $('btnFire');
+    const down = e => { e.preventDefault(); Audio18C.unlock(); S.trigger = true; };
+    const up = e => { e.preventDefault(); S.trigger = false; S.triggerLatched = false; };
+    bf.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    bf.addEventListener('pointercancel', up);
+    $('btnRel').addEventListener('click', () => { Audio18C.unlock(); reload(); });
+
+    canvas.addEventListener('pointerdown', e => { if (e.button === 0 && e.shiftKey) { Audio18C.unlock(); S.trigger = true; } });
+
+    window.addEventListener('keydown', e => {
+      if (e.repeat) return;
+      const k = e.code;
+      if (k === 'Space') { e.preventDefault(); Audio18C.unlock(); S.trigger = true; }
+      else if (k === 'KeyR') { Audio18C.unlock(); reload(); }
+      else if (k === 'KeyV' || k === 'KeyX') { Audio18C.unlock(); setMode(S.mode === 'semi' ? 'auto' : 'semi'); }
+      else if (k === 'KeyM') { Audio18C.unlock(); setMag(S.cap === 33 ? 17 : 33); }
+    });
+    window.addEventListener('keyup', e => {
+      if (e.code === 'Space') { S.trigger = false; S.triggerLatched = false; }
+    });
+    window.addEventListener('blur', () => { S.trigger = false; S.triggerLatched = false; });
+
+    updateHUD();
+  }
+
+  /* ------------------------------------------------------------- update */
+  function update(dt) {
+    S.tSinceShot += dt;
+
+    if (S.reload >= 0) { stepReload(dt); S.trigger = false; }
+
+    // trigger logic
+    if (S.trigger && S.reload < 0) {
+      if (S.mode === 'semi') {
+        if (!S.triggerLatched && S.tSinceShot >= SEMI_DT) { S.triggerLatched = true; fire(); }
+      } else {
+        if (S.tSinceShot >= AUTO_DT) fire();
+      }
+    }
+
+    // slide cycle
+    if (S.cycleT >= 0) {
+      S.cycleT += dt;
+      if (S.cycleT >= CYCLE_BACK + CYCLE_FWD) {
+        S.cycleT = -1;
+        if (S.lastShot && S.ammo === 0) { S.slideLocked = true; S.lastShot = false; pill('Пусто', true); }
+      }
+    }
+    if (S.ammo > 0 && S.slideLocked === false && S.reload < 0) { /* ok */ }
+
+    // recoil springs: snappy out, softer on the way back to point of aim
+    S.recoilV += (-S.recoil * 1820 - S.recoilV * 58) * dt;
+    S.recoil += S.recoilV * dt;
+    S.riseV += (-S.rise * 1380 - S.riseV * 48) * dt;
+    S.rise += S.riseV * dt;
+    S.rollV += (-S.roll * 1150 - S.rollV * 44) * dt;
+    S.roll += S.rollV * dt;
+    S.recoil = clamp(S.recoil, -1.2, 9.0);
+    S.rise = clamp(S.rise, -0.025, 0.135);
+    S.roll = clamp(S.roll, -0.055, 0.055);
+    S.shakeT += dt;
+    S.shake = Math.max(0, S.shake - dt * 3.4);
+
+    // trigger blade animation
+    const wantT = (S.trigger && S.reload < 0 && (S.ammo > 0 || S.mode === 'auto')) ? 1 : 0;
+    S.triggerA += ((S.cycleT >= 0 ? 1 : wantT) - S.triggerA) * Math.min(1, dt * 34);
+    S.selA += (S.selT - S.selA) * Math.min(1, dt * 16);
+
+    // muzzle light
+    S.muzzleI = Math.max(0, S.muzzleI - dt * 14);
+    if (S.muzzleI > 0) {
+      rootMatrix();
+      xformPoint(ROOT, 0, 4, -122, wp);
+      MUZZLE.pos[0] = wp[0]; MUZZLE.pos[1] = wp[1]; MUZZLE.pos[2] = wp[2];
+      // burning powder is turbulent: the light stutters as the gas ball breaks up
+      const fl = 0.78 + 0.22 * Math.sin(S.muzzleI * 121.0) * Math.sin(S.muzzleI * 47.0);
+      const i = S.muzzleI * S.muzzleI * 34 * fl;
+      MUZZLE.col[0] = i * 1.00; MUZZLE.col[1] = i * 0.66; MUZZLE.col[2] = i * 0.27;
+    } else { MUZZLE.col[0] = MUZZLE.col[1] = MUZZLE.col[2] = 0; }
+
+    stepShells(dt);
+    stepSprites(dt);
+
+    /* ---- node matrices ---- */
+    rootMatrix();
+    m4copy(ROOT, NODES.frame);
+    NODES.world.set(m4());
+
+    const sz = slideZ();
+    m4mul(ROOT, m4trs(0, 0, sz, 0, 0, 0, 1, 1, 1, LOC), NODES.slide);
+
+    /* ---- Browning tilting barrel, done the way the real one works -------
+       The barrel is locked to the slide for the first 3.5 mm, then the
+       locking block cams its CHAMBER down while the muzzle end stays
+       supported by the slide's front bore -- so the visible, protruding
+       part of the barrel stays on the bore axis.  The previous build
+       pivoted the barrel about its middle, which swung the muzzle 3.9 mm
+       off axis: that was the bent muzzle on an empty gun.               */
+    const bz = Math.min(sz, BARREL_TRAVEL);
+    const tu = clamp((sz - BARREL_TRAVEL * 0.55) / (SLIDE_TRAVEL * 0.42), 0, 1);
+    const tilt = tu * tu * (3 - 2 * tu) * BARREL_TILT;
+    const pvz = -108.0 + sz * 0.92;              // the support point rides with the slide
+    m4mul(m4trs(0, 0, bz + pvz, tilt, 0, 0, 1, 1, 1, TMP),
+          m4trs(0, 0, -pvz, 0, 0, 0, 1, 1, 1, TMP2), LOC);
+    m4mul(ROOT, LOC, NODES.barrel);
+
+    /* recoil spring assembly: front cup captured by the slide, rear seated
+       on the locking block -- so it simply compresses as the slide runs. */
+    const RZ0 = -14.0, RL = 98.6;
+    const rk = Math.max(0.24, (RL - sz) / RL);
+    m4mul(m4trs(0, 0, RZ0, 0, 0, 0, 1, 1, rk, TMP),
+          m4trs(0, 0, -RZ0, 0, 0, 0, 1, 1, 1, TMP2), LOC);
+    m4mul(ROOT, LOC, NODES.rsa);
+
+    // trigger
+    const ta = -S.triggerA * 15 * D2R;
+    m4mul(m4trs(0, -30, -8, ta, 0, 0, 1, 1, 1, TMP), m4trs(0, 30, 8, 0, 0, 0, 1, 1, 1, TMP2), LOC);
+    m4mul(ROOT, LOC, NODES.trigger);
+
+    // slide stop lever
+    const sa = (S.slideLocked ? -2.4 : 0) * D2R;
+    m4mul(m4trs(0, -23, -17, sa, 0, 0, 1, 1, 1, TMP), m4trs(0, 23, 17, 0, 0, 0, 1, 1, 1, TMP2), LOC);
+    m4mul(ROOT, LOC, NODES.slideStop);
+
+    // selector (child of the slide)
+    m4mul(m4trs(-13.5, -3, 40, S.selA, 0, 0, 1, 1, 1, TMP), m4trs(13.5, 3, -40, 0, 0, 0, 1, 1, 1, TMP2), LOC);
+    m4mul(NODES.slide, LOC, NODES.selector);
+
+    // magazine
+    m4mul(ROOT, m4trs(0, S.magY, S.magY * TAN14, 0, 0, 0, 1, 1, 1, LOC), NODES.mag);
+    m4copy(NODES.mag, NODES.magShort);
+    m4copy(NODES.mag, NODES.topRound);
+  }
+
+  /* --------------------------------------------------------------- draw */
+  const SH = m4();
+  function shellMatrix(s) {
+    return m4trs(s.p[0], s.p[1], s.p[2], s.r[0], s.r[1], s.r[2], 1, 1, 1, SH);
+  }
+  function drawExtra(prog) {
+    if (!shellGpu || !S.shells.length) return;
+    gl.uniform3f(prog.u.uAlbedo, 0.62, 0.455, 0.17);
+    gl.uniform1f(prog.u.uMetal, 1.0);
+    gl.uniform1f(prog.u.uRough, 0.26);
+    gl.uniform1f(prog.u.uClearcoat, 0);
+    gl.uniform1f(prog.u.uDetail, 2);
+    gl.uniform1f(prog.u.uMark, 0);
+    gl.uniform1f(prog.u.uGround, 0);
+    gl.bindVertexArray(shellGpu.vao);
+    for (const s of S.shells) {
+      const M = shellMatrix(s);
+      gl.uniformMatrix4fv(prog.u.uM, false, M);
+      m3normal(M, NRM);
+      gl.uniformMatrix3fv(prog.u.uN, false, NRM);
+      gl.drawElements(gl.TRIANGLES, shellGpu.count, shellGpu.type, 0);
+    }
+  }
+  function drawExtraDepth(prog) {
+    if (!shellGpu || !S.shells.length) return;
+    gl.bindVertexArray(shellGpu.vao);
+    for (const s of S.shells) {
+      gl.uniformMatrix4fv(prog.u.uM, false, shellMatrix(s));
+      gl.drawElements(gl.TRIANGLES, shellGpu.count, shellGpu.type, 0);
+    }
+  }
+
+  function visible(node) {
+    if (node === 'shellProto') return false;
+    // an empty magazine shows its follower, not a cartridge, at the lips
+    if (node === 'topRound') return S.ammo > 0 && !S.magHidden;
+    if (node === 'mag') return S.magType === 33 && !S.magHidden;
+    if (node === 'magShort') return S.magType === 17 && !S.magHidden;
+    return true;
+  }
+
+  return { init, update, visible, drawExtra, drawExtraDepth, state: S, fire, reload, setMode, setMag };
+})();
+
+/* ------------------------------------------------------------------ boot */
+boot();
+
+}catch(e){ fail((e && e.stack) ? e.stack : String(e)); }
+})();
+</script>
+</body>
+</html>

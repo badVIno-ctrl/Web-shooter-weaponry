@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VFG — вертикальная тактическая рукоять · процедурная модель three.js</title>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}
+</script>
+
+<style>
+:root{
+  --bg:#15171a; --pnl:rgba(22,25,29,.86); --bd:rgba(255,255,255,.14);
+  --tx:#f2f4f7; --tx2:rgba(242,244,247,.62);
+  --ac:#5E9FE8; --ok:#72BC8F; --er:#E97366; --wr:#DE9255;
+  --mono:ui-monospace,Menlo,Consolas,"DejaVu Sans Mono","Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+#app{position:fixed;inset:0;z-index:0}
+canvas{display:block}
+
+.pnl{position:fixed;z-index:10;background:var(--pnl);border:1px solid var(--bd);border-radius:12px;
+  padding:12px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  box-shadow:0 1px 2px rgba(0,0,0,.35),0 8px 28px rgba(0,0,0,.28)}
+.ttl{margin:0 0 10px;font:600 11px/1 inherit;letter-spacing:.09em;text-transform:uppercase;color:var(--tx2)}
+
+#panel{left:16px;top:16px;width:238px;max-height:calc(58vh);overflow:auto}
+#anim{left:16px;bottom:16px;width:238px;max-height:34vh;overflow:auto}
+#stats{right:16px;top:16px;width:262px}
+#hint{right:16px;bottom:16px;padding:10px 14px;font-size:13px;color:var(--tx2)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.gap{margin-top:8px}
+
+button{-webkit-appearance:none;appearance:none;width:100%;min-height:44px;padding:9px 8px;
+  border:1px solid var(--bd);border-radius:8px;background:rgba(255,255,255,.05);color:var(--tx);
+  font:600 13px/1.22 inherit;cursor:pointer;transition:background .12s ease,border-color .12s ease}
+button:hover:not(:disabled){background:rgba(255,255,255,.11)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+button.on{background:rgba(94,159,232,.24);border-color:var(--ac);color:#dbeaff}
+button:disabled{opacity:.4;cursor:default}
+
+.sl{display:block;margin-top:12px}
+.sl:first-child{margin-top:2px}
+.sl .nm{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;color:var(--tx2);margin-bottom:4px}
+.sl .nm b{color:var(--tx);font-weight:600}
+.sl .nm em{font-style:normal;font-family:var(--mono);color:var(--tx)}
+input[type=range]{width:100%;height:26px;accent-color:var(--ac);cursor:pointer;margin:0}
+.empty{font-size:12px;color:var(--tx2)}
+
+#stats .body{font:12px/1.65 var(--mono)}
+#stats .r{display:flex;justify-content:space-between;gap:12px}
+#stats .r span{color:var(--tx2)}
+#chk{margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);font:12px/1.5 var(--mono)}
+.ok{color:var(--ok)} .er{color:var(--er)} .wr{color:var(--wr)}
+#chk ul{margin:4px 0 0;padding-left:16px}
+
+#boot{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px;background:var(--bg)}
+#boot .card{max-width:520px;text-align:center;border:1px solid var(--bd);border-radius:12px;padding:22px 24px;background:rgba(255,255,255,.03)}
+#boot h1{margin:0 0 6px;font-size:17px;font-weight:600}
+#boot p{margin:6px 0 0;font-size:13px;color:var(--tx2)}
+#boot code{font-family:var(--mono);font-size:12px;color:var(--tx2);word-break:break-all}
+#boot.err .card{border-color:rgba(233,115,102,.55)}
+#boot.err h1{color:var(--er)}
+.dots::after{content:"";animation:d 1.2s steps(4,end) infinite}
+@keyframes d{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+@media (prefers-reduced-motion:reduce){.dots::after{animation:none;content:"..."}}
+
+@media (max-width:760px){
+  #panel,#anim{width:calc(52vw - 22px);min-width:172px}
+  #stats{width:calc(44vw - 22px);min-width:158px}
+  #stats .body,#chk{font-size:11px}
+  #hint{display:none}
+  button{font-size:12px;min-height:42px}
+}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<!-- ── панель управления (слева сверху) ───────────────────────────────── -->
+<div class="pnl" id="panel">
+  <p class="ttl">VFG · передняя рукоять</p>
+  <div class="grid">
+    <button id="b-wire"    disabled>Каркас</button>
+    <button id="b-nodes"   disabled>Узлы</button>
+    <button id="b-bounds"  disabled>Габариты</button>
+    <button id="b-grid"    disabled class="on">Сетка</button>
+    <button id="b-rot"     disabled>Автоповорот</button>
+    <button id="b-reset"   disabled>Сброс камеры</button>
+  </div>
+  <div class="grid3 gap">
+    <button id="b-lod0" disabled>LOD0</button>
+    <button id="b-lod1" disabled class="on">LOD1</button>
+    <button id="b-lod2" disabled>LOD2</button>
+  </div>
+  <div class="grid gap">
+    <button id="b-fire"   disabled>Выстрел</button>
+    <button id="b-reload" disabled>Перезарядка</button>
+    <button id="b-png"    disabled>Скриншот PNG</button>
+    <button id="b-glb"    disabled>Экспорт GLB</button>
+  </div>
+  <div class="gap">
+    <button id="b-style" disabled>Стиль: vertical</button>
+    <button id="b-rail"  disabled class="on">Планка</button>
+  </div>
+</div>
+
+<!-- ── панель анимации (слева снизу) ──────────────────────────────────── -->
+<div class="pnl" id="anim">
+  <p class="ttl">Анимация деталей</p>
+  <div id="anim-body"><div class="empty">—</div></div>
+</div>
+
+<!-- ── статистика (справа сверху) ─────────────────────────────────────── -->
+<div class="pnl" id="stats">
+  <p class="ttl">Статистика</p>
+  <div class="body" id="stats-body">
+    <div class="r"><span>треугольники</span><b>—</b></div>
+  </div>
+  <div id="chk">—</div>
+</div>
+
+<!-- ── подсказка (справа снизу) ───────────────────────────────────────── -->
+<div class="pnl" id="hint">ЛКМ — вращать · колесо — зум · ПКМ — панорама · Shift+ЛКМ — панорама</div>
+
+<!-- ── экран загрузки / ошибки ────────────────────────────────────────── -->
+<div id="boot">
+  <div class="card">
+    <h1 id="boot-t"><span class="dots">Загрузка three.js</span></h1>
+    <p id="boot-p">Модуль тянется с unpkg.com. После первой загрузки файл работает из кэша браузера.</p>
+  </div>
+</div>
+
+<script type="module">
+/* ===========================================================================
+   ЧАСТЬ 1 — ПРОСМОТРЩИК
+   Один файл, file://, без сборки. three.js подключается по importmap из <head>.
+   =========================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const boot = $('boot');
+
+function bootFail(title, detail){
+  boot.className = 'err';
+  $('boot-t').textContent = title;
+  $('boot-p').innerHTML = '';
+  const p = $('boot-p');
+  p.append(detail.text);
+  if (detail.code){
+    const c = document.createElement('div');
+    c.style.marginTop = '10px';
+    const code = document.createElement('code');
+    code.textContent = detail.code;
+    c.appendChild(code);
+    p.appendChild(c);
+  }
+}
+
+let THREE = null, OrbitControls = null, GLTFExporter = null;
+
+const slow = setTimeout(() => {
+  if (!THREE) $('boot-p').textContent = 'Загрузка идёт дольше обычного — проверьте доступ к unpkg.com.';
+}, 8000);
+
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  ({ GLTFExporter }  = await import('three/addons/exporters/GLTFExporter.js'));
+} catch (err) {
+  clearTimeout(slow);
+  bootFail('three.js не загрузился', {
+    text: 'Сам файл исправен, но библиотека берётся с CDN unpkg.com. Подключитесь к интернету и обновите страницу (F5): после первой загрузки браузер закэширует three.js и файл будет работать офлайн. Если сеть закрыта прокси — поменяйте адреса в importmap в <head> на пути к локальной копии three.',
+    code: String((err && err.message) || err)
+  });
+}
+
+/* ===========================================================================
+   ПРОСМОТРЩИК
+   =========================================================================== */
+function main(){
+  const mm = (x) => x / 1000;
+
+  /* ---------------- рендерер ---------------- */
+  const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.24;
+  $('app').appendChild(renderer.domElement);
+
+  /* ---------------- сцена и свет ---------------- */
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x181b1f);
+
+  /* Окружение (IBL): без него металл выглядит плоским и мёртвым.
+     Строим процедурную equirect-карту "студии": небо-заливка,
+     светлое окно слева-сверху и тёмный пол. */
+  function studioEnvironment(){
+    const w = 128, h = 64, data = new Uint8Array(w * h * 4);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    for (let y = 0; y < h; y++){
+      const t = y / (h - 1);                       // 0 = зенит
+      const k = Math.pow(1 - t, 1.35);
+      for (let x = 0; x < w; x++){
+        const i = (y * w + x) * 4;
+        let r = lerp(14, 132, k), g = lerp(15, 152, k), b = lerp(18, 186, k);
+        const u = x / w;
+        // мягкое окно-софтбокс
+        const win = Math.exp(-Math.pow((u - 0.17) / 0.11, 2) - Math.pow((t - 0.24) / 0.14, 2));
+        r += 230 * win; g += 226 * win; b += 214 * win;
+        // слабый холодный отражатель справа-сзади
+        const bnc = Math.exp(-Math.pow((u - 0.68) / 0.16, 2) - Math.pow((t - 0.42) / 0.22, 2));
+        r += 40 * bnc; g += 58 * bnc; b += 86 * bnc;
+        data[i]     = Math.min(255, r);
+        data[i + 1] = Math.min(255, g);
+        data[i + 2] = Math.min(255, b);
+        data[i + 3] = 255;
+      }
+    }
+    const tex = new THREE.DataTexture(data, w, h);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    try {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const rt = pmrem.fromEquirectangular(tex);
+      pmrem.dispose(); tex.dispose();
+      return rt.texture;
+    } catch (e){ console.warn('PMREM недоступен:', e); tex.dispose(); return null; }
+  }
+  scene.environment = studioEnvironment();
+  scene.environmentIntensity = 0.85;
+
+  // key — сверху-справа-спереди
+  const key = new THREE.DirectionalLight(0xfff3e6, 3.05);
+  key.position.set(0.26, 0.42, 0.30);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.near = 0.05;  key.shadow.camera.far = 1.6;
+  key.shadow.camera.left = -0.13; key.shadow.camera.right = 0.13;
+  key.shadow.camera.top = 0.13;   key.shadow.camera.bottom = -0.13;
+  key.shadow.bias = -0.0004;      key.shadow.normalBias = 0.0015;
+  scene.add(key, key.target);
+
+  // fill — слабый холодный слева
+  const fill = new THREE.DirectionalLight(0x9dc2ff, 0.85);
+  fill.position.set(-0.38, 0.10, 0.20);
+  scene.add(fill);
+
+  // rim — контровой сзади
+  const rim = new THREE.DirectionalLight(0xd2e6ff, 2.15);
+  rim.position.set(-0.14, 0.24, -0.44);
+  scene.add(rim);
+
+  scene.add(new THREE.HemisphereLight(0x9fb4d2, 0x101216, 0.62));
+
+  const grid = new THREE.GridHelper(0.5, 25, 0x3c4550, 0x232830);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.6;
+  scene.add(grid);
+
+  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.ShadowMaterial({ opacity:0.42 }));
+  catcher.rotation.x = -Math.PI/2;
+  catcher.receiveShadow = true;
+  scene.add(catcher);
+
+  /* ---------------- камера и управление ---------------- */
+  const camera = new THREE.PerspectiveCamera(38, window.innerWidth/window.innerHeight, 0.01, 20);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;           // ЛКМ — вращение, колесо — зум, ПКМ — панорама
+  controls.dampingFactor = 0.075;
+  controls.autoRotateSpeed = 1.7;
+  controls.screenSpacePanning = true;
+
+  /* ---------------- состояние ---------------- */
+  const state = { wire:false, nodes:false, bounds:false, grid:true, rot:false, lod:1, style:'vertical', rail:true };
+  let model = null, boundsHelper = null, nodeHelpers = [], partState = {}, valid = null, busy = false;
+
+  /* ---------------- сборка / пересборка модели ---------------- */
+  function killHelpers(){
+    nodeHelpers.forEach(h => {
+      if (h.material){ if (h.material.map) h.material.map.dispose(); h.material.dispose(); }
+      if (h.geometry) h.geometry.dispose();
+      if (h.parent) h.parent.remove(h);
+    });
+    nodeHelpers = [];
+  }
+
+  function buildModel(fit){
+    if (model){ killHelpers(); scene.remove(model); if (model.dispose) model.dispose(); }
+    partState = {};
+    model = build(THREE, { style: state.style, lod: state.lod });   // <— функция из секции МОДЕЛЬ
+    scene.add(model);
+    valid = validateForegrip(model);
+    applyWire();
+    makeNodeHelpers();
+    makeSliders();
+    fitSceneHelpers();
+    if (fit) resetCamera();
+    updateStats();
+  }
+
+  function modelBox(){ return new THREE.Box3().setFromObject(model); }
+
+  function fitSceneHelpers(){
+    const box = modelBox();
+    grid.position.y = box.min.y - 0.004;
+    catcher.position.y = box.min.y - 0.0038;
+    const c = box.getCenter(new THREE.Vector3());
+    key.target.position.copy(c);
+    key.target.updateMatrixWorld();
+  }
+
+  function resetCamera(){
+    const box = modelBox();
+    const size = box.getSize(new THREE.Vector3());
+    const c = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z) || 0.1;
+    const fov = camera.fov * Math.PI / 180;
+    const dist = (maxDim * 0.5) / Math.tan(fov * 0.5) * 1.9;
+    camera.near = Math.max(maxDim / 300, 0.0008);      // near/far от габаритов
+    camera.far  = Math.max(maxDim * 300, 2);
+    camera.updateProjectionMatrix();
+    camera.position.copy(c).addScaledVector(new THREE.Vector3(0.74, 0.40, 1).normalize(), dist);
+    controls.target.copy(c);
+    controls.minDistance = maxDim * 0.3;
+    controls.maxDistance = maxDim * 16;
+    controls.update();
+  }
+
+  /* ---------------- узлы: AxesHelper 30 мм + подпись-спрайт ---------------- */
+  function makeLabel(text){
+    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgba(10,12,15,.82)';
+    g.beginPath();
+    if (g.roundRect) g.roundRect(3, 11, 250, 42, 10); else g.rect(3, 11, 250, 42);
+    g.fill();
+    g.strokeStyle = 'rgba(94,159,232,.75)'; g.lineWidth = 2; g.stroke();
+    g.font = 'bold 25px ui-monospace, Menlo, Consolas, monospace';
+    g.fillStyle = '#dbeaff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, 128, 33);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthTest:false, depthWrite:false }));
+    sp.scale.set(mm(34), mm(8.5), 1);
+    sp.position.set(0, mm(11), 0);
+    sp.renderOrder = 999;
+    return sp;
+  }
+
+  function makeNodeHelpers(){
+    const nodes = model.nodes || {};
+    for (const name in nodes){
+      const n = nodes[name];
+      if (!n || !n.isObject3D) continue;
+      const ax = new THREE.AxesHelper(mm(30));            // оси 30 мм
+      ax.material.depthTest = false;
+      ax.material.transparent = true;
+      ax.renderOrder = 998;
+      const lb = makeLabel(name);
+      ax.visible = lb.visible = state.nodes;
+      n.add(ax); n.add(lb);
+      nodeHelpers.push(ax, lb);
+    }
+  }
+
+  /* ---------------- панель анимации: слайдер на каждый group.parts ---------------- */
+  const RU = {
+    cap:'крышка отсека', mag:'магазин', magazine:'магазин', bolt:'затвор', slide:'кожух-затвор',
+    charge:'рукоятка взведения', chargingHandle:'рукоятка взведения', trigger:'спусковой крючок',
+    safety:'флажок предохранителя', pin:'чека', lever:'скоба', stock:'приклад', cover:'крышка', lid:'крышка'
+  };
+
+  // штатная траектория детали (модель может переопределить через group.partMotion)
+  function motionFor(name){
+    const custom = model.partMotion && model.partMotion[name];
+    if (custom) return { pos: custom.pos || [0,0,0], rot: custom.rot || [0,0,0] };
+    const n = String(name).toLowerCase();
+    if (/mag/.test(n))                  return { pos:[0,-0.110,0], rot:[0.12,0,0] };   // магазин вниз и наружу
+    if (/bolt|carrier|breech/.test(n))  return { pos:[0,0,0.030], rot:[0,0,0] };       // затвор назад (+Z)
+    if (/slide/.test(n))                return { pos:[0,0,0.032], rot:[0,0,0] };
+    if (/charg|cocking|handle/.test(n)) return { pos:[0,0,0.030], rot:[0,0,0] };
+    if (/trig/.test(n))                 return { pos:[0,0,0],     rot:[0.30,0,0] };
+    if (/saf|select|fire/.test(n))      return { pos:[0,0,0],     rot:[0,0,-1.40] };
+    if (/pin|ring/.test(n))             return { pos:[0.030,0.015,0], rot:[0,0,-1.20] };
+    if (/lever|spoon/.test(n))          return { pos:[0.050,0.030,0], rot:[-1.30,0,0] };
+    if (/cap|lid|cover|hatch|door/.test(n)) return { pos:[0,-0.022,0], rot:[0,-Math.PI*2.5,0] };
+    if (/stock|butt|fold/.test(n))      return { pos:[0,0,0],     rot:[0,-2.0,0] };
+    return { pos:[0,-0.020,0], rot:[0,0,0] };
+  }
+
+  function setPart(name, t){
+    const p = partState[name];
+    if (!p) return;
+    p.t = t;
+    p.obj.position.set(p.p0.x + p.m.pos[0]*t, p.p0.y + p.m.pos[1]*t, p.p0.z + p.m.pos[2]*t);
+    p.obj.rotation.set(p.r0.x + p.m.rot[0]*t, p.r0.y + p.m.rot[1]*t, p.r0.z + p.m.rot[2]*t);
+    if (p.input && Number(p.input.value) !== t) p.input.value = String(t);
+    if (p.out) p.out.textContent = t.toFixed(2);
+  }
+
+  function makeSliders(){
+    const host = $('anim-body');
+    host.textContent = '';
+    const parts = model.parts || {};
+    const keys = Object.keys(parts);
+    if (!keys.length){
+      const d = document.createElement('div'); d.className = 'empty';
+      d.textContent = 'У модели нет подвижных деталей';
+      host.appendChild(d);
+    }
+    for (const name of keys){
+      const obj = parts[name];
+      if (!obj || !obj.isObject3D) continue;
+      const wrap = document.createElement('label'); wrap.className = 'sl';
+      const nm = document.createElement('div'); nm.className = 'nm';
+      const b = document.createElement('b'); b.textContent = name;
+      const sub = document.createElement('span'); sub.textContent = RU[name] || '';
+      const em = document.createElement('em'); em.textContent = '0.00';
+      nm.append(b, sub, em);
+      const inp = document.createElement('input');
+      inp.type = 'range'; inp.min = '0'; inp.max = '1'; inp.step = '0.001'; inp.value = '0';
+      inp.setAttribute('aria-label', 'Деталь ' + name);
+      wrap.append(nm, inp);
+      host.appendChild(wrap);
+      // исходные position/rotation запомнены — слайдер всегда возвращает деталь на место
+      partState[name] = { obj, p0: obj.position.clone(), r0: obj.rotation.clone(), m: motionFor(name), input: inp, out: em, t: 0 };
+      inp.addEventListener('input', () => setPart(name, Number(inp.value)));
+    }
+    // переключатели опциональных сеттеров модели
+    const setters = [['setReticle','Марка'],['setBeam','Луч'],['setLight','Фонарь'],['setAmmo','Патроны'],['setDeployed','Разложено']];
+    const avail = setters.filter(s => typeof model[s[0]] === 'function');
+    if (avail.length){
+      const g = document.createElement('div'); g.className = 'grid gap';
+      for (const s of avail){
+        const btn = document.createElement('button');
+        btn.textContent = s[1];
+        let on = false;
+        btn.addEventListener('click', () => { on = !on; btn.classList.toggle('on', on); model[s[0]](on); });
+        g.appendChild(btn);
+      }
+      host.appendChild(g);
+    }
+  }
+
+  /* ---------------- циклы «Выстрел» и «Перезарядка» ---------------- */
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  function tween(name, from, to, dur){
+    return new Promise(res => {
+      const t0 = performance.now();
+      (function step(){
+        const k = Math.min(1, (performance.now() - t0) / dur);
+        setPart(name, from + (to - from) * k);
+        if (k < 1) requestAnimationFrame(step); else res();
+      })();
+    });
+  }
+  function findPart(re){ return Object.keys(partState).find(k => re.test(k.toLowerCase())); }
+
+  function recoilKick(){
+    return new Promise(res => {
+      const z0 = model.position.z, t0 = performance.now();
+      (function step(){
+        const k = Math.min(1, (performance.now() - t0) / 90);
+        model.position.z = z0 + Math.sin(k * Math.PI) * 0.004;    // отдача 4 мм за 90 мс
+        if (k < 1) requestAnimationFrame(step); else { model.position.z = z0; res(); }
+      })();
+    });
+  }
+
+  async function fire(){
+    if (busy) return; busy = true;
+    const b = findPart(/bolt|slide|charg/);
+    if (b){ await tween(b, 0, 1, 45); await tween(b, 1, 0, 45); }   // цикл затвора 90 мс
+    else await recoilKick();                                        // у рукояти затвора нет — короткая отдача
+    busy = false;
+  }
+
+  async function reload(){
+    if (busy) return; busy = true;
+    const m = findPart(/mag/);
+    if (m){ await tween(m, 0, 1, 220); await wait(260); await tween(m, 1, 0, 220); }
+    else {
+      const c = findPart(/cap|lid|cover/);                          // замена батареек: крышка вниз → пауза → вверх
+      if (c){ await tween(c, 0, 1, 380); await wait(240); await tween(c, 1, 0, 420); }
+    }
+    busy = false;
+    fire();
+  }
+
+  /* ---------------- скриншот и экспорт ---------------- */
+  function saveBlob(blob, name){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+  }
+
+  function screenshot(){
+    renderer.render(scene, camera);
+    const name = 'vfg_' + state.style + '_lod' + state.lod + '.png';
+    if (renderer.domElement.toBlob) renderer.domElement.toBlob(b => b && saveBlob(b, name), 'image/png');
+    else {
+      const a = document.createElement('a');
+      a.href = renderer.domElement.toDataURL('image/png'); a.download = name; a.click();
+    }
+  }
+
+  function exportGLB(){
+    const vis = nodeHelpers.map(h => h.visible);
+    nodeHelpers.forEach(h => { h.visible = false; });                // хелперы в GLB не попадают
+    const done = () => nodeHelpers.forEach((h, i) => { h.visible = vis[i]; });
+    new GLTFExporter().parse(
+      model,
+      (buf) => { done(); saveBlob(new Blob([buf], { type:'model/gltf-binary' }), 'vfg_' + state.style + '_lod' + state.lod + '.glb'); },
+      (err) => { done(); alert('Экспорт GLB не удался: ' + err); },
+      { binary:true, onlyVisible:true }
+    );
+  }
+
+  /* ---------------- переключатели ---------------- */
+  function applyWire(){
+    model.traverse(o => { if (o.isMesh && o.material) o.material.wireframe = state.wire; });
+  }
+
+  function applyBounds(){
+    if (boundsHelper){ scene.remove(boundsHelper); boundsHelper.geometry.dispose(); boundsHelper = null; }
+    if (!state.bounds) return;
+    boundsHelper = new THREE.Box3Helper(modelBox(), 0x5E9FE8);
+    boundsHelper.material.depthTest = false;
+    scene.add(boundsHelper);
+  }
+
+  function bind(id, fn){
+    const e = $(id);
+    e.disabled = false;
+    e.addEventListener('click', () => fn(e));
+    return e;
+  }
+
+  bind('b-wire',   e => { state.wire   = !state.wire;   e.classList.toggle('on', state.wire); applyWire(); });
+  bind('b-nodes',  e => { state.nodes  = !state.nodes;  e.classList.toggle('on', state.nodes); nodeHelpers.forEach(h => { h.visible = state.nodes; }); });
+  bind('b-bounds', e => { state.bounds = !state.bounds; e.classList.toggle('on', state.bounds); applyBounds(); });
+  bind('b-grid',   e => { state.grid   = !state.grid;   e.classList.toggle('on', state.grid); grid.visible = state.grid; });
+  bind('b-rot',    e => { state.rot    = !state.rot;    e.classList.toggle('on', state.rot); controls.autoRotate = state.rot; });
+  bind('b-reset',  () => resetCamera());
+  ['0','1','2'].forEach(l => bind('b-lod' + l, () => {
+    state.lod = Number(l);
+    ['0','1','2'].forEach(k => $('b-lod' + k).classList.toggle('on', k === l));
+    buildModel(false); applyBounds();
+  }));
+  bind('b-fire',   () => fire());
+  bind('b-reload', () => reload());
+  bind('b-png',    () => screenshot());
+  bind('b-glb',    () => exportGLB());
+  bind('b-style',  e => {
+    state.style = state.style === 'vertical' ? 'angled' : 'vertical';
+    e.textContent = 'Стиль: ' + state.style;
+    buildModel(true); applyBounds();
+  });
+
+  /* Кусок планки Picatinny: показывает, что губки и сухари реально садятся на пазы. */
+  let railObj = null;
+  function applyRail(){
+    if (railObj){
+      scene.remove(railObj);
+      if (railObj.dispose) railObj.dispose();
+      railObj = null;
+    }
+    if (state.rail && typeof buildRailStub === 'function'){
+      railObj = buildRailStub(THREE, { shadows:true });
+      scene.add(railObj);
+    }
+  }
+  applyRail();
+  bind('b-rail',   e => { state.rail = !state.rail; e.classList.toggle('on', state.rail); applyRail(); });
+
+  /* ---------------- статистика ---------------- */
+  const nf = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+
+  function updateStats(){
+    let tris = 0, meshes = 0;
+    const mats = new Set();
+    model.traverse(o => {
+      if (!o.isMesh || !o.geometry) return;
+      meshes++;
+      if (o.material) mats.add(o.material.uuid);
+      const g = o.geometry;
+      tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    });
+    const s = modelBox().getSize(new THREE.Vector3());
+    const rows = [
+      ['треугольники', nf(tris)],
+      ['меши',         String(meshes)],
+      ['материалы',    String(mats.size)],
+      ['draw calls',    String(renderer.info.render.calls)],
+      ['ширина X, мм',  (s.x * 1000).toFixed(1)],
+      ['высота Y, мм',   (s.y * 1000).toFixed(1)],
+      ['длина Z, мм',    (s.z * 1000).toFixed(1)],
+      ['узлы',          String(Object.keys(model.nodes || {}).length)],
+      ['LOD / стиль',   state.lod + ' / ' + state.style]
+    ];
+    $('stats-body').innerHTML = rows.map(r => '<div class="r"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('');
+
+    let html;
+    if (valid && valid.ok) html = '<div class="ok">● узлы на месте: ' + valid.nodes.join(', ') + '</div>';
+    else {
+      const list = (valid && valid.missing.length ? valid.missing : ['нет данных проверки']);
+      html = '<div class="er">● не хватает:</div><ul>' + list.map(x => '<li class="er">' + x + '</li>').join('') + '</ul>';
+    }
+    if (valid && valid.warnings.length) html += valid.warnings.map(w => '<div class="wr">▲ ' + w + '</div>').join('');
+    $('chk').innerHTML = html;
+  }
+
+  /* ---------------- resize и цикл кадра ---------------- */
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  buildModel(true);
+
+  let acc = 0, last = performance.now();
+  renderer.setAnimationLoop(() => {
+    const now = performance.now();
+    acc += now - last; last = now;
+    controls.update();
+    renderer.render(scene, camera);
+    if (acc > 250){ acc = 0; updateStats(); }     // draw calls читаем после кадра
+  });
+}
+
+// ==== МОДЕЛЬ: НАЧАЛО ====
+/* =============================================================================
+   VFG - вертикальная тактическая передняя рукоять (боевое исполнение).
+   Процедурная геометрия, без текстур и внешних ассетов.
+
+   СИСТЕМА КООРДИНАТ
+     -Z - вперёд (к дулу), +Y - вверх, +X - вправо. Геометрия строится
+     в миллиметрах и переводится в метры в fgGeom().
+     Origin (0,0,0) - центр плоскости прилегания к планке Пикатинни на 6 часов.
+     Вверх (+Y) выходят только губки и упорные сухари - они обхватывают
+     планку и заходят в её пазы.
+
+   ЛОГИКА СБОРКИ (почему ничего не висит в воздухе)
+     1 corpus (алюминий) - фрезерованный корпус-зажим: канал 21,2 мм с фасками 45°,
+       неподвижная правая губка, карман под подвижный прижим слева,
+       два упорных сухаря (шаг 10,16) на дне канала.
+     2 bar (сталь) - подвижная губка лежит дном на полу кармана, крюк 45° цепляет планку.
+     3 bolt (сталь) - поперечный винт проходит сквозь прижим и вкручивается в корпус;
+       барашек с накаткой прижат торцом к щеке прижима.
+     4 grip (полимер) - колонна с фланцем; фланец утоплен в корпус на 0,4 мм и
+       повторяет его след -> стык читается как разъём двух деталей.
+     5 cap (полимер) - крышка отсека: пробка входит в колодец, буртик садится
+       на посадочный поясок колонны. Подвижная деталь group.parts.cap.
+
+   ГАБАРИТЫ: 38,6 (X, с барашком) x 94,5 (Y) x 52 (Z)
+
+   КОНТРАКТ: group.nodes = {mount, gripL, thumbRest}; group.parts = {cap}; group.dispose()
+            buildRailStub(THREE, {len}) - кусок планки для проверки посадки.
+============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   ЯДРО: треугольный "суп" в миллиметрах с явными нормалями.
+--------------------------------------------------------------------------- */
+function fgSoup(){ return { p: [], n: [] }; }
+function fgSub(a, b){ return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function fgCross(a, b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function fgLen(a){ return Math.hypot(a[0], a[1], a[2]); }
+function fgUnit(a){ const l = fgLen(a) || 1; return [a[0]/l, a[1]/l, a[2]/l]; }
+
+function fgTri(g, A, B, C, nA, nB, nC){
+  if (!nA){
+    const f = fgCross(fgSub(B, A), fgSub(C, A));
+    if (fgLen(f) < 1e-12) return;
+    nA = nB = nC = fgUnit(f);
+  }
+  g.p.push(A[0],A[1],A[2], B[0],B[1],B[2], C[0],C[1],C[2]);
+  g.n.push(nA[0],nA[1],nA[2], nB[0],nB[1],nB[2], nC[0],nC[1],nC[2]);
+}
+function fgQuad(g, A, B, C, D, nA, nB, nC, nD){
+  if (!nA){
+    let f = fgCross(fgSub(B, A), fgSub(D, A));
+    if (fgLen(f) < 1e-12) f = fgCross(fgSub(C, B), fgSub(A, B));
+    if (fgLen(f) < 1e-12) return;
+    nA = nB = nC = nD = fgUnit(f);
+  }
+  fgTri(g, A, B, C, nA, nB, nC);
+  fgTri(g, A, C, D, nA, nC, nD);
+}
+function fgAppend(dst, src){
+  for (let i = 0; i < src.p.length; i++) dst.p.push(src.p[i]);
+  for (let i = 0; i < src.n.length; i++) dst.n.push(src.n[i]);
+  return dst;
+}
+function fgMap(g, fn, fnN){
+  for (let i = 0; i < g.p.length; i += 3){
+    const q = fn([g.p[i], g.p[i+1], g.p[i+2]]);
+    g.p[i] = q[0]; g.p[i+1] = q[1]; g.p[i+2] = q[2];
+    if (fnN){
+      const m = fnN([g.n[i], g.n[i+1], g.n[i+2]]);
+      g.n[i] = m[0]; g.n[i+1] = m[1]; g.n[i+2] = m[2];
+    }
+  }
+  return g;
+}
+function fgRotY(g, a){
+  const c = Math.cos(a), s = Math.sin(a);
+  const R = (v) => [ v[0]*c + v[2]*s, v[1], -v[0]*s + v[2]*c ];
+  return fgMap(g, R, R);
+}
+function fgTranslate(g, dx, dy, dz){ return fgMap(g, (v) => [v[0]+dx, v[1]+dy, v[2]+dz]); }
+
+function fgGeom(THREE, g){
+  const pos = new Float32Array(g.p.length);
+  for (let i = 0; i < g.p.length; i++) pos[i] = g.p[i] * 0.001;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal',   new THREE.Float32BufferAttribute(new Float32Array(g.n), 3));
+  return geo;
+}
+
+/* --- триангуляция простого многоугольника (ear clipping) --- */
+function fgInTri(p, a, b, c){
+  const d = (b[1]-c[1])*(a[0]-c[0]) + (c[0]-b[0])*(a[1]-c[1]);
+  if (Math.abs(d) < 1e-12) return false;
+  const u = ((b[1]-c[1])*(p[0]-c[0]) + (c[0]-b[0])*(p[1]-c[1])) / d;
+  const v = ((c[1]-a[1])*(p[0]-c[0]) + (a[0]-c[0])*(p[1]-c[1])) / d;
+  return u > 1e-9 && v > 1e-9 && (u + v) < 1 - 1e-9;
+}
+function fgTriangulate(pts){
+  const n = pts.length;
+  if (n < 3) return [];
+  const idx = [];
+  let area = 0;
+  for (let i = 0; i < n; i++){
+    const a = pts[i], b = pts[(i+1) % n];
+    area += a[0]*b[1] - b[0]*a[1];
+    idx.push(i);
+  }
+  if (area < 0) idx.reverse();
+  const out = [];
+  let guard = 0;
+  while (idx.length > 3 && guard++ < 5000){
+    let cut = false;
+    for (let i = 0; i < idx.length; i++){
+      const i0 = idx[(i + idx.length - 1) % idx.length], i1 = idx[i], i2 = idx[(i + 1) % idx.length];
+      const A = pts[i0], B = pts[i1], C = pts[i2];
+      if ((B[0]-A[0])*(C[1]-A[1]) - (B[1]-A[1])*(C[0]-A[0]) <= 1e-10) continue;
+      let ok = true;
+      for (const j of idx){
+        if (j === i0 || j === i1 || j === i2) continue;
+        if (fgInTri(pts[j], A, B, C)){ ok = false; break; }
+      }
+      if (!ok) continue;
+      out.push([i0, i1, i2]);
+      idx.splice(i, 1);
+      cut = true;
+      break;
+    }
+    if (!cut) break;
+  }
+  if (idx.length === 3) out.push([idx[0], idx[1], idx[2]]);
+  return out;
+}
+
+/* --- протяжка профиля вдоль +Z --- */
+function fgSweep(g, stations, opts){
+  opts = opts || {};
+  const S = stations.length;
+  for (let s = 0; s < S - 1; s++){
+    const a = stations[s], b = stations[s + 1];
+    const N = a.pts.length;
+    for (let i = 0; i < N; i++){
+      const j = (i + 1) % N;
+      fgQuad(g,
+        [a.pts[i][0], a.pts[i][1], a.z],
+        [a.pts[j][0], a.pts[j][1], a.z],
+        [b.pts[j][0], b.pts[j][1], b.z],
+        [b.pts[i][0], b.pts[i][1], b.z]);
+    }
+  }
+  if (opts.cap0 !== false){
+    const st = stations[0];
+    for (const t of fgTriangulate(st.pts)) fgTri(g,
+      [st.pts[t[0]][0], st.pts[t[0]][1], st.z],
+      [st.pts[t[2]][0], st.pts[t[2]][1], st.z],
+      [st.pts[t[1]][0], st.pts[t[1]][1], st.z],
+      [0,0,-1], [0,0,-1], [0,0,-1]);
+  }
+  if (opts.cap1 !== false){
+    const st = stations[S - 1];
+    for (const t of fgTriangulate(st.pts)) fgTri(g,
+      [st.pts[t[0]][0], st.pts[t[0]][1], st.z],
+      [st.pts[t[1]][0], st.pts[t[1]][1], st.z],
+      [st.pts[t[2]][0], st.pts[t[2]][1], st.z],
+      [0,0,1], [0,0,1], [0,0,1]);
+  }
+  return g;
+}
+function fgInset(pts, dirs, d){
+  return pts.map((p, i) => [p[0] + dirs[i][0] * d, p[1] + dirs[i][1] * d]);
+}
+
+/* --- поверхность по сетке колец (нормали - центральные разности) --- */
+function fgGridNormals(grid, flip){
+  const R = grid.length, S = grid[0].length, nrm = [];
+  for (let i = 0; i < R; i++){
+    const row = [];
+    for (let j = 0; j < S; j++){
+      const jp = (j + 1) % S, jm = (j - 1 + S) % S;
+      const ip = Math.min(i + 1, R - 1), im = Math.max(i - 1, 0);
+      let n = fgCross(fgSub(grid[i][jp], grid[i][jm]), fgSub(grid[ip][j], grid[im][j]));
+      if (fgLen(n) < 1e-12) n = [0, 1, 0];
+      n = fgUnit(n);
+      row.push(flip ? [-n[0], -n[1], -n[2]] : n);
+    }
+    nrm.push(row);
+  }
+  return nrm;
+}
+function fgGridSurface(g, grid, flip){
+  const nrm = fgGridNormals(grid, flip);
+  const R = grid.length, S = grid[0].length;
+  for (let i = 0; i < R - 1; i++){
+    for (let j = 0; j < S; j++){
+      const jp = (j + 1) % S;
+      const A = grid[i][j], B = grid[i][jp], C = grid[i+1][jp], D = grid[i+1][j];
+      if (flip) fgQuad(g, A, D, C, B, nrm[i][j], nrm[i+1][j], nrm[i+1][jp], nrm[i][jp]);
+      else      fgQuad(g, A, B, C, D, nrm[i][j], nrm[i][jp], nrm[i+1][jp], nrm[i+1][j]);
+    }
+  }
+  return nrm;
+}
+/** Кольцевая перемычка между двумя кольцами с общей нормалью n. */
+function fgBridge(g, ringA, ringB, n){
+  const S = ringA.length;
+  for (let j = 0; j < S; j++){
+    const jp = (j + 1) % S;
+    fgQuad(g, ringA[j], ringA[jp], ringB[jp], ringB[j], n, n, n, n);
+  }
+}
+/** Плоская заглушка кольца веером из центра; rev задаёт направ��ение обхода. */
+function fgCap(g, ring, center, n, rev){
+  const S = ring.length;
+  for (let j = 0; j < S; j++){
+    const jp = (j + 1) % S;
+    if (rev) fgTri(g, center, ring[jp], ring[j], n, n, n);
+    else     fgTri(g, center, ring[j], ring[jp], n, n, n);
+  }
+}
+function fgStep(e0, e1, x){
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+/* =============================================================================
+   1. КОРПУС-ЗАЖИМ (алюминий) + УПОРНЫЕ СУХАРИ
+   Профиль в плоскости XY, протяжка вдоль Z (обход CCW).
+     y = 0     - плоскость прилегания планки (дно канала)
+     y = +3.9  - верх губок (обхват планки сверху)
+     y = -9.0  - пол кармана под подвижный прижим
+     y = -14.0 - низ корпуса (стык с фланцем колонны)
+============================================================================= */
+const FG_CORPUS_PTS = [
+  [ 15.60, -14.00],   //  0 низ справа
+  [ 16.80, -11.80],   //  1 правая стенка внизу
+  [ 16.80,   2.40],   //  2 правая стенка вверху
+  [ 15.40,   3.90],   //  3 фаска верхней кромки губки
+  [  7.90,   3.90],   //  4 верх губки (к каналу)
+  [  7.90,   2.55],   //  5 внутренняя вертикаль губки
+  [ 10.45,   0.00],   //  6 рабочая фаска 45° (прижимает планку)
+  [ -7.40,   0.00],   //  7 дно канала влево
+  [ -7.40,  -9.00],   //  8 внутренняя стенка кармана   (вариант "карман")
+  [-16.90,  -9.00],   //  9 пол кармана                    (вариант "карман")
+  [-16.90, -11.80],   // 10 левая стенка
+  [-15.60, -14.00],   // 11 низ слева
+];
+// тот же профиль без кармана (торцевые участки |z| > 15 - сплошной металл)
+const FG_CORPUS_SOLID = FG_CORPUS_PTS.map((p, i) =>
+  i === 8 ? [-7.40, -0.60] : i === 9 ? [-16.90, -0.60] : p);
+// направления снятия торцевой фаски (0 - точка не двигается: геометрия канала)
+const FG_CORPUS_DIR = [
+  [-0.70, 0.70], [-1, 0], [-1, 0], [-0.70, -0.70],
+  [0, 0], [0, 0], [0, 0], [0, 0], [0, 0],
+  [0, 0], [1, 0], [0.70, 0.70],
+];
+const FG_CORPUS_DIR_SOLID = FG_CORPUS_DIR.map((d, i) => (i === 9 ? [1, 0] : d));
+
+function fgBuildCorpus(){
+  const g = fgSoup();
+  const ch = 1.20;                       // торцевая фаска 45°
+  const solid = FG_CORPUS_SOLID, pocket = FG_CORPUS_PTS;
+  fgSweep(g, [
+    { z: -26.0, pts: fgInset(solid, FG_CORPUS_DIR_SOLID, ch) },
+    { z: -24.8, pts: solid },
+    { z: -15.0, pts: solid },
+    { z: -15.0, pts: pocket },           // торцевая стенка кармана
+    { z:  15.0, pts: pocket },
+    { z:  15.0, pts: solid },            // торцевая стенка кармана
+    { z:  24.8, pts: solid },
+    { z:  26.0, pts: fgInset(solid, FG_CORPUS_DIR_SOLID, ch) },
+  ]);
+
+  /* Упорные сухари (recoil lugs): входят в поперечные пазы планки.
+     Шаг 10,16 мм; ширина 5,0 (паз 5,35). Опираются на сплошное дно канала
+     (x от -7,35 до +10,45), т.е. никогда не выступают над карманом. */
+  const lugPts = [                       // локальный x -> Z модели, y -> Y (обход CCW)
+    [-2.50, -0.80], [ 2.50, -0.80], [ 2.50, 2.40],
+    [ 1.90,  3.00], [-1.90,  3.00], [-2.50, 2.40],
+  ];
+  for (const zc of [-5.08, 5.08]){
+    const lug = fgSoup();
+    fgSweep(lug, [
+      { z: -7.35, pts: lugPts },         // локальная ось z -> глобальный X
+      { z: 10.45, pts: lugPts },
+    ]);
+    fgRotY(lug, Math.PI / 2);            // (x,y,z) -> (z, y, -x)
+    fgTranslate(lug, 0, 0, zc);
+    fgAppend(g, lug);
+  }
+  return g;
+}
+
+/* =============================================================================
+   2. ПОДВИЖНЫЙ ПРИЖИМ (сталь)
+   Лежит в кармане корпуса: дно -8,95 (пол кармана -9,0), внутренняя щека
+   x = -7,6 (стенка кармана -7,4) - технологические зазоры 0,05-0,2 мм.
+============================================================================= */
+function fgBuildBar(){
+  const pts = [
+    [ -7.60, -8.60],   // внутренняя щека внизу
+    [ -7.60,  0.00],   // внутренняя щека до уровня планки
+    [-10.35,  0.00],   // площадка под планкой
+    [ -7.90,  2.45],   // рабочая фаска 45°
+    [ -7.90,  3.90],   // кромка крюка
+    [-15.40,  3.90],   // верх прижима
+    [-16.30,  3.00],   // фаска
+    [-16.30, -8.60],   // наружная щека (сюда упирается барашек)
+    [-15.90, -8.95],   // фаска
+    [ -8.00, -8.95],   // дно
+  ];
+  const g = fgSoup();
+  fgSweep(g, [{ z: -14.60, pts }, { z: 14.60, pts }]);
+  return g;
+}
+
+/* =============================================================================
+   3. ПОПЕРЕЧНЫЙ ВИНТ С БАРАШКОМ (сталь), ось X на высоте y = -5
+   Стержень прошивает прижим и уходит в резьбу корпуса (x = +7,5).
+============================================================================= */
+function fgBuildBolt(S, knurl){
+  const sec = [
+    { x: -21.80, r: 5.60 },
+    { x: -21.60, r: 6.60 },
+    { x: -21.20, r: 7.50 },
+    { x: -21.00, r: 7.50, k: 1 },   // накатка барашка
+    { x: -16.40, r: 7.50, k: 1 },
+    { x: -16.20, r: 7.50 },
+    { x: -15.80, r: 6.90 },         // опорный торец по щеке прижима
+    { x: -15.60, r: 2.75 },
+    { x:   7.50, r: 2.75 },         // резьбовой конец внутри корпуса
+  ];
+  const grid = sec.map((s) => {
+    const ring = [];
+    for (let j = 0; j < S; j++){
+      const f = (j / S) * Math.PI * 2;
+      let r = s.r;
+      if (s.k && knurl > 0) r -= 0.42 * Math.pow(0.5 + 0.5 * Math.cos(knurl * f), 1.4);
+      ring.push([s.x, r * Math.cos(f), r * Math.sin(f)]);
+    }
+    return ring;
+  });
+  const g = fgSoup();
+  fgGridSurface(g, grid, false);
+  fgCap(g, grid[0], [sec[0].x, 0, 0], [-1, 0, 0], false);
+  fgCap(g, grid[grid.length - 1], [sec[sec.length - 1].x, 0, 0], [1, 0, 0], true);
+  fgTranslate(g, 0, -5.0, 0);
+  return g;
+}
+
+/* =============================================================================
+   4. КОЛОННА РУКОЯТИ (полимер)
+   Сечение - суперэллипс (от прямоугольного фланца внизу к овалу хвата).
+   Таблица: [s (мм вниз от верха фланца), rx, rz, показатель, глубина долов].
+   Антропометрия: перехват 26,2 x 32,4 (обхват ~92 мм), расширение под
+   ладонь ниже середины и упорный буртик внизу (мизинец не соскальзывает).
+============================================================================= */
+const FG_COL = [
+  [  0.0, 14.90, 20.60, 2.95, 0.00],   // фланец (утоплен в корпус; корпус свесом над ним)
+  [  1.6, 15.05, 20.80, 2.95, 0.00],   // поясок-разъём: видимый шов полимер/металл
+  [  3.0, 15.00, 20.70, 2.90, 0.00],
+  [  4.8, 14.60, 19.40, 2.72, 0.15],   // короткая юбка (не "ножка стола")
+  [  7.2, 14.20, 18.10, 2.55, 0.40],
+  [ 10.2, 13.90, 17.30, 2.40, 0.70],
+  [ 14.0, 13.72, 16.85, 2.30, 0.90],
+  [ 19.0, 13.62, 16.65, 2.22, 1.00],
+  [ 26.0, 13.58, 16.55, 2.16, 1.00],   // перехват 27,2 x 33,1 (обхват ~95 мм)
+  [ 34.0, 13.66, 16.65, 2.12, 1.00],
+  [ 42.0, 13.86, 16.95, 2.10, 1.00],
+  [ 50.0, 14.06, 17.25, 2.08, 1.00],   // подушка под ладонь
+  [ 58.0, 14.20, 17.45, 2.06, 1.00],
+  [ 65.0, 14.30, 17.60, 2.08, 0.92],
+  [ 70.0, 14.50, 17.90, 2.10, 0.62],
+  [ 73.2, 15.10, 18.60, 2.15, 0.25],   // упорный буртик под мизинец
+  [ 74.6, 14.90, 18.35, 2.15, 0.00],
+  [ 75.9, 14.20, 17.50, 2.10, 0.00],
+  [ 76.6, 13.90, 17.20, 2.10, 0.00],   // посадочный поясок под крышку
+];
+const FG_TOP_Y = -13.60;                 // верх фланца (низ корпуса -14,0)
+
+function fgCR(p0, p1, p2, p3, t){
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * (2*p1 + (-p0 + p2)*t + (2*p0 - 5*p1 + 4*p2 - p3)*t2 + (-p0 + 3*p1 - 3*p2 + p3)*t3);
+}
+function fgSampleCol(tbl, u){
+  const n = tbl.length;
+  const i = Math.max(0, Math.min(n - 2, Math.floor(u)));
+  const t = Math.max(0, Math.min(1, u - i));
+  const p0 = tbl[Math.max(0, i - 1)], p1 = tbl[i], p2 = tbl[i + 1], p3 = tbl[Math.min(n - 1, i + 2)];
+  const out = [];
+  for (let k = 0; k < p1.length; k++) out.push(fgCR(p0[k], p1[k], p2[k], p3[k], t));
+  return out;
+}
+/** Наклон оси рукояти (только для style='angled'): плавный выход на угол. */
+function fgTilt(s, maxA){ return maxA === 0 ? 0 : maxA * fgStep(6, 30, s); }
+
+/** Кольцо-суперэллипс в наклонной плоскости (поворот вокруг X на a). */
+function fgRing(S, center, a, rx, rz, e, disp){
+  const ca = Math.cos(a), sa = Math.sin(a), k = 2 / e, ring = [];
+  for (let j = 0; j < S; j++){
+    const th = (j / S) * Math.PI * 2;
+    const cu = Math.cos(th), su = Math.sin(th);
+    const sx = Math.sign(cu) * Math.pow(Math.abs(cu), k);
+    const sz = Math.sign(su) * Math.pow(Math.abs(su), k);
+    const d = disp ? disp(th) : 0;
+    const lx = sx * (rx + d), lz = sz * (rz + d);
+    ring.push([center[0] + lx, center[1] - lz * sa, center[2] + lz * ca]);
+  }
+  return ring;
+}
+function fgRotX(g, a){
+  const c = Math.cos(a), s = Math.sin(a);
+  const R = (v) => [v[0], v[1]*c - v[2]*s, v[1]*s + v[2]*c];
+  return fgMap(g, R, R);
+}
+/** Рельеф поверхности колонны: продольные долы + боковые утопленные площадки. */
+function fgGripField(th, y, fl, P){
+  const a = Math.abs(Math.atan2(Math.sin(th), Math.cos(th)));
+  const dl = Math.min(a, Math.PI - a);                       // 0 на боковой оси
+  const pan = fgStep(0.60, 0.42, dl) * fgStep(-27, -31, y) * fgStep(-76, -72, y);
+  let d = -0.45 * pan;
+  const f = Math.max(0, Math.min(1, fl)) * (1 - pan);
+  if (f > 0) d -= P.fluteDepth * f * Math.pow(0.5 + 0.5 * Math.cos(P.flutes * th + Math.PI), 2);
+  return d;
+}
+
+function fgBuildGrip(P, S, R, tiltMax, bore){
+  const g = fgSoup();
+  const samples = [];
+  for (let i = 0; i < R; i++) samples.push(fgSampleCol(FG_COL, (i / (R - 1)) * (FG_COL.length - 1)));
+  const grid = [], centers = [];
+  let y = FG_TOP_Y, z = 0, aLast = 0;
+  for (let i = 0; i < R; i++){
+    const c = samples[i];
+    if (i > 0){
+      const ds = c[0] - samples[i - 1][0];
+      const am = fgTilt(0.5 * (c[0] + samples[i - 1][0]), tiltMax);
+      y -= ds * Math.cos(am);
+      z -= ds * Math.sin(am);
+    }
+    const a = fgTilt(c[0], tiltMax);
+    aLast = a;
+    const ctr = [0, y, z];
+    centers.push(ctr);
+    grid.push(fgRing(S, ctr, a, c[1], c[2], c[3], (th) => fgGripField(th, y, c[4], P)));
+  }
+  fgGridSurface(g, grid, false);
+  fgCap(g, grid[0], centers[0], [0, 1, 0], true);           // верхний торец (внутри корпуса)
+
+  const seat = centers[R - 1];
+  const down = [0, -Math.cos(aLast), -Math.sin(aLast)];
+  if (bore){
+    /* Колодец отсека глубиной 28 мм: стенка 2,5 мм - реально для полимера. */
+    const rb = 10.60, dep = 28;
+    const up = [0, Math.cos(aLast), Math.sin(aLast)];
+    const cTop = [seat[0] + up[0]*dep, seat[1] + up[1]*dep, seat[2] + up[2]*dep];
+    const rBot = fgRing(S, seat, aLast, rb, rb, 2);
+    const rTop = fgRing(S, cTop, aLast, rb, rb, 2);
+    fgBridge(g, grid[R - 1], rBot, down);                   // кольцевой торец вниз
+    fgGridSurface(g, [rTop, rBot], true);                   // стенка колодца (нормали внутрь)
+    fgCap(g, rTop, cTop, down, false);                      // дно колодца
+  } else {
+    fgCap(g, grid[R - 1], seat, down, false);
+  }
+  return { soup: g, seat, tilt: aLast, centers, samples };
+}
+
+/* =============================================================================
+   5. КРЫШКА ОТСЕКА (полимер) - подвижная деталь.
+   Пробка входит в колодец, буртик садится на поясок, снизу - накатка
+   и шлиц под монету (строится в локальных координатах и ставится на место).
+============================================================================= */
+/** Квад с автоматическим выбором обхода по опорному направлению ref. */
+function fgQuadRef(g, A, B, C, D, ref){
+  const n = fgCross(fgSub(B, A), fgSub(D, A));
+  if (n[0]*ref[0] + n[1]*ref[1] + n[2]*ref[2] < 0) fgQuad(g, A, D, C, B);
+  else fgQuad(g, A, B, C, D);
+}
+/** Шлиц под монету: дно крышки делится на две площадки + утопленное дно. */
+function fgSlotFace(g, ring, yFloor, hw){
+  const yb = ring[0][1], S = ring.length;
+  const zone = (x) => (x > hw ? 1 : x < -hw ? -1 : 0);
+  const seq = [];
+  for (let j = 0; j < S; j++){
+    const A = ring[j], B = ring[(j + 1) % S];
+    seq.push({ p: A, cross: false });
+    const hits = [];
+    for (const xc of [hw, -hw]){
+      const dx = B[0] - A[0];
+      if (Math.abs(dx) < 1e-9) continue;
+      const t = (xc - A[0]) / dx;
+      if (t > 1e-6 && t < 1 - 1e-6) hits.push({ t, p: [xc, yb, A[2] + (B[2] - A[2]) * t] });
+    }
+    hits.sort((u, v) => u.t - v.t);
+    for (const h of hits) seq.push({ p: h.p, cross: true });
+  }
+  const cross = [];
+  for (let i = 0; i < seq.length; i++) if (seq[i].cross) cross.push(i);
+  if (cross.length !== 4) return false;                       // страховка
+  const arc = (a, b) => {                                     // точки от a до b включительно
+    const out = [];
+    for (let i = a; ; i = (i + 1) % seq.length){
+      out.push(seq[i].p);
+      if (i === b) break;
+    }
+    return out;
+  };
+  const [i1, i2, i3, i4] = cross;
+  const arcTop = arc(i1, i2), arcLeft = arc(i2, i3), arcBot = arc(i3, i4), arcRight = arc(i4, i1);
+  const down = [0, -1, 0];
+  const emit = (poly) => {
+    const flat = poly.map((p) => [p[0], p[2]]);
+    for (const t of fgTriangulate(flat))
+      fgTri(g, poly[t[0]], poly[t[1]], poly[t[2]], down, down, down);
+  };
+  emit(arcRight); emit(arcLeft);
+  const lift = (p) => [p[0], yFloor, p[2]];
+  emit([].concat(arcTop.map(lift), arcBot.map(lift)));        // дно шлица
+  const c1 = seq[i1].p, c2 = seq[i2].p, c3 = seq[i3].p, c4 = seq[i4].p;
+  fgQuadRef(g, c1, lift(c1), lift(c4), c4, [-1, 0, 0]);       // стенка шлица x=+hw
+  fgQuadRef(g, c3, lift(c3), lift(c2), c2, [ 1, 0, 0]);       // стенка шлица x=-hw
+  for (const a of [arcTop, arcBot]){                          // торцы шлица по кромке
+    for (let i = 0; i < a.length - 1; i++){
+      const A = a[i], B = a[i + 1];
+      fgQuadRef(g, A, B, lift(B), lift(A), [0, 0, A[2] + B[2]]);
+    }
+  }
+  return true;
+}
+
+function fgBuildCap(S, knurl, slot){
+  const g = fgSoup();
+  const R = [                       // [s вниз от пояска, rx, rz, e, накатка]
+    [0.00, 13.90, 17.20, 2.10, 0],  // совпадает с посадочным пояском колонны
+    [0.70, 14.20, 17.50, 2.10, 1],
+    [3.20, 14.20, 17.50, 2.10, 1],  // пояс накатки
+    [4.10, 13.40, 16.60, 2.10, 0],
+    [4.70, 11.55, 14.35, 2.05, 0],
+  ];
+  const kn = (th) => -0.45 * Math.pow(0.5 + 0.5 * Math.cos(knurl * th), 1.3);
+  const rings = R.map((r) => fgRing(S, [0, -r[0], 0], 0, r[1], r[2], r[3], r[4] && knurl ? kn : null));
+  fgGridSurface(g, rings, false);
+  const last = rings[rings.length - 1];
+  if (!slot || !fgSlotFace(g, last, -4.70 + 1.60, 1.70))
+    fgCap(g, last, [0, -4.70, 0], [0, -1, 0], false);
+  /* Пробка в колодец (видна, когда крышка снята анимацией). */
+  const plugBot = fgRing(S, [0, 0.20, 0], 0, 10.35, 10.35, 2);
+  const plugTop = fgRing(S, [0, 6.80, 0], 0, 10.35, 10.35, 2);
+  fgGridSurface(g, [plugTop, plugBot], false);
+  fgCap(g, plugTop, [0, 6.80, 0], [0, 1, 0], true);
+  fgBridge(g, plugBot, rings[0], [0, 1, 0]);                  // опорный торец буртика
+  return g;
+}
+
+/* =============================================================================
+   6. СБОРКА
+============================================================================= */
+function buildForegrip(THREE, opts){
+  const P = Object.assign({
+    style: 'vertical',
+    lod: 1,
+    simpleMetal: false,
+    shadows: true,
+    flutes: 10,
+    fluteDepth: 0.55,
+  }, opts || {});
+  const lod = Math.max(0, Math.min(2, P.lod | 0));
+  const angled = P.style === 'angled';
+  const SEG   = [100, 40, 20][lod];      // сегментов по окружности колонны
+  const RINGS = [96, 34, 18][lod];       // колец по высоте
+  const SEGB  = [48, 24, 12][lod];       // винт
+  const SEGC  = [72, 32, 16][lod];       // крышка
+  const knurlB = [16, 8, 0][lod];
+  const knurlC = [24, 10, 0][lod];
+  const tiltMax = angled ? 32 * Math.PI / 180 : 0;
+
+  const group = new THREE.Group();
+  group.name = 'foregrip';
+
+  /* ---------- материалы ---------- */
+  const MP = THREE.MeshPhysicalMaterial || THREE.MeshStandardMaterial;
+  const matPoly = new MP({ color: 0x1b1d20, roughness: 0.58, metalness: 0.02 });
+  if ('clearcoat' in matPoly){ matPoly.clearcoat = 0.18; matPoly.clearcoatRoughness = 0.55; }
+  const matAlu = new THREE.MeshStandardMaterial({ color: 0x25272b, roughness: 0.40, metalness: 0.88 });
+  const matSteel = P.simpleMetal ? matAlu
+    : new THREE.MeshStandardMaterial({ color: 0x8b9199, roughness: 0.28, metalness: 0.95 });
+  const mats = [matPoly, matAlu];
+  if (!P.simpleMetal) mats.push(matSteel);
+
+  const geos = [];
+  const mk = (name, soup, mat) => {
+    const geo = fgGeom(THREE, soup);
+    geos.push(geo);
+    const m = new THREE.Mesh(geo, mat);
+    m.name = name;
+    m.castShadow = !!P.shadows;
+    m.receiveShadow = !!P.shadows;
+    group.add(m);
+    return m;
+  };
+
+  /* ---------- детали ---------- */
+  mk('corpus', fgBuildCorpus(), matAlu);
+  mk('clamp_bar', fgBuildBar(), matSteel);
+  mk('bolt', fgBuildBolt(SEGB, knurlB), matSteel);
+
+  const col = fgBuildGrip(P, SEG, RINGS, tiltMax, lod < 2);
+  mk('grip', col.soup, matPoly);
+
+  const capSoup = fgBuildCap(SEGC, knurlC, lod < 2);
+  fgRotX(capSoup, col.tilt);
+  fgTranslate(capSoup, col.seat[0], col.seat[1], col.seat[2]);
+  const capMesh = mk('cap', capSoup, matPoly);
+
+  /* ---------- узлы крепления ---------- */
+  const mm = (v) => v * 0.001;
+  const nMount = new THREE.Object3D();
+  nMount.name = 'mount';
+  const nGripL = new THREE.Object3D();
+  nGripL.name = 'gripL';
+  const mid = col.centers[Math.round((RINGS - 1) * 0.52)];
+  nGripL.position.set(mm(mid[0]), mm(mid[1]), mm(mid[2]));
+  nGripL.rotation.x = col.tilt;
+  const nThumb = new THREE.Object3D();
+  nThumb.name = 'thumbRest';
+  nThumb.position.set(mm(14.6), mm(-12.6), 0);
+  nThumb.rotation.z = -0.55;
+  group.add(nMount, nGripL, nThumb);
+  group.nodes = { mount: nMount, gripL: nGripL, thumbRest: nThumb };
+  group.parts = { cap: capMesh };
+
+  /* ---------- движение подвижной детали (снятие крышки) ---------- */
+  group.partMotion = {
+    cap: {
+      pos: [0, mm(-26 * Math.cos(col.tilt)), mm(-26 * Math.sin(col.tilt))],
+      rot: [0, -Math.PI * 2.5, 0],
+    },
+  };
+
+  group.userData.lod = lod;
+  group.userData.style = P.style;
+  group.dispose = function(){
+    for (const g of geos) g.dispose && g.dispose();
+    for (const m of mats) m.dispose && m.dispose();
+  };
+  group.userData.validation = validateForegrip(group, THREE);
+  return group;
+}
+
+/* =============================================================================
+   7. КУСОК ПЛАНКИ MIL-STD-1913 (только для просмотра: проверка посадки)
+   Сознательно сделана на 0,2 мм меньше номинала, чтобы не пересекать губки.
+============================================================================= */
+function buildRailStub(THREE, opts){
+  const o = Object.assign({ len: 132, shadows: true }, opts || {});
+  const full = [
+    [ 10.40, 0.05], [ 7.90, 2.55], [ 7.90, 5.40], [ 10.60, 6.40], [ 10.60, 9.60],
+    [-10.60, 9.60], [-10.60, 6.40], [-7.90, 5.40], [-7.90, 2.55], [-10.40, 0.05],
+  ];
+  const slot = [
+    [  7.90, 2.55], [ 7.90, 2.55], [ 7.90, 5.40], [ 10.60, 6.40], [ 10.60, 9.60],
+    [-10.60, 9.60], [-10.60, 6.40], [-7.90, 5.40], [-7.90, 2.55], [ -7.90, 2.55],
+  ];
+  const half = o.len / 2, st = [{ z: -half, pts: full }];
+  const centers = [];
+  for (let k = -6; k <= 6; k++){
+    const zc = (k + 0.5) * 10.16;
+    if (Math.abs(zc) + 2.675 < half - 1.5) centers.push(zc);
+  }
+  centers.sort((a, b) => a - b);
+  for (const zc of centers){
+    st.push({ z: zc - 2.675, pts: full });
+    st.push({ z: zc - 2.675, pts: slot });
+    st.push({ z: zc + 2.675, pts: slot });
+    st.push({ z: zc + 2.675, pts: full });
+  }
+  st.push({ z: half, pts: full });
+  const g = fgSoup();
+  fgSweep(g, st);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2b2e33, roughness: 0.48, metalness: 0.85 });
+  const geo = fgGeom(THREE, g);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'rail_stub';
+  mesh.castShadow = mesh.receiveShadow = !!o.shadows;
+  const grp = new THREE.Group();
+  grp.name = 'rail';
+  grp.add(mesh);
+  grp.dispose = function(){ geo.dispose && geo.dispose(); mat.dispose && mat.dispose(); };
+  return grp;
+}
+
+/* =============================================================================
+   8. ВАЛИДАЦИЯ
+   Кроме формального контракта проверяет главное требование:
+   ни одна деталь не висит в воздухе (габариты собираются в одну связную группу).
+============================================================================= */
+function validateForegrip(group, THREEref){
+  const result = { ok: false, missing: [], warnings: [], tris: 0, meshes: 0,
+                   materials: 0, drawCalls: 0, sizeMM: {}, nodes: [] };
+  if (!group) { result.missing.push('модель'); return result; }
+
+  const n = group.nodes || {};
+  for (const k of ['mount', 'gripL', 'thumbRest']){
+    if (n[k] && n[k].isObject3D) result.nodes.push(k);
+    else result.missing.push('узел ' + k);
+  }
+  const parts = group.parts || {};
+  if (!parts.cap || !parts.cap.isObject3D) result.missing.push('деталь cap');
+  if (typeof group.dispose !== 'function') result.missing.push('dispose()');
+
+  const matSet = [], boxes = [];
+  if (group.updateMatrixWorld) group.updateMatrixWorld(true);
+  group.traverse(function(o){
+    if (!o.isMesh || !o.geometry) return;
+    result.meshes++;
+    result.drawCalls++;
+    if (matSet.indexOf(o.material) < 0) matSet.push(o.material);
+    const geo = o.geometry;
+    const pos = geo.getAttribute && geo.getAttribute('position');
+    if (!pos) return;
+    result.tris += (geo.index ? geo.index.count : pos.count) / 3;
+    let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    for (let i = 0; i < pos.count; i++){
+      const v = [pos.getX(i), pos.getY(i), pos.getZ(i)];
+      for (let k = 0; k < 3; k++){
+        if (v[k] < mn[k]) mn[k] = v[k];
+        if (v[k] > mx[k]) mx[k] = v[k];
+      }
+    }
+    boxes.push({ name: o.name || 'mesh', mn, mx });
+  });
+  result.materials = matSet.length;
+
+  if (boxes.length){
+    const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    for (const b of boxes) for (let k = 0; k < 3; k++){
+      if (b.mn[k] < mn[k]) mn[k] = b.mn[k];
+      if (b.mx[k] > mx[k]) mx[k] = b.mx[k];
+    }
+    const r1 = (v) => Math.round(v * 10000) / 10;   // м → мм, 0,1 мм
+    result.sizeMM = { x: r1(mx[0] - mn[0]), y: r1(mx[1] - mn[1]), z: r1(mx[2] - mn[2]) };
+    result.boundsMM = { minY: r1(mn[1]), maxY: r1(mx[1]) };
+    if (r1(mx[1]) > 4.5) result.warnings.push('габариты выходят за +Y (плоскость планки)');
+
+    /* Связность: две детали считаются соединёнными, если их габариты
+       пересекаются с допуском 0,6 мм. Отдельная группа = деталь в воздухе. */
+    const eps = 0.0006, par = boxes.map((_, i) => i);
+    const find = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++){
+        const a = boxes[i], b = boxes[j];
+        let hit = true;
+        for (let k = 0; k < 3; k++)
+          if (a.mn[k] - eps > b.mx[k] || b.mn[k] - eps > a.mx[k]) hit = false;
+        if (hit) par[find(i)] = find(j);
+      }
+    const roots = [];
+    for (let i = 0; i < boxes.length; i++){
+      const r = find(i);
+      if (roots.indexOf(r) < 0) roots.push(r);
+    }
+    if (roots.length > 1){
+      const groups = roots.map((r) => boxes.filter((_, i) => find(i) === r).map((b) => b.name));
+      groups.sort((a, b) => b.length - a.length);
+      for (let i = 1; i < groups.length; i++)
+        result.warnings.push('висит в воздухе: ' + groups[i].join(', '));
+    }
+  } else {
+    result.missing.push('геометрия');
+  }
+
+  const lod = (group.userData && group.userData.lod != null) ? group.userData.lod : 1;
+  const budget = [46000, 15000, 4600][lod] || 15000;
+  const floor  = [9000, 2600, 700][lod] || 2600;
+  if (result.tris > budget) result.warnings.push('слишком много треуг. для LOD' + lod);
+  if (result.tris < floor)  result.warnings.push('мало треуг. для LOD' + lod);
+  if (result.drawCalls > 8) result.warnings.push('много draw call');
+
+  result.tris = Math.round(result.tris);
+  result.ok = result.missing.length === 0 && result.warnings.length === 0;
+  group.userData.validation = result;
+  return result;
+}
+// ==== МОДЕЛЬ: КОНЕЦ ====
+const build = buildForegrip;
+window.buildForegrip     = buildForegrip;
+window.validateForegrip  = validateForegrip;
+// export { buildForegrip }
+
+/* ===========================================================================
+   ЗАПУСК
+   =========================================================================== */
+clearTimeout(slow);
+$('boot').remove();
+main();
+</script>
+</body>
+</html>

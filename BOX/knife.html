@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Боевой нож Ka-Bar — процедурная модель three.js</title>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}
+</script>
+<style>
+  :root{
+    --panel:rgba(24,26,30,.86); --brd:rgba(255,255,255,.14);
+    --txt:#eef1f4; --txt2:rgba(238,241,244,.62); --acc:#5E9FE8; --ok:#72BC8F; --err:#E97366;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#15171a;color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  canvas{display:block}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--brd);border-radius:12px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:10}
+
+  #ui{top:16px;left:16px;padding:12px;width:348px;display:flex;flex-direction:column;gap:8px}
+  #ui .grp{display:flex;flex-wrap:wrap;gap:8px}
+  #ui .sep{height:1px;background:var(--brd)}
+  button{font:600 14px/1.2 inherit;color:var(--txt);background:#26292e;border:1px solid var(--brd);
+    border-radius:8px;padding:11px 13px;min-height:44px;cursor:pointer;transition:background .15s,border-color .15s}
+  button:hover{background:#33373d}
+  button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  button.on{background:var(--acc);border-color:var(--acc);color:#0d1013}
+
+  #anim{left:16px;bottom:16px;padding:12px 14px;width:348px;max-height:34vh;overflow:auto}
+  #anim h3{margin:0 0 10px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--txt2);font-weight:700}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .row label{flex:0 0 104px;font-size:13px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row input[type=range]{flex:1;accent-color:var(--acc);height:26px;min-width:0}
+  .row .val{flex:0 0 34px;text-align:right;font:12px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--txt2)}
+  .empty{font-size:13px;line-height:1.5;color:var(--txt2);margin:0}
+
+  #stats{top:16px;right:16px;padding:12px 14px;width:252px;
+    font:12px/1.7 ui-monospace,Menlo,Consolas,"Courier New",monospace}
+  #stats .k{color:var(--txt2)}
+  #stats b{font-weight:700;color:#fff;float:right}
+  #check{margin-top:10px;padding-top:9px;border-top:1px solid var(--brd);line-height:1.5;clear:both}
+  .ok{color:var(--ok)} .err{color:var(--err)}
+
+  #hint{right:16px;bottom:16px;padding:9px 13px;font-size:12.5px;color:var(--txt2)}
+
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;
+    background:#15171a;text-align:center;padding:24px}
+  #boot h1{font-size:19px;margin:0 0 10px;font-weight:600}
+  #boot p{margin:6px auto;font-size:14px;color:var(--txt2);line-height:1.6;max-width:520px}
+  #boot code{font:12px ui-monospace,Menlo,Consolas,monospace;background:#26292e;padding:2px 6px;border-radius:5px}
+  .spin{width:26px;height:26px;margin:0 auto 16px;border:3px solid rgba(255,255,255,.18);
+    border-top-color:var(--acc);border-radius:50%;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+  @media (max-width:900px){
+    #ui{width:calc(100vw - 32px)} #anim{width:calc(100vw - 32px);max-height:28vh}
+    #stats{top:auto;bottom:calc(28vh + 76px);width:252px} #hint{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="boot"><div>
+  <div class="spin"></div>
+  <h1 id="bootTitle">Загрузка three.js…</h1>
+  <p id="bootMsg">Модуль тянется с CDN unpkg.com. После первого открытия он останется в кэше браузера, и файл будет работать без интернета.</p>
+</div></div>
+
+<div id="ui" class="panel" hidden>
+  <div class="grp">
+    <button id="bWire">Каркас</button>
+    <button id="bNodes">Узлы</button>
+    <button id="bBox">Габариты</button>
+    <button id="bGrid" class="on">Сетка</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bSpin">Автоповорот</button>
+    <button id="bReset">Сброс камеры</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bLod0" class="on">LOD0</button>
+    <button id="bLod1">LOD1</button>
+    <button id="bLod2">LOD2</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bFire">Выстрел</button>
+    <button id="bReload">Перезарядка</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bShot">Скриншот PNG</button>
+    <button id="bGlb">Экспорт GLB</button>
+  </div>
+</div>
+
+<div id="anim" class="panel" hidden>
+  <h3>Анимация деталей</h3>
+  <div id="animBody"></div>
+</div>
+
+<div id="stats" class="panel" hidden>
+  <div><span class="k">треугольники</span> <b id="sTri">—</b></div>
+  <div><span class="k">меши</span> <b id="sMesh">—</b></div>
+  <div><span class="k">материалы</span> <b id="sMat">—</b></div>
+  <div><span class="k">draw calls</span> <b id="sCalls">—</b></div>
+  <div><span class="k">bbox мм</span> <b id="sBox">—</b></div>
+  <div><span class="k">узлы</span> <b id="sNodes">—</b></div>
+  <div id="check"></div>
+</div>
+
+<div id="hint" class="panel" hidden>ЛКМ — вращать · колесо — зум · ПКМ — панорама</div>
+
+<script type="module">
+let THREE, OrbitControls, GLTFExporter;
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  ({ GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js'));
+} catch (err) {
+  const s = document.querySelector('#boot .spin'); if (s) s.remove();
+  document.getElementById('bootTitle').textContent = 'Не удалось загрузить three.js';
+  document.getElementById('bootMsg').innerHTML =
+    'Библиотека берётся с CDN <code>unpkg.com</code>, и браузер её не получил.<br><br>' +
+    '1 — проверьте интернет; 2 — откройте файл один раз с сетью, чтобы модуль попал в кэш; ' +
+    '3 — отключите блокировщик или VPN для unpkg.com.<br><br><code>' +
+    String((err && err.message) || err) + '</code>';
+  throw err;
+}
+
+/* ============================================================================
+// ==== МОДЕЛЬ: НАЧАЛО ====
+   БОЕВОЙ НОЖ типа Ka-Bar / штык-нож — только процедурная геометрия
+
+   ТАБЛИЦА РАЗМЕРОВ (мм)
+   ---------------------------------------------------------------------------
+   Общая длина (торец +63.5 → остриё −236.5) ....... 300
+   Клинок: длина 175 | ширина 32 | обух 4.5 | кромка 0.2
+           форма clip-point, скос обуха 62, глубина скоса 13
+           сечение — вытянутый шестиугольник: плоский обух → щёки
+           → рёбра спусков на 62 % высоты → подвод → кромка 0.2
+   Дол (fuller): длина 90, ширина ~7, глубина 0.55 — с каждой стороны
+   Серрейтор на скосе обуха: 6 зубьев, шаг 10.3, высота 1.9
+   Риски заводской обработки: продольный рельеф ±0.035 по щёкам
+   Гарда: 55 x 12 x 4, нижнее перо загнуто вперёд (к острию), вылет 14
+   Рукоять: длина 110 (z −57.5…+52.5), бочка D24 → D28 → D25,
+           8 кольцевых канавок глубиной 1.35
+   Навершие-хвостовик: 20 (z +43.5…+63.5), из них 11 открыто за рукоятью;
+           сквозное отверстие под темляк D6 по оси X (центр z +58)
+           Сумма 175+4+110+11 = 300 — рукоять 110 вместо 115, чтобы
+           отверстие было реально сквозным, а не ��пиралось в рукоять
+   ---------------------------------------------------------------------------
+   ОСИ: −Z — направление удара (остриё в −Z), +Y вверх, +X вправо.
+        Origin (0,0,0) — центр ладони на рукояти.
+   БЮДЖЕТ: LOD0 — 2–4k треугольников; LOD1 — ~40 % от LOD0.
+        Геометрия склеена поматериально: 1 меш = 1 материал = 1 draw call.
+        ТЗ требует 4 материала (bladeSteel / edgeSteel / handle / guard) —
+        значит физический минимум равен 4 draw call (3 из них — сталь+рукоять).
+============================================================================ */
+
+function buildKnife(THREE, opts = {}) {
+  const mm = (x) => x / 1000;                            // мм → метры
+  const lod = opts.lod === undefined ? 0 : opts.lod;     // 0 | 1 | 2
+  const Q   = lod === 0 ? 1 : (lod === 1 ? 0.55 : 0.2);  // множитель детализации
+  const qi  = (n, min) => Math.max(min, Math.round(n * Q));
+
+  /* -------------------------------------------------------------- размеры */
+  const BLADE_L  = mm(175), BLADE_W = mm(32);
+  const SPINE_T  = mm(4.5), EDGE_T  = mm(0.2);
+  const CLIP_L   = mm(62),  CLIP_D  = mm(13);            // скос обуха (clip-point)
+  const FULLER_L = mm(90),  FULLER_D = mm(0.55);         // дол
+  const SERR_N   = 6,       SERR_H  = mm(1.9);           // серрейтор
+  const RISK     = mm(0.035);                            // риски заводской обработки
+  const GUARD_W  = mm(55),  GUARD_H = mm(12), GUARD_T = mm(4);
+  const GUARD_Y  = mm(-3);                               // центр гарды по Y
+  const GRIP_L   = mm(110), GRIP_R  = mm(14);            // рукоять D28
+  const GRIP_Z0  = mm(52.5);                             // рукоять +52.5 … −57.5, центр ладони ≈ 0
+  const POMMEL_L = mm(20),  POMMEL_Z0 = mm(43.5);        // навершие +43.5 … +63.5
+  const LANYARD_R = mm(3);                               // отверстие под темляк D6
+  const BLADE_Z0 = -(mm(57.5) + GUARD_T);                // −61.5 — передняя плоскость гарды
+  const SPINE_Y  = mm(11);                               // обух над осью рукояти
+  const EDGE_Y0  = SPINE_Y - BLADE_W;                    // −21 — кромка у гарды
+  const SHOULDER = 0.62;                                 // высота рёбер спусков
+
+  /* ------------------------------------------------------------- материалы */
+  const bladeSteel = new THREE.MeshStandardMaterial({ name: 'bladeSteel', color: 0x9aa0a6, metalness: 0.95, roughness: 0.25 });
+  const edgeSteel  = new THREE.MeshStandardMaterial({ name: 'edgeSteel',  color: 0xc6cbd0, metalness: 0.95, roughness: 0.12 });
+  const handleMat  = new THREE.MeshStandardMaterial({ name: 'handle',     color: 0x1b1c1e, metalness: 0.0,  roughness: 0.85 });
+  const guardMat   = new THREE.MeshStandardMaterial({ name: 'guard',      color: 0x3a3d41, metalness: 0.8,  roughness: 0.35 });
+
+  const bladeParts = [], edgeParts = [], handleParts = [], metalParts = [];
+
+  /* ==========================================================================
+     1) КЛИНОК — лофт по сечениям.
+     Сечение — вытянутый шестиугольник с дополнительными точками:
+     плоский обух 4.5 → щёки с долом и рисками → рёбра спусков → кромка 0.2.
+  ========================================================================== */
+
+  // продольный профиль: t = 0 у гарды, t = 1 на острие
+  function profile(t) {
+    const clipStart = 1 - CLIP_L / BLADE_L;              // 0.646
+    let spine = SPINE_Y;
+    if (t > clipStart) {                                 // вогнутый скос обуха
+      const u = (t - clipStart) / (1 - clipStart);
+      spine = SPINE_Y - CLIP_D * (u * u * 0.55 + u * 0.45);
+    }
+    let edge = EDGE_Y0;                                  // почти прямая кромка
+    const belly = 0.56;
+    if (t > belly) {                                     // брюшко к острию
+      const u = (t - belly) / (1 - belly);
+      edge = EDGE_Y0 + (BLADE_W - CLIP_D - mm(0.35)) * Math.pow(u, 1.9);
+    }
+    return { z: BLADE_Z0 - t * BLADE_L, spine, edge: Math.min(edge, spine - mm(0.05)) };
+  }
+
+  const thickAt  = (t) => SPINE_T * (1 - 0.40 * Math.pow(t, 1.5));  // дистальное сужение
+  const tipTaper = (t) => (t > 0.93 ? Math.max(0.05, Math.pow((1 - t) / 0.07, 0.62)) : 1);
+  function fullerAt(t) {                                 // глубина дола на позиции t
+    if (lod > 1) return 0;
+    const a = mm(8) / BLADE_L, b = (mm(8) + FULLER_L) / BLADE_L;
+    if (t <= a || t >= b) return 0;
+    const u = (t - a) / (b - a);
+    return FULLER_D * Math.min(1, Math.sin(Math.PI * u) * 1.9);     // ровное дно, плавные выходы
+  }
+
+  const CHEEK = lod === 0 ? 5 : 3;                       // точек на щеке
+  const BEV   = lod === 0 ? 3 : 2;                       // точек на спуске
+  const R     = CHEEK + BEV;                             // точек в половине сечения
+  const RING  = 2 * R - 2;                               // точек в замкнутом сечении
+
+  // замкнутый контур сечения: [0] обух +X … [R-1] кромка … обратно по −X
+  function section(t) {
+    const p  = profile(t);
+    const ts = tipTaper(t);
+    const hx = thickAt(t) * 0.5 * ts;                    // полутолщина обуха
+    const ex = Math.max(EDGE_T * 0.5 * ts, hx * 0.05);   // полутолщина кромки
+    const h  = p.spine - p.edge;
+    const sy = p.spine - h * (1 - SHOULDER);             // Y ребра спуска
+    const fd = fullerAt(t) * ts;
+    const half = [];
+    for (let i = 0; i < CHEEK; i++) {                    // щека: обух → ребро спуска
+      const u = i / (CHEEK - 1);
+      const y = p.spine - (p.spine - sy) * u;
+      const g = Math.exp(-Math.pow((u - 0.46) / 0.30, 2));           // профиль дола ~7 мм
+      const risk = (lod === 0 && i > 0 && i < CHEEK - 1) ? (i % 2 ? -RISK : RISK) : 0;
+      half.push([Math.max(ex, hx * (1 - 0.05 * u) - fd * g + risk), y]);
+    }
+    const sx = half[CHEEK - 1][0];                       // X на ребре спуска
+    for (let i = 1; i <= BEV; i++) {                     // спуск: ребро → кромка
+      const u = i / BEV;
+      half.push([ex + (sx - ex) * Math.pow(1 - u, 1.25), sy - (sy - p.edge) * u]);
+    }
+    const ring = half.slice();
+    for (let i = R - 2; i >= 1; i--) ring.push([-half[i][0], half[i][1]]);
+    return ring;
+  }
+
+  const SEG = qi(34, 9);                                 // сечений вдоль клинка
+  const rings = [];
+  for (let i = -1; i <= SEG; i++) {                      // i = −1 — уход хвостовика в гарду
+    rings.push({ r: section(Math.max(0, i / SEG)), z: BLADE_Z0 - (i / SEG) * BLADE_L });
+  }
+
+  // — корпус клинка (без двух прикромочных полос — их даёт edgeSteel)
+  {
+    const pos = [], idx = [];
+    for (const { r, z } of rings) for (const [x, y] of r) pos.push(x, y, z);
+    for (let s = 0; s < rings.length - 1; s++) {
+      const a = s * RING, b = (s + 1) * RING;
+      for (let k = 0; k < RING; k++) {
+        if (k === R - 2 || k === R - 1) continue;        // полосы у самой кромки
+        const k2 = (k + 1) % RING;
+        idx.push(a + k, a + k2, b + k2, a + k, b + k2, b + k);
+      }
+    }
+    const cap = pos.length / 3;                          // торец рикассо (скрыт в гарде)
+    const r0 = rings[0];
+    pos.push(0, (r0.r[0][1] + r0.r[R - 1][1]) / 2, r0.z);
+    for (let k = 0; k < RING; k++) idx.push(cap, (k + 1) % RING, k);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx); g.computeVertexNormals(); g.name = 'blade';
+    bladeParts.push(g);
+  }
+
+  // — режущая кромка отдельным светлым материалом (те же вершины — без z-fight)
+  {
+    const pos = [], idx = [];
+    for (const { r, z } of rings) {
+      const a = r[R - 2], b = r[R - 1], c = r[R];
+      pos.push(a[0], a[1], z, b[0], b[1], z, c[0], c[1], z);
+    }
+    for (let s = 0; s < rings.length - 1; s++) {
+      const a = s * 3, b = (s + 1) * 3;
+      for (let k = 0; k < 2; k++) idx.push(a + k, a + k + 1, b + k + 1, a + k, b + k + 1, b + k);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx); g.computeVertexNormals(); g.name = 'edge';
+    edgeParts.push(g);
+  }
+
+  // — серрейтор: 6 реальных зубьев на скосе обуха (ExtrudeGeometry + Shape)
+  if (lod < 2) {
+    const clipStart = 1 - CLIP_L / BLADE_L;
+    for (let s = 0; s < SERR_N; s++) {
+      const t  = clipStart + (CLIP_L / BLADE_L) * ((s + 0.5) / SERR_N);
+      const p  = profile(t);
+      const w  = (CLIP_L / SERR_N) * 0.44;               // полушаг зуба
+      const hx = thickAt(t) * 0.5 * tipTaper(t);
+      const sh = new THREE.Shape();                      // треугольный зуб
+      sh.moveTo(-w, mm(-2.6)); sh.lineTo(w, mm(-2.6)); sh.lineTo(w * 0.3, SERR_H); sh.closePath();
+      const g = new THREE.ExtrudeGeometry(sh, { depth: hx * 2, bevelEnabled: false, steps: 1, curveSegments: 1 });
+      g.translate(0, 0, -hx);
+      g.rotateY(-Math.PI / 2);                           // лок. x → мировой Z, толщина по X
+      const p2 = profile(Math.min(1, t + 0.015)), p1 = profile(Math.max(0, t - 0.015));
+      g.rotateX(Math.atan2(p2.spine - p1.spine, p1.z - p2.z));       // наклон вдоль скоса
+      g.translate(0, p.spine, p.z);
+      g.name = 'serration';
+      bladeParts.push(g);
+    }
+  }
+
+  /* ==========================================================================
+     2) ГАРДА 55 x 12 x 4 мм + нижнее перо, загнутое вперёд (к острию)
+  ========================================================================== */
+  {
+    const cs = lod === 0 ? 3 : 1;
+    const hw = GUARD_W / 2, hh = GUARD_H / 2, r = mm(2.5);
+    const sh = new THREE.Shape();
+    sh.moveTo(-hw + r, -hh);
+    sh.lineTo(hw - r, -hh);  sh.quadraticCurveTo(hw, -hh, hw, -hh + r);
+    sh.lineTo(hw, hh - r);   sh.quadraticCurveTo(hw, hh, hw - r, hh);
+    sh.lineTo(-hw + r, hh);  sh.quadraticCurveTo(-hw, hh, -hw, hh - r);
+    sh.lineTo(-hw, -hh + r); sh.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: GUARD_T, bevelEnabled: false, steps: 1, curveSegments: cs });
+    g.translate(0, GUARD_Y, BLADE_Z0);                   // от −61.5 до −57.5
+    g.name = 'guard';
+    metalParts.push(g);
+
+    // перо: силуэт в плоскости ZY, толщина по X
+    const zF = BLADE_Z0, zB = BLADE_Z0 + GUARD_T, yT = GUARD_Y - hh + mm(0.5);
+    const lip = new THREE.Shape();
+    lip.moveTo(zB, yT);
+    lip.lineTo(zF, yT);
+    lip.lineTo(zF - mm(14), mm(-19));
+    lip.lineTo(zF - mm(12), mm(-23));
+    lip.lineTo(zB - mm(1), mm(-17));
+    lip.closePath();
+    const lg = new THREE.ExtrudeGeometry(lip, { depth: mm(10), bevelEnabled: false, steps: 1, curveSegments: 1 });
+    lg.rotateY(-Math.PI / 2);                            // лок. x → Z, лок. z → −X
+    lg.translate(mm(5), 0, 0);                           // центрируем по X
+    lg.name = 'guardLip';
+    metalParts.push(lg);
+  }
+
+
+  /* ==========================================================================
+     3) РУКОЯТЬ — LatheGeometry: бочка D23.6 → D28 → D22.8,
+        8 кольцевых канавок под пальцы, матовое покрытие
+  ========================================================================== */
+  {
+    const N = qi(54, 16), RAD = lod === 0 ? 16 : (lod === 1 ? 12 : 8);
+    const GROOVES = 8, GD = mm(1.35);                    // 8 канавок глубиной 1.35 мм
+    const pts = [new THREE.Vector2(mm(0.4), GRIP_Z0)];   // торец у навершия
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;                                   // 0 — навершие, 1 — гарда
+      const z = GRIP_Z0 - u * GRIP_L;
+      let r = mm(11.8) + Math.sin(Math.PI * Math.pow(u, 0.9)) * mm(2.2) - u * mm(0.4);
+      if (lod < 2) {                                     // кольцевые канавки на средних 80 %
+        const gu = (u - 0.10) / 0.80;
+        if (gu > 0 && gu < 1) r -= GD * Math.pow(Math.max(0, -Math.cos(gu * GROOVES * Math.PI * 2)), 2.2);
+      }
+      pts.push(new THREE.Vector2(Math.min(GRIP_R, Math.max(mm(4), r)), z));
+    }
+    pts.push(new THREE.Vector2(mm(0.4), GRIP_Z0 - GRIP_L));   // торец у гарды
+    const g = new THREE.LatheGeometry(pts, RAD);
+    g.rotateX(Math.PI / 2);                              // ось Lathe Y → ось рукояти Z
+    g.name = 'grip';
+    handleParts.push(g);
+  }
+
+  /* ==========================================================================
+     4) НАВЕРШИЕ-ХВОСТОВИК 20 мм со СКВОЗНЫМ отверстием под темляк D6.
+     Отверстие настоящее: Shape.holes + ExtrudeGeometry вдоль оси X.
+  ========================================================================== */
+  {
+    const cs = lod === 0 ? 12 : (lod === 1 ? 6 : 4);
+    const z0 = POMMEL_Z0, z1 = POMMEL_Z0 + POMMEL_L, ry = mm(13), rc = mm(7);
+    const sh = new THREE.Shape();                        // силуэт в плоскости ZY
+    sh.moveTo(z0, -ry);
+    sh.lineTo(z1 - rc, -ry);
+    sh.absarc(z1 - rc, -ry + rc, rc, -Math.PI / 2, 0, false);
+    sh.lineTo(z1, ry - rc);
+    sh.absarc(z1 - rc, ry - rc, rc, 0, Math.PI / 2, false);
+    sh.lineTo(z0, ry);
+    sh.lineTo(z0, -ry);
+    const hole = new THREE.Path();                       // сквозное отверстие D6
+    hole.absarc(z1 - mm(5.5), 0, LANYARD_R, 0, Math.PI * 2, true);   // z +58, за торцом рукояти
+    sh.holes.push(hole);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: mm(24), bevelEnabled: false, steps: 1, curveSegments: cs });
+    g.rotateY(-Math.PI / 2);                             // лок. x → Z, лок. z → −X (отверстие по X)
+    g.translate(mm(12), 0, 0);                           // центрируем по X
+    g.name = 'pommel';
+    metalParts.push(g);
+  }
+
+  /* ==========================================================================
+     5) СКЛЕЙКА ПОМАТЕРИАЛЬНО: 1 меш = 1 материал = 1 draw call
+  ========================================================================== */
+  function mergeGeos(list) {
+    if (!list.length) return null;
+    let vc = 0, ic = 0;
+    for (const g of list) {
+      if (!g.attributes.normal) g.computeVertexNormals();
+      vc += g.attributes.position.count;
+      ic += g.index ? g.index.count : g.attributes.position.count;
+    }
+    const pos = new Float32Array(vc * 3), nrm = new Float32Array(vc * 3);
+    const idx = vc > 65535 ? new Uint32Array(ic) : new Uint16Array(ic);
+    let vo = 0, io = 0;
+    for (const g of list) {
+      pos.set(g.attributes.position.array, vo * 3);
+      nrm.set(g.attributes.normal.array, vo * 3);
+      if (g.index) { const a = g.index.array; for (let i = 0; i < a.length; i++) idx[io++] = a[i] + vo; }
+      else { const n = g.attributes.position.count; for (let i = 0; i < n; i++) idx[io++] = i + vo; }
+      vo += g.attributes.position.count;
+      g.dispose();
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    out.setIndex(new THREE.BufferAttribute(idx, 1));
+    out.computeBoundingBox(); out.computeBoundingSphere();
+    return out;
+  }
+
+  const group = new THREE.Group();
+  group.name = 'Knife_KaBar';
+
+  const addMesh = (name, list, mat) => {
+    const g = mergeGeos(list);
+    if (!g) return;
+    g.name = name;
+    const m = new THREE.Mesh(g, mat);
+    m.name = name;
+    m.castShadow = true; m.receiveShadow = true;
+    group.add(m);
+  };
+  addMesh('blade',  bladeParts,  bladeSteel);   // клинок + серрейтор
+  addMesh('edge',   edgeParts,   edgeSteel);    // заточенная кромка
+  addMesh('handle', handleParts, handleMat);    // рукоять
+  addMesh('metal',  metalParts,  guardMat);     // гарда + перо + навершие
+
+  /* ==========================================================================
+     6) УЗЛЫ — пустышки Object3D для игровой логики
+  ========================================================================== */
+  const mkNode = (name, x, y, z) => {
+    const o = new THREE.Object3D();
+    o.name = name; o.position.set(x, y, z);
+    group.add(o);
+    return o;
+  };
+  const pTip = profile(1), pS = profile(0.015), pE = profile(0.97), pH = profile(0.82);
+  group.nodes = {
+    tip:       mkNode('tip', 0, (pTip.spine + pTip.edge) / 2, pTip.z),   // остриё, z = −236.5
+    edgeStart: mkNode('edgeStart', 0, pS.edge, pS.z),                    // начало заточки
+    edgeEnd:   mkNode('edgeEnd', 0, pE.edge, pE.z),                      // конец заточки
+    gripR:     mkNode('gripR', GRIP_R, 0, 0),                            // правая точка хвата
+    hitPoint:  mkNode('hitPoint', 0, pH.edge, pH.z),                     // трассировка удара
+  };
+
+  group.parts = {};                                    // подвижных деталей у ножа нет
+
+  /* ------------------------------------------------ габариты и статистика */
+  let tris = 0, meshes = 0;
+  const mats = new Set();
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++; mats.add(o.material.uuid);
+    tris += o.geometry.index.count / 3;
+    const p = o.geometry.attributes.position.array;
+    for (let i = 0; i < p.length; i += 3)
+      for (let k = 0; k < 3; k++) {
+        if (p[i + k] < lo[k]) lo[k] = p[i + k];
+        if (p[i + k] > hi[k]) hi[k] = p[i + k];
+      }
+  });
+
+  group.userData = {
+    kind: 'knife', lod, triangles: tris, meshes, materials: mats.size,
+    bboxMm: { x: (hi[0] - lo[0]) * 1000, y: (hi[1] - lo[1]) * 1000, z: (hi[2] - lo[2]) * 1000 },
+    spec: { totalMm: 300, bladeMm: 175, bladeWidthMm: 32, spineMm: 4.5, gripMm: 110, gripDiaMm: 28 },
+  };
+
+  /* ----------------------------------------------------------- dispose() */
+  group.dispose = function () {
+    group.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
+    [bladeSteel, edgeSteel, handleMat, guardMat].forEach((m) => m.dispose());
+  };
+
+  return group;
+}
+
+/* ---------------------------------------------------------------------------
+   validate(group) — проверка контракта модели (без зависимости от THREE)
+--------------------------------------------------------------------------- */
+function validate(group) {
+  const need = ['tip', 'edgeStart', 'edgeEnd', 'gripR', 'hitPoint'];
+  const missing = need.filter((n) => !group.nodes || !group.nodes[n]);
+  const u = group.userData || {};
+  const warn = [];
+  if (u.lod === 0 && (u.triangles < 2000 || u.triangles > 4000)) warn.push('треугольники вне 2–4k: ' + u.triangles);
+  if (u.meshes !== u.materials) warn.push('draw calls не минимальны: ' + u.meshes + ' / ' + u.materials);
+  if (typeof group.dispose !== 'function') warn.push('нет dispose()');
+  if (!group.parts) warn.push('нет group.parts');
+  return {
+    ok: missing.length === 0, missing, warn,
+    tris: Math.round(u.triangles || 0), meshes: u.meshes || 0, materials: u.materials || 0,
+    sizeMm: u.bboxMm || { x: 0, y: 0, z: 0 },
+    nodeCount: Object.keys(group.nodes || {}).length,
+  };
+}
+
+const build = buildKnife;
+window.buildKnife = buildKnife;
+// export { buildKnife }
+// ==== МОДЕЛЬ: КОНЕЦ ====
+
+/* ============================================================================
+   ПРОСМОТРЩИК
+============================================================================ */
+const $ = (id) => document.getElementById(id);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171a);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.01, 100);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.075;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+controls.autoRotateSpeed = 1.6;
+
+/* --------------------------------------------------------------- свет */
+const key = new THREE.DirectionalLight(0xfff2e2, 2.7);          // key: сверху-справа-спереди
+key.position.set(0.42, 0.62, 0.48);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0006;
+key.shadow.normalBias = 0.0015;
+Object.assign(key.shadow.camera, { near: 0.02, far: 3, left: -0.28, right: 0.28, top: 0.28, bottom: -0.28 });
+key.shadow.camera.updateProjectionMatrix();
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0x9dc3ff, 0.55);        // слабый холодный fill слева
+fill.position.set(-0.65, 0.18, 0.22);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xffffff, 1.9);          // контровой rim сзади
+rim.position.set(-0.12, 0.4, -0.72);
+scene.add(rim);
+
+scene.add(new THREE.HemisphereLight(0x9fb4c8, 0x121417, 0.55));
+
+/* --------------------------------------------------- сетка и плоскость теней */
+let grid = new THREE.GridHelper(0.6, 24, 0x3a4048, 0x24282d);
+grid.material.transparent = true;
+grid.material.opacity = 0.65;
+scene.add(grid);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), new THREE.ShadowMaterial({ opacity: 0.36 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+/* ------------------------------------------------------------ модель и LOD */
+let model = null, lod = 0, report = null;
+let nodesGroup = null, boxHelper = null, wireOn = false;
+const wireMats = [];
+
+function labelSprite(text) {                                     // подпись узла — canvas, без внешних шрифтов
+  const c = document.createElement('canvas');
+  const f = 'bold 40px ui-monospace, Menlo, Consolas, monospace';
+  let x = c.getContext('2d'); x.font = f;
+  const w = Math.ceil(x.measureText(text).width) + 30;
+  c.width = w; c.height = 60;
+  x = c.getContext('2d'); x.font = f;
+  x.fillStyle = 'rgba(10,12,15,.85)';
+  if (x.roundRect) { x.beginPath(); x.roundRect(0, 0, w, 60, 12); x.fill(); } else x.fillRect(0, 0, w, 60);
+  x.fillStyle = '#eef1f4'; x.textBaseline = 'middle'; x.fillText(text, 15, 32);
+  const tex = new THREE.CanvasTexture(c);
+  if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set((w / 60) * 0.019, 0.019, 1);
+  sp.position.y = 0.017;
+  sp.renderOrder = 999;
+  return sp;
+}
+
+function modelBox() {                    // только меши, без AxesHelper/спрайтов
+  const b = new THREE.Box3();
+  model.traverse((o) => { if (o.isMesh && o.geometry) b.expandByObject(o); });
+  return b;
+}
+
+function clearModel() {
+  if (!model) return;
+  if (nodesGroup) { model.remove(nodesGroup); nodesGroup.traverse((o) => { if (o.material && o.material.map) o.material.map.dispose(); if (o.material) o.material.dispose(); if (o.geometry) o.geometry.dispose(); }); nodesGroup = null; }
+  if (boxHelper) { scene.remove(boxHelper); boxHelper.geometry.dispose(); boxHelper.material.dispose(); boxHelper = null; }
+  scene.remove(model);
+  if (typeof model.dispose === 'function') model.dispose();
+  wireMats.length = 0;
+  model = null;
+}
+
+function loadModel(n, keepCamera) {
+  const nodesWereOn = $('bNodes').classList.contains('on');
+  const boxWasOn = $('bBox').classList.contains('on');
+  clearModel();
+  lod = n;
+  model = build(THREE, { lod: n });                             // <- вызов модели
+  scene.add(model);
+  model.traverse((o) => { if (o.isMesh) { wireMats.push(o.material); o.material.wireframe = wireOn; } });
+  report = validate(model);
+
+  // узлы: AxesHelper 30 мм + подпись
+  nodesGroup = new THREE.Group();
+  nodesGroup.visible = nodesWereOn;
+  for (const [name, obj] of Object.entries(model.nodes || {})) {
+    const h = new THREE.AxesHelper(0.03);
+    h.material.depthTest = false; h.material.transparent = true; h.renderOrder = 998;
+    h.position.copy(obj.position);
+    h.add(labelSprite(name));
+    nodesGroup.add(h);
+  }
+  model.add(nodesGroup);
+
+  const box = modelBox();
+  boxHelper = new THREE.Box3Helper(box, 0x5E9FE8);
+  boxHelper.visible = boxWasOn;
+  scene.add(boxHelper);
+
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  grid.position.y = box.min.y - maxDim * 0.09;
+  floor.position.y = grid.position.y + 0.0005;
+  key.target.position.copy(box.getCenter(new THREE.Vector3()));
+  key.target.updateMatrixWorld();
+  scene.add(key.target);
+
+  buildAnimPanel();
+  if (!keepCamera) resetCamera();
+  updateStats();
+}
+
+function resetCamera() {
+  const box = modelBox();
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const dist = (maxDim / 2) / Math.tan((camera.fov * Math.PI / 180) / 2) * 1.45;
+  camera.near = Math.max(maxDim / 3000, 0.0008);                 // near/far от габаритов
+  camera.far = dist * 20 + maxDim * 10;
+  camera.updateProjectionMatrix();
+  camera.position.set(center.x + dist * 0.5, center.y + dist * 0.44, center.z + dist * 0.74);
+  controls.target.copy(center);
+  controls.minDistance = maxDim * 0.12;
+  controls.maxDistance = maxDim * 14;
+  controls.update();
+}
+
+/* =================================================== панель анимации (group.parts) */
+// штатные траектории по имени детали; смещение всегда от исходных position/rotation
+const TRAJ = [
+  { re: /mag|магаз/i,               f: (o, b, v) => { o.position.set(b.p.x, b.p.y - 0.115 * v, b.p.z + 0.004 * v); o.rotation.set(b.r.x + 0.14 * v, b.r.y, b.r.z); } },
+  { re: /bolt|slide|затвор|кожух/i,  f: (o, b, v) => { o.position.set(b.p.x, b.p.y, b.p.z + 0.033 * v); } },
+  { re: /charg|cock|взвод/i,         f: (o, b, v) => { o.position.set(b.p.x + 0.006 * v, b.p.y, b.p.z + 0.033 * v); } },
+  { re: /trig|спуск|крюч/i,         f: (o, b, v) => { o.rotation.set(b.r.x + 0.42 * v, b.r.y, b.r.z); } },
+  { re: /safe|select|флаж|предохр/i, f: (o, b, v) => { o.rotation.set(b.r.x, b.r.y, b.r.z - 1.25 * v); } },
+  { re: /pin|ring|lever|скоб|чек/i,   f: (o, b, v) => { o.position.set(b.p.x + 0.09 * v, b.p.y + 0.05 * v, b.p.z); o.rotation.set(b.r.x, b.r.y, b.r.z + 5 * v); } },
+  { re: /lid|cover|cap|крыш/i,        f: (o, b, v) => { o.rotation.set(b.r.x - 2.0 * v, b.r.y, b.r.z); } },
+  { re: /stock|butt|приклад/i,       f: (o, b, v) => { o.rotation.set(b.r.x, b.r.y + 2.6 * v, b.r.z); } },
+];
+const partsMeta = [];
+
+function buildAnimPanel() {
+  const body = $('animBody');
+  body.textContent = '';
+  partsMeta.length = 0;
+  const parts = Object.entries(model.parts || {});
+
+  for (const [name, obj] of parts) {
+    const base = { p: obj.position.clone(), r: obj.rotation.clone() };
+    const hit = TRAJ.find((t) => t.re.test(name));
+    const f = hit ? hit.f : (o, b, v) => { o.position.set(b.p.x, b.p.y, b.p.z + 0.03 * v); };
+    const meta = { name, obj, base, apply: (v) => f(obj, base, v), input: null, out: null };
+    partsMeta.push(meta);
+
+    const row = document.createElement('div'); row.className = 'row';
+    const lab = document.createElement('label'); lab.textContent = name; lab.title = name;
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = '0'; inp.max = '1'; inp.step = '0.01'; inp.value = '0';
+    const out = document.createElement('span'); out.className = 'val'; out.textContent = '0.00';
+    inp.addEventListener('input', () => { const v = +inp.value; out.textContent = v.toFixed(2); meta.apply(v); });
+    meta.input = inp; meta.out = out;
+    row.append(lab, inp, out); body.appendChild(row);
+  }
+
+  if (!parts.length) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.innerHTML = '<b>group.parts = {}</b> — у ножа подвижных деталей нет, слайдеры не нужны.<br>' +
+      '«Выстрел» — цикл удара 90 мс (выпад по −Z и возврат), «Перезарядка» — перехват с прокруткой.<br>' +
+      'Панель сама соберёт слайдеры, если в секцию модели подставить оружие с деталями.';
+    body.appendChild(p);
+  }
+
+  // переключатели для опциональных сеттеров модели
+  const setters = [['setReticle', 'Прицел'], ['setBeam', 'Луч'], ['setLight', 'Фонарь'], ['setAmmo', 'Патроны'], ['setDeployed', 'Разложено']]
+    .filter(([k]) => typeof model[k] === 'function');
+  if (setters.length) {
+    const grp = document.createElement('div');
+    grp.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px';
+    for (const [k, label] of setters) {
+      const b = document.createElement('button');
+      b.textContent = label; b.style.padding = '8px 11px'; b.style.minHeight = '38px';
+      b.addEventListener('click', () => { b.classList.toggle('on'); model[k](b.classList.contains('on')); });
+      grp.appendChild(b);
+    }
+    body.appendChild(grp);
+  }
+}
+
+/* ------------------------------------------- «Выстрел» и «Перезарядка» */
+const setPart = (m, v) => { m.apply(v); if (m.input) { m.input.value = String(v); m.out.textContent = v.toFixed(2); } };
+const pick = (re) => partsMeta.filter((m) => re.test(m.name));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+
+function tween(ms, fn) {                                        // простой твин на rAF
+  return new Promise((res) => {
+    const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / ms);
+      fn(k);
+      k < 1 ? requestAnimationFrame(step) : res();
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+let busy = false;
+let lunge = 0;                                                  // отдача модели, когда parts пустой
+
+async function boltCycle(ms) {                                  // цикл затвора 90 мс
+  const bolts = pick(/bolt|slide|затвор|кожух/i);
+  if (!bolts.length) { await tween(ms * 2, (k) => { lunge = Math.sin(k * Math.PI); }); lunge = 0; return; }
+  await tween(ms, (k) => bolts.forEach((m) => setPart(m, Math.sin(k * Math.PI))));
+  bolts.forEach((m) => setPart(m, 0));
+}
+
+async function doFire() {
+  if (busy || !model) return; busy = true;
+  try { await boltCycle(90); } finally { busy = false; }
+}
+
+async function doReload() {
+  if (busy || !model) return; busy = true;
+  try {
+    const mags = pick(/mag|магаз/i);
+    if (mags.length) {
+      await tween(260, (k) => mags.forEach((m) => setPart(m, ease(k))));
+      await sleep(320);
+      await tween(240, (k) => mags.forEach((m) => setPart(m, 1 - ease(k))));
+      mags.forEach((m) => setPart(m, 0));
+      await boltCycle(90);
+    } else {                                                    // нож: перехват с прокруткой
+      const r0 = model.rotation.z;
+      await tween(700, (k) => { model.rotation.z = r0 + Math.PI * 2 * ease(k); lunge = Math.sin(k * Math.PI) * 0.5; });
+      model.rotation.z = r0; lunge = 0;
+    }
+  } finally { busy = false; }
+}
+
+/* -------------------------------------------------------------- статистика */
+function updateStats() {
+  if (!report) return;
+  const s = report.sizeMm;
+  $('sTri').textContent = report.tris.toLocaleString('ru-RU');
+  $('sMesh').textContent = String(report.meshes);
+  $('sMat').textContent = String(report.materials);
+  $('sBox').textContent = s.x.toFixed(0) + '×' + s.y.toFixed(0) + '×' + s.z.toFixed(0);
+  $('sNodes').textContent = String(report.nodeCount);
+  const parts = [];
+  parts.push(report.ok
+    ? '<div class="ok">● узлы на месте (' + report.nodeCount + ')</div>'
+    : '<div class="err">● нет узлов: ' + report.missing.join(', ') + '</div>');
+  for (const w of report.warn) parts.push('<div class="err">● ' + w + '</div>');
+  if (report.ok && !report.warn.length) parts.push('<div class="ok">● ' + report.materials + ' мат. → ' + report.meshes + ' draw call</div>');
+  $('check').innerHTML = parts.join('');
+}
+
+/* -------------------------------------------------------------------- кнопки */
+const toggle = (el, on) => el.classList.toggle('on', on);
+
+$('bWire').addEventListener('click', (e) => {
+  wireOn = !wireOn;
+  wireMats.forEach((m) => (m.wireframe = wireOn));
+  toggle(e.currentTarget, wireOn);
+});
+$('bNodes').addEventListener('click', (e) => {
+  const on = !nodesGroup.visible; nodesGroup.visible = on; toggle(e.currentTarget, on);
+});
+$('bBox').addEventListener('click', (e) => {
+  const on = !boxHelper.visible; boxHelper.visible = on; toggle(e.currentTarget, on);
+});
+$('bGrid').addEventListener('click', (e) => {
+  const on = !grid.visible; grid.visible = on; floor.visible = on; toggle(e.currentTarget, on);
+});
+$('bSpin').addEventListener('click', (e) => {
+  controls.autoRotate = !controls.autoRotate; toggle(e.currentTarget, controls.autoRotate);
+});
+$('bReset').addEventListener('click', () => resetCamera());
+
+const lodBtns = [$('bLod0'), $('bLod1'), $('bLod2')];
+lodBtns.forEach((b, i) => b.addEventListener('click', () => {
+  if (lod === i) return;
+  loadModel(i, true);
+  lodBtns.forEach((x, j) => toggle(x, i === j));
+}));
+
+$('bFire').addEventListener('click', doFire);
+$('bReload').addEventListener('click', doReload);
+
+function download(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+$('bShot').addEventListener('click', () => {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((b) => { if (b) download(b, 'knife_lod' + lod + '.png'); }, 'image/png');
+});
+
+$('bGlb').addEventListener('click', (e) => {
+  const btn = e.currentTarget, old = btn.textContent;
+  btn.textContent = 'Экспорт…'; btn.disabled = true;
+  const done = () => { btn.textContent = old; btn.disabled = false; };
+  const nodesWere = nodesGroup.visible; nodesGroup.visible = false;
+  new GLTFExporter().parse(
+    model,
+    (buf) => { nodesGroup.visible = nodesWere; download(new Blob([buf], { type: 'model/gltf-binary' }), 'knife_lod' + lod + '.glb'); done(); },
+    (err) => { nodesGroup.visible = nodesWere; console.error(err); alert('Не удалось экспортировать GLB: ' + err); done(); },
+    { binary: true }
+  );
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ------------------------------------------------------------------ запуск */
+loadModel(0, false);
+['ui', 'anim', 'stats', 'hint'].forEach((id) => $(id).removeAttribute('hidden'));
+$('boot').remove();
+
+let frames = 0;
+renderer.setAnimationLoop(() => {
+  controls.update();
+  if (model) model.position.z = -lunge * 0.055;                 // отдача / выпад по −Z
+  renderer.render(scene, camera);
+  if ((frames++ & 15) === 0) $('sCalls').textContent = String(renderer.info.render.calls);
+});
+</script>
+</body>
+</html>

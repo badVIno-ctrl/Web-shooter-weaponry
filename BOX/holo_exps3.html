@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Голографический прицел EXPS3 — процедурная модель three.js</title>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}
+</script>
+<style>
+  :root{
+    --panel:rgba(20,22,26,.86); --border:rgba(255,255,255,.15);
+    --txt:#f3f4f6; --dim:rgba(255,255,255,.66); --accent:#5e9fe8; --accentSoft:rgba(94,159,232,.24);
+    --ok:#72bc8f; --bad:#e97366;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#15171a;color:var(--txt);overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  canvas{display:block}
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);box-shadow:0 4px 18px rgba(0,0,0,.42)}
+  #ui{top:16px;left:16px;padding:12px;display:flex;flex-direction:column;gap:8px;width:328px;z-index:10}
+  .grp{display:flex;gap:8px;flex-wrap:wrap}
+  .sep{height:1px;background:var(--border);margin:2px 0}
+  button{font:600 13px/1.15 inherit;color:var(--txt);background:rgba(255,255,255,.07);
+    border:1px solid var(--border);border-radius:8px;padding:12px 12px;min-height:44px;cursor:pointer;
+    transition:background .14s,border-color .14s,color .14s}
+  button:hover{background:rgba(255,255,255,.15)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.on{background:var(--accentSoft);border-color:var(--accent);color:#dbeaff}
+  #anim{left:16px;bottom:16px;padding:14px;width:328px;max-height:38vh;overflow:auto;z-index:10}
+  #anim h3{margin:0 0 10px;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim);font-weight:700}
+  .row{display:grid;grid-template-columns:92px 1fr 40px;align-items:center;gap:10px;margin:10px 0}
+  .row label{font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row output{font:12px/1 ui-monospace,Menlo,Consolas,monospace;color:var(--dim);text-align:right}
+  input[type=range]{width:100%;accent-color:var(--accent);height:28px;cursor:pointer}
+  #toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  #anim .btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  #stats{top:16px;right:16px;padding:12px 14px;min-width:238px;z-index:10;
+    font:12px/1.7 ui-monospace,Menlo,Consolas,"Courier New",monospace;color:var(--dim)}
+  #stats b{color:var(--txt);font-weight:700;float:right;margin-left:14px}
+  #nodecheck{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);clear:both}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+  #hint{right:16px;bottom:16px;padding:11px 14px;font-size:13px;color:var(--dim);z-index:10;max-width:46vw}
+  #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;
+    padding:32px;z-index:50;background:#15171a}
+  #boot .card{max-width:560px}
+  #boot h1{font-size:20px;margin:0 0 12px;font-weight:600}
+  #boot p{margin:0;font-size:14px;color:var(--dim);line-height:1.6}
+  #boot code{font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#dbeaff;background:rgba(94,159,232,.12);
+    border:1px solid var(--border);border-radius:6px;padding:3px 7px;display:inline-block;margin-top:12px}
+  .spin{width:26px;height:26px;margin:0 auto 18px;border:2px solid rgba(255,255,255,.18);
+    border-top-color:var(--accent);border-radius:50%;animation:sp 900ms linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+  @media (max-width:900px){#stats{display:none}#hint{display:none}}
+  @media (max-width:760px){#ui,#anim{width:calc(100vw - 32px)}#anim{max-height:32vh}}
+</style>
+</head>
+<body>
+
+<div id="boot"><div class="card">
+  <div class="spin" id="spin"></div>
+  <h1 id="bootTitle">Загрузка three.js…</h1>
+  <p id="bootMsg">Модуль r166 тянется с CDN unpkg.com. Первый запуск требует интернета, дальше файл открывается из кэша браузера.</p>
+</div></div>
+
+<div id="ui" class="panel" hidden></div>
+
+<div id="anim" class="panel" hidden>
+  <h3>Анимация деталей</h3>
+  <div id="sliders"></div>
+  <div id="toggles"></div>
+  <div class="btns">
+    <button id="bShot2" type="button">Выстрел</button>
+    <button id="bReload2" type="button">Перезарядка</button>
+  </div>
+</div>
+
+<div id="stats" class="panel" hidden>
+  <div>Треугольники <b id="sTri">—</b></div>
+  <div>Меши <b id="sMesh">—</b></div>
+  <div>Материалы <b id="sMat">—</b></div>
+  <div>Draw calls <b id="sCalls">—</b></div>
+  <div>BBox, мм <b id="sBox">—</b></div>
+  <div>Узлы <b id="sNodes">—</b></div>
+  <div id="nodecheck"></div>
+</div>
+
+<div id="hint" class="panel" hidden>ЛКМ — вращать · колесо — зум · ПКМ — панорама</div>
+
+<script type="module">
+let THREE, OrbitControls, GLTFExporter;
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  ({ GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js'));
+} catch (err) {
+  document.getElementById('spin').style.display = 'none';
+  document.getElementById('bootTitle').textContent = 'Не удалось загрузить three.js';
+  document.getElementById('bootMsg').innerHTML =
+    'Сам файл исправен, но модуль three.js r166 не пришёл с CDN.<br>' +
+    'Проверьте интернет и обновите страницу: после первой удачной загрузки файл работает офлайн.<br>' +
+    'Блокировщики скриптов и корпоративные прокси тоже могут резать unpkg.com.' +
+    '<br><code>' + String(err && err.message ? err.message : err) + '</code>';
+  throw err;
+}
+
+// ==== МОДЕЛЬ: НАЧАЛО ====
+/* ============================================================================
+   ГОЛОГРАФИЧЕСКИЙ ПРИЦЕЛ типа EOTech EXPS3 — процедурная геометрия three.js
+
+   ТАБЛИЦА РАЗМЕРОВ (мм)
+   +---------------------------------+------------------------------------------+
+   | Корпус Д x Ш x В от планки     | 96 x 60 x 70                             |
+   | Окно (сквозной тоннель)         | 33 x 23, R3, стекло с наклоном 6 град |
+   | Капот по периметру окна        | стенка 5, вылет 8 (43 x 33 снаружи)     |
+   | Оптическая ось над планкой    | 47  (lower 1/3 co-witness)               |
+   | Кнопки настройки, лев. борт  | 2 шт. 8 x 8, ход нажатия 0,8           |
+   | Батарейный отсек снизу-спереди| 30 x 25 x 15 + рычажный зажим          |
+   | Планка Пикатинни              | 21,2 ширина, шаг 10,16, скосы 45 град |
+   | Стенки тоннеля                 | бок 9,5 / крыша 7,5 / низ 23,5          |
+   | Марка                          | кольцо 65 MOA + точка 1 MOA в центре   |
+   +---------------------------------+------------------------------------------+
+
+   ОСИ:    -Z вперёд, +Y вверх, +X вправо.   ЕДИНИЦЫ: метры, mm(x) = x/1000.
+   ORIGIN: центр нижней плоскости крепления на планку Пикатинни (y = 0).
+   БЮДЖЕТ: ~1,9k треугольников на LOD0 / ~0,8k на LOD1.
+           4 статичных батча (anodized / steel / glass / reticle) + 3 подвижные
+           детали из group.parts, которые по контракту нельзя сливать в батч.
+============================================================================ */
+
+function buildHolo(THREE, opts = {}) {
+  const mm = (x) => x / 1000;                        // миллиметры -> метры
+  const O = Object.assign({
+    reticle: true,
+    reticleColor: 0xff2b1a,                          // красная марка
+    reticleBrightness: 1.0,
+    lod: 0                                           // 0 — полная, 1/2 — упрощённые
+  }, opts);
+  const LOW = O.lod >= 1;                            // LOD1+: меньше сегментов и мелких деталей
+  const seg = (hi, lo) => (LOW ? lo : hi);
+
+  const group = new THREE.Group();
+  group.name = 'HoloSight_EXPS3';
+
+  /* ---------------------- МАТЕРИАЛЫ ---------------------------------- */
+  const anodized = new THREE.MeshStandardMaterial({          // корпус, капот, кронштейн
+    name: 'anodized', color: 0x212428, metalness: 0.60, roughness: 0.55
+  });
+  const steel = new THREE.MeshStandardMaterial({             // рычаг QD, ось, пружина, винты
+    name: 'steel', color: 0x70747a, metalness: 0.90, roughness: 0.32
+  });
+  const rubber = new THREE.MeshStandardMaterial({            // накладки кнопок
+    name: 'rubber', color: 0x0e1013, metalness: 0.05, roughness: 0.92
+  });
+  const glass = new THREE.MeshPhysicalMaterial({             // окно 33 x 23
+    name: 'glass', color: 0xe3ecea, metalness: 0.0, roughness: 0.04,
+    transmission: 0.92, thickness: mm(2.2), ior: 1.52,
+    transparent: true, side: THREE.DoubleSide,
+    // просветление: зелёно-синий отблеск, видный только под углом
+    iridescence: 0.9, iridescenceIOR: 1.35, iridescenceThicknessRange: [200, 520],
+    sheen: 0.6, sheenColor: new THREE.Color(0x2f7a63), sheenRoughness: 0.30,
+    clearcoat: 0.7, clearcoatRoughness: 0.06,
+    specularColor: new THREE.Color(0x8fd8c8), envMapIntensity: 1.2
+  });
+  const reticleMat = new THREE.MeshStandardMaterial({        // эмиссивная марка
+    name: 'reticle', color: 0x000000, roughness: 1, metalness: 0,
+    emissive: new THREE.Color(O.reticleColor), emissiveIntensity: 2.6,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide
+  });
+  const materials = [anodized, steel, rubber, glass, reticleMat];
+
+  /* ---------------------- ГЕОМЕТРИЧЕСКИЕ ХЕЛПЕРЫ ------------------- */
+  const geoms = [];
+  const keep = (g) => { geoms.push(g); return g; };
+
+  // скруглённый прямоугольный контур в плоскости XY
+  function rect(Ctor, w, h, r, cx, cy) {
+    const p = new Ctor();
+    const x = (cx || 0) - w / 2, y = (cy || 0) - h / 2, rr = Math.min(r, w / 2, h / 2);
+    p.moveTo(x + rr, y);
+    p.lineTo(x + w - rr, y);      p.quadraticCurveTo(x + w, y, x + w, y + rr);
+    p.lineTo(x + w, y + h - rr);  p.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    p.lineTo(x + rr, y + h);      p.quadraticCurveTo(x, y + h, x, y + h - rr);
+    p.lineTo(x, y + rr);          p.quadraticCurveTo(x, y, x + rr, y);
+    return p;
+  }
+  function extrude(shape, depth, curve) {
+    const g = new THREE.ExtrudeGeometry(shape, {
+      depth, bevelEnabled: false, curveSegments: curve === undefined ? seg(3, 1) : curve
+    });
+    g.translate(0, 0, -depth / 2);                    // центрируем по Z
+    return keep(g);
+  }
+  const roundedBox = (w, h, d, r) => extrude(rect(THREE.Shape, w, h, r, 0, 0), d);
+  // рамка с отверстием: основа для корпуса-тоннеля и для капота
+  function frame(wo, ho, ro, wi, hi, ri, holeCY, depth) {
+    const s = rect(THREE.Shape, wo, ho, ro, 0, 0);
+    s.holes.push(rect(THREE.Path, wi, hi, ri, 0, holeCY));
+    return extrude(s, depth);
+  }
+  const boxG  = (w, h, d) => keep(new THREE.BoxGeometry(w, h, d));
+  const cylG  = (r, h, s) => keep(new THREE.CylinderGeometry(r, r, h, s === undefined ? seg(14, 6) : s));
+  const torG  = (r, t) => keep(new THREE.TorusGeometry(r, t, seg(5, 3), seg(14, 8)));
+
+  // слияние BufferGeometry без внешних аддонов (position / normal / uv / index)
+  function mergeGeoms(list) {
+    let vc = 0, ic = 0;
+    for (const g of list) {
+      if (!g.getAttribute('normal')) g.computeVertexNormals();
+      const n = g.getAttribute('position').count;
+      vc += n; ic += g.index ? g.index.count : n;
+    }
+    const pos = new Float32Array(vc * 3), nor = new Float32Array(vc * 3), uv = new Float32Array(vc * 2);
+    const idx = new Uint32Array(ic);
+    let vo = 0, io = 0;
+    for (const g of list) {
+      const P = g.getAttribute('position'), N = g.getAttribute('normal'), U = g.getAttribute('uv');
+      pos.set(P.array.subarray(0, P.count * 3), vo * 3);
+      nor.set(N.array.subarray(0, N.count * 3), vo * 3);
+      if (U) uv.set(U.array.subarray(0, U.count * 2), vo * 2);
+      if (g.index) { const I = g.index.array; for (let i = 0; i < I.length; i++) idx[io + i] = I[i] + vo; io += I.length; }
+      else { for (let i = 0; i < P.count; i++) idx[io + i] = i + vo; io += P.count; }
+      vo += P.count;
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    out.setIndex(new THREE.BufferAttribute(idx, 1));
+    out.computeBoundingBox(); out.computeBoundingSphere();
+    return out;
+  }
+  function xform(geo, pos, rot, scl) {
+    const g = geo.clone();
+    g.applyMatrix4(new THREE.Matrix4().compose(
+      new THREE.Vector3(pos[0], pos[1], pos[2]),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(rot ? rot[0] : 0, rot ? rot[1] : 0, rot ? rot[2] : 0)),
+      new THREE.Vector3(scl ? scl[0] : 1, scl ? scl[1] : 1, scl ? scl[2] : 1)));
+    return g;
+  }
+  // копим куски по материалам и сливаем по одному мешу на материал
+  const bucket = new Map();
+  const add = (mat, geo, pos, rot, scl) => {
+    if (!bucket.has(mat)) bucket.set(mat, []);
+    bucket.get(mat).push(xform(geo, pos || [0, 0, 0], rot, scl));
+  };
+  function flush(mat, name) {
+    const list = bucket.get(mat); bucket.delete(mat);
+    if (!list || !list.length) return null;
+    const merged = mergeGeoms(list);
+    list.forEach(g => g.dispose());
+    geoms.push(merged);
+    const mesh = new THREE.Mesh(merged, mat);
+    mesh.name = name; mesh.castShadow = true; mesh.receiveShadow = true;
+    group.add(mesh);
+    return mesh;
+  }
+
+  /* ---------------------- КЛЮЧЕВЫЕ РАЗМЕРЫ (мм) --------------------- */
+  const RAIL_W = 21.2, RAIL_PITCH = 10.16;           // планка Пикатинни
+  const MOUNT_H = 12;                                // высота кронштейна над планкой
+  const OPT_Y = 47;                                  // оптическая ось
+  const WIN_W = 33, WIN_H = 23, WIN_R = 3;           // окно
+  const HOOD_T = 5, HOOD_D = 8;                      // капот: стенка и вылет
+  const SH_W = 52, SH_H = 54;                        // сечение корпуса (без приливов)
+  const SH_Z0 = -34, SH_Z1 = 54;                     // корпус от фронта до тыла (88 мм)
+  const SH_CY = MOUNT_H + SH_H / 2;                  // центр сечения = 39 мм
+  const GLASS_Z = -30;                               // стекло ближе к фронту тоннеля
+  const TILT = THREE.MathUtils.degToRad(6);          // наклон стекла 6 град назад
+  const M = mm;                                      // короткий алиас
+
+  /* ---------------------- 1. КОРПУС-ТОННЕЛЬ -------------------------- */
+  // Одна выдавленная рамка: скруглённый прямоугольник 52 x 54 с сквозным
+  // окном 33 x 23 на высоте оптической оси — даёт крышу, две боковины и низ.
+  add(anodized,
+      frame(M(SH_W), M(SH_H), M(5), M(WIN_W), M(WIN_H), M(WIN_R), M(OPT_Y - SH_CY), M(SH_Z1 - SH_Z0)),
+      [0, M(SH_CY), M((SH_Z0 + SH_Z1) / 2)]);
+
+  // рёбра жёсткости по крыше (3 шт. поперёк)
+  if (!LOW) for (let i = 0; i < 3; i++)
+    add(anodized, boxG(M(SH_W - 6), M(2.2), M(3.2)), [0, M(MOUNT_H + SH_H + 0.6), M(6 + i * 12)]);
+  // продольное ребро по крыше
+  add(anodized, boxG(M(10), M(2.4), M(70)), [0, M(MOUNT_H + SH_H + 0.7), M(12)]);
+  // вентиляционные проточки по бокам (рёбра между пазами)
+  const nv = LOW ? 3 : 6;
+  for (let s = -1; s <= 1; s += 2)
+    for (let i = 0; i < nv; i++)
+      add(anodized, boxG(M(1.6), M(4.5), M(22)), [s * M(SH_W / 2 + 0.4), M(20 + i * 6), M(30)]);
+  // гравированные риски юстировки вокруг барабанчиков
+  if (!LOW) for (let i = 0; i < 5; i++) {
+    add(anodized, boxG(M(0.9), M(0.7), M(4)), [M(SH_W / 2 + 0.2), M(30), M(34 + i * 4)]);        // правый борт
+    add(anodized, boxG(M(4), M(0.7), M(0.9)), [M(-8 + i * 4), M(MOUNT_H + SH_H + 0.2), M(44)]);  // крыша
+  }
+  // барабанчики юстировки: windage справа, elevation сверху
+  add(anodized, cylG(M(6), M(6)), [M(SH_W / 2 + 2), M(30), M(40)], [0, 0, Math.PI / 2]);
+  add(anodized, cylG(M(6), M(4)), [0, M(MOUNT_H + SH_H + 1.6), M(40)]);
+
+  /* ---------------------- 2. КРОНШТЕЙН И ПЛАНКА ---------------------- */
+  add(anodized, boxG(M(RAIL_W), M(4), M(58)), [0, M(2), M(0)]);                                    // подошва
+  for (const s of [-1, 1])                                                                          // скосы 45 град
+    add(anodized, boxG(M(3.6), M(3.6), M(58)), [s * M(RAIL_W / 2 - 0.3), M(3.8), 0], [0, 0, Math.PI / 4]);
+  add(anodized, roundedBox(M(28), M(8.4), M(60), M(2)), [0, M(7.9), M(0)]);                         // тело кронштейна
+  if (!LOW) for (let i = -1; i <= 1; i++)                                                           // рекойл-упоры, шаг 10,16
+    add(anodized, boxG(M(RAIL_W - 1.2), M(3.4), M(4.4)), [0, M(2.1), M(i * RAIL_PITCH)]);
+
+  /* ---------------------- 3. БАТАРЕЙНЫЙ ОТСЕК (30 x 25 x 15) ---------- */
+  add(anodized, roundedBox(M(25), M(15), M(30), M(2.5)), [0, M(MOUNT_H + 7.5), M(-27)]);
+  add(anodized, cylG(M(5.6), M(3.5)), [0, M(MOUNT_H + 7.5), M(-43.2)], [Math.PI / 2, 0, 0]);        // крышка
+  add(steel,    cylG(M(2.2), M(5)),   [0, M(MOUNT_H + 7.5), M(-45.4)], [Math.PI / 2, 0, 0]);        // рычажок зажима
+  add(steel,    boxG(M(3), M(13), M(2.4)), [0, M(MOUNT_H + 12), M(-45.4)]);
+
+  /* ---------------------- 4. БЫСТРОСЪЁМНЫЙ ЗАЖИМ QD ------------------- */
+  add(steel, cylG(M(1.7), M(26)), [M(-13), M(6.5), M(-8)], [0, 0, Math.PI / 2]);                    // ось рычага
+  add(steel, roundedBox(M(32), M(7.5), M(3), M(1.8)),                                               // сам рычаг
+      [M(-15.5), M(6.5), M(-8)], [0, Math.PI / 2, THREE.MathUtils.degToRad(-7)]);
+  add(steel, boxG(M(4.5), M(11), M(3.2)), [M(-13.6), M(8.5), M(-8)]);                               // прижимная лапка
+  if (!LOW) for (let i = 0; i < 3; i++)                                                             // пружина
+    add(steel, torG(M(2.8), M(0.65)), [M(-9.4), M(6.5), M(-8 + i * 1.9)], [0, Math.PI / 2, 0]);
+  add(steel, cylG(M(1.7), M(24)), [M(12), M(6.5), M(16)], [0, 0, Math.PI / 2]);                     // задний винт
+
+  /* ---------------------- 5. ПРИЛИВ ПОД КНОПКИ ---------------------- */
+  add(anodized, roundedBox(M(16), M(30), M(4), M(2.5)), [M(-SH_W / 2 - 0.6), M(24), M(34)], [0, Math.PI / 2, 0]);
+
+  /* ---------------------- 6. КАПОТ (подвижная деталь) ---------------- */
+  // Пивот группы — по верхней задней кромке капота: откидывается как крышка.
+  const hood = new THREE.Group();
+  hood.name = 'hood';
+  hood.position.set(0, M(OPT_Y + WIN_H / 2 + HOOD_T), M(SH_Z0));
+  {
+    const fg = frame(M(WIN_W + 2 * HOOD_T), M(WIN_H + 2 * HOOD_T), M(WIN_R + 2),
+                     M(WIN_W), M(WIN_H), M(WIN_R), 0, M(HOOD_D));
+    const fm = new THREE.Mesh(fg, anodized);
+    fm.name = 'hood_frame';
+    fm.position.set(0, -M(WIN_H / 2 + HOOD_T), -M(HOOD_D / 2));
+    fm.rotation.x = TILT;
+    fm.castShadow = true; fm.receiveShadow = true;
+    hood.add(fm);
+  }
+  group.add(hood);
+
+  /* ---------------------- 7. ОКНО ---------------------------------------- */
+  const glassGeo = keep(new THREE.PlaneGeometry(M(WIN_W - 0.6), M(WIN_H - 0.6)));
+  const opticGlass = new THREE.Mesh(glassGeo, glass);
+  opticGlass.name = 'opticGlass';
+  opticGlass.position.set(0, M(OPT_Y), M(GLASS_Z));
+  opticGlass.rotation.x = TILT;
+  group.add(opticGlass);
+
+  /* ---------------------- 8. КНОПКИ 8 x 8, ход 0,8 мм ------------------- */
+  function makeButton(name, y, dir) {
+    const g = new THREE.Group();
+    g.name = name;
+    g.position.set(M(-SH_W / 2 - 3.4), M(y), M(34));   // левая боковина, сзади
+    const chunks = [xform(roundedBox(M(8), M(8), M(3), M(1.2)), [0, 0, 0], [0, Math.PI / 2, 0])];
+    if (!LOW) {                                        // рельефная стрелка из двух планок
+      const bar = boxG(M(1.0), M(1.0), M(3.6));
+      for (const s of [1, -1])
+        chunks.push(xform(bar, [M(-2.0), M(-0.6 * dir), s * M(1.15)], [s * dir * Math.PI / 4, 0, 0]));
+    }
+    const merged = mergeGeoms(chunks);
+    chunks.forEach(c => c.dispose());
+    geoms.push(merged);
+    const mesh = new THREE.Mesh(merged, rubber);
+    mesh.name = name + '_mesh'; mesh.castShadow = true; mesh.receiveShadow = true;
+    g.add(mesh); group.add(g);
+    return g;
+  }
+  const buttonUp   = makeButton('buttonUp',   30.5,  1);
+  const buttonDown = makeButton('buttonDown', 19.5, -1);
+
+  /* ---------------------- 9. МАРКА: 65 MOA + 1 MOA -------------------- */
+  // Масштаб проекции подобран так, чтобы кольцо 65 MOA занимало ~12 мм окна.
+  const MOA = 0.185;                                   // мм на 1 MOA на плоскости марки
+  const rRing = M(32.5 * MOA);                         // радиус кольца 65 MOA
+  const reticleChunks = [
+    keep(new THREE.RingGeometry(rRing - M(0.24), rRing + M(0.24), seg(40, 20))).clone(),
+    keep(new THREE.CircleGeometry(M(0.42), seg(14, 8))).clone()   // точка 1 MOA
+  ];
+  const reticleGeo = mergeGeoms(reticleChunks);
+  reticleChunks.forEach(c => c.dispose());
+  geoms.push(reticleGeo);
+  const reticle = new THREE.Mesh(reticleGeo, reticleMat);
+  reticle.name = 'reticle';
+  reticle.position.set(0, M(OPT_Y), M(GLASS_Z + 0.8));  // чуть ближе к глазу, чем стекло
+  reticle.rotation.x = TILT;
+  group.add(reticle);
+
+  /* ---------------------- 10. СБОРКА БАТЧЕЙ ------------------------ */
+  flush(anodized, 'shell_anodized');
+  flush(steel, 'hardware_steel');
+
+  /* ---------------------- 11. УЗЛЫ, ДЕТАЛИ, API ---------------------- */
+  const mkNode = (name, x, y, z) => {
+    const o = new THREE.Object3D(); o.name = name; o.position.set(x, y, z); group.add(o); return o;
+  };
+  group.nodes = {
+    mount:      mkNode('mount', 0, 0, 0),                     // низ крепления на планку
+    sightAxis:  mkNode('sightAxis', 0, M(OPT_Y), M(GLASS_Z)), // оптическая ось, 47 мм
+    opticGlass: opticGlass,                                    // стекло окна
+    exitPupil:  mkNode('exitPupil', 0, M(OPT_Y), M(SH_Z1 + 40))// выходной зрачок за прицелом
+  };
+  group.parts = { buttonUp, buttonDown, hood };
+
+  group.setReticle = function (on, color, brightness) {
+    reticle.visible = on !== false;
+    if (color !== undefined && color !== null) reticleMat.emissive.set(color);
+    if (brightness !== undefined && brightness !== null)
+      reticleMat.emissiveIntensity = 0.4 + 3.4 * Math.max(0, Math.min(1, brightness));
+    return group;
+  };
+  group.setReticle(O.reticle, O.reticleColor, O.reticleBrightness);
+
+  group.dispose = function () {
+    geoms.forEach(g => g.dispose());
+    materials.forEach(m => m.dispose());
+  };
+
+  group.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return group;
+}
+
+// Проверка контракта модели.
+function validate(group) {
+  const missing = [];
+  ['mount', 'sightAxis', 'opticGlass', 'exitPupil'].forEach(k => {
+    if (!group.nodes || !group.nodes[k]) missing.push('nodes.' + k);
+  });
+  ['buttonUp', 'buttonDown', 'hood'].forEach(k => {
+    if (!group.parts || !group.parts[k]) missing.push('parts.' + k);
+  });
+  if (typeof group.setReticle !== 'function') missing.push('setReticle()');
+  if (typeof group.dispose !== 'function') missing.push('dispose()');
+  return { ok: missing.length === 0, missing };
+}
+
+const build = buildHolo;
+window.buildHolo = buildHolo;
+// export { buildHolo }
+// ==== МОДЕЛЬ: КОНЕЦ ====
+
+
+/* ============================================================================
+   ПРОСМОТРЩИК
+============================================================================ */
+const mm = (x) => x / 1000;
+const el = (id) => document.getElementById(id);
+
+/* --- рендерер --- */
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+/* --- сцена --- */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171a);
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.01, 10);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.075;
+controls.autoRotateSpeed = 1.6;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+// свет: key сверху-справа-спереди (-Z), холодный fill слева, контровой rim сзади
+const key = new THREE.DirectionalLight(0xfff2df, 2.6);
+key.position.set(0.26, 0.40, -0.32);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 0.01; key.shadow.camera.far = 2.0; key.shadow.bias = -0.0013;
+key.shadow.camera.left = -0.14; key.shadow.camera.right = 0.14;
+key.shadow.camera.top = 0.14;  key.shadow.camera.bottom = -0.14;
+scene.add(key, key.target);
+const fill = new THREE.DirectionalLight(0x9ec6ff, 0.55); fill.position.set(-0.40, 0.14, 0.08); scene.add(fill);
+const rim  = new THREE.DirectionalLight(0xc3daff, 1.6);  rim.position.set(-0.05, 0.20, 0.42);  scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xa2b8cf, 0x0b0c0e, 0.55));
+
+const grid = new THREE.GridHelper(0.4, 40, 0x3d434b, 0x24282d);
+grid.material.transparent = true; grid.material.opacity = 0.8;
+scene.add(grid);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.ShadowMaterial({ opacity: 0.34 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.0004; floor.receiveShadow = true;
+scene.add(floor);
+
+/* --- состояние просмотрщика --- */
+const state = { wire: false, nodes: false, bbox: false, grid: true, spin: false };
+let model = null, boxHelper = null, nodeHelpers = null;
+let sliders = [], initialTRS = new Map(), busy = false;
+
+/* --- штатные траектории деталей (t = 0 — штатное место) --- */
+const TRAJ = {
+  // кнопки утапливаются в левую боковину на 0,8 мм по +X
+  buttonUp:   { label: 'Кнопка ↑', apply: (o, b, t) => o.position.set(b.p.x + mm(0.8) * t, b.p.y, b.p.z) },
+  buttonDown: { label: 'Кнопка ↓', apply: (o, b, t) => o.position.set(b.p.x + mm(0.8) * t, b.p.y, b.p.z) },
+  // капот откидывается вверх-назад вокруг верхней задней кромки
+  hood:       { label: 'Капот',    apply: (o, b, t) => o.rotation.set(b.r.x - THREE.MathUtils.degToRad(105) * t, b.r.y, b.r.z) }
+};
+const FALLBACK = (o, b, t) => o.position.set(b.p.x, b.p.y, b.p.z + mm(8) * t);
+
+function applyPart(name, t) {
+  const o = model.parts[name], b = initialTRS.get(o);
+  if (!o || !b) return;
+  (TRAJ[name] ? TRAJ[name].apply : FALLBACK)(o, b, t);
+}
+
+/* --- создание / удаление модели --- */
+function disposeModel() {
+  if (!model) return;
+  disposeNodeHelpers();
+  if (boxHelper) { scene.remove(boxHelper); boxHelper.geometry.dispose(); boxHelper.material.dispose(); boxHelper = null; }
+  scene.remove(model);
+  if (model.dispose) model.dispose();
+  model = null;
+}
+function makeModel(level) {
+  disposeModel();
+  model = buildHolo(THREE, { lod: Math.min(level, 1) });
+  if (level >= 2) model.setReticle(false);            // LOD2: геометрия LOD1 без марки
+  scene.add(model);
+  initialTRS = new Map();
+  Object.values(model.parts || {}).forEach(p =>
+    initialTRS.set(p, { p: p.position.clone(), r: p.rotation.clone() }));
+  buildAnimPanel();
+  rebuildNodeHelpers();
+  refreshBoxHelper();
+  setWire(state.wire);
+  updateStats(true);
+}
+
+/* --- панель анимации (G) --- */
+function buildAnimPanel() {
+  const host = el('sliders'); host.innerHTML = ''; sliders = [];
+  Object.keys(model.parts || {}).forEach(name => {
+    const row = document.createElement('div'); row.className = 'row';
+    const lab = document.createElement('label');
+    lab.textContent = (TRAJ[name] && TRAJ[name].label) || name;
+    lab.htmlFor = 'sl_' + name;
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = '0'; inp.max = '1'; inp.step = '0.01'; inp.value = '0';
+    inp.id = 'sl_' + name;
+    const out = document.createElement('output'); out.textContent = '0.00';
+    inp.addEventListener('input', () => {
+      out.textContent = (+inp.value).toFixed(2);
+      applyPart(name, +inp.value);
+    });
+    row.append(lab, inp, out); host.appendChild(row);
+    sliders.push({ name, inp, out });
+  });
+  const tg = el('toggles'); tg.innerHTML = '';
+  [['setReticle', 'Марка'], ['setBeam', 'Луч'], ['setLight', 'Подсветка'],
+   ['setAmmo', 'Патрон'], ['setDeployed', 'Разложено']]
+    .filter(([fn]) => typeof model[fn] === 'function')
+    .forEach(([fn, label]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = label;
+      const on0 = fn !== 'setReticle' || model.getObjectByName('reticle').visible;
+      b.dataset.on = on0 ? '1' : '0'; b.classList.toggle('on', on0);
+      b.addEventListener('click', () => {
+        const on = b.dataset.on !== '1';
+        b.dataset.on = on ? '1' : '0';
+        b.classList.toggle('on', on);
+        model[fn](on, 0xff2b1a, 1.0);
+      });
+      tg.appendChild(b);
+    });
+}
+function setSlider(name, v) {
+  const s = sliders.find(x => x.name === name);
+  if (!s) return;
+  s.inp.value = String(v);
+  s.out.textContent = (+v).toFixed(2);
+  applyPart(name, v);
+}
+
+/* --- «Выстрел» и «Перезарядка» --- */
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+function tween(name, from, to, ms) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / ms);
+      setSlider(name, from + (to - from) * k);
+      if (k < 1) requestAnimationFrame(step); else res();
+    };
+    requestAnimationFrame(step);
+  });
+}
+// У оптики нет затвора, поэтому цикл 90 мс — это нажатие кнопки + вспышка марки.
+async function fireCycle() {
+  if (busy || !model) return;
+  busy = true;
+  if (model.setReticle) model.setReticle(true, 0xff2b1a, 1.0);
+  await tween('buttonUp', 0, 1, 45);
+  if (model.setReticle) model.setReticle(true, 0xffd0a0, 1.0);
+  await tween('buttonUp', 1, 0, 45);
+  if (model.setReticle) model.setReticle(true, 0xff2b1a, 1.0);
+  busy = false;
+}
+// Аналог перезарядки для прицела: капот откидывается -> пауза -> закрывается -> цикл.
+async function reloadCycle() {
+  if (busy || !model) return;
+  busy = true;
+  await tween('hood', 0, 1, 280);
+  await wait(240);
+  await tween('hood', 1, 0, 280);
+  busy = false;
+  await fireCycle();
+}
+
+/* --- узлы: AxesHelper 30 мм + спрайт-подпись на canvas --- */
+function labelSprite(text) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(16,18,22,.86)'; g.fillRect(0, 0, 256, 64);
+  g.strokeStyle = 'rgba(94,159,232,.95)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 253, 61);
+  g.font = 'bold 28px ui-monospace, Menlo, Consolas, monospace';
+  g.fillStyle = '#dbeaff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(mm(28), mm(7), 1);
+  return sp;
+}
+function disposeNodeHelpers() {
+  if (!nodeHelpers) return;
+  scene.remove(nodeHelpers);
+  nodeHelpers.traverse(o => {
+    if (o.isSprite) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    else { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }
+  });
+  nodeHelpers = null;
+}
+function rebuildNodeHelpers() {
+  disposeNodeHelpers();
+  nodeHelpers = new THREE.Group();
+  nodeHelpers.visible = state.nodes;
+  const v = new THREE.Vector3();
+  model.updateMatrixWorld(true);
+  Object.entries(model.nodes || {}).forEach(([name, obj], i) => {
+    obj.getWorldPosition(v);
+    const ax = new THREE.AxesHelper(mm(30));
+    ax.position.copy(v);
+    ax.material.depthTest = false;
+    nodeHelpers.add(ax);
+    const sp = labelSprite(name);
+    sp.position.copy(v).add(new THREE.Vector3(0, mm(9 + (i % 2) * 7), 0));
+    nodeHelpers.add(sp);
+  });
+  scene.add(nodeHelpers);
+}
+function refreshBoxHelper() {
+  if (boxHelper) { scene.remove(boxHelper); boxHelper.geometry.dispose(); boxHelper.material.dispose(); }
+  boxHelper = new THREE.Box3Helper(new THREE.Box3().setFromObject(model), 0x5e9fe8);
+  boxHelper.visible = state.bbox;
+  scene.add(boxHelper);
+}
+
+/* --- камера под габариты (Box3) --- */
+function resetCamera() {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const c = box.getCenter(new THREE.Vector3());
+  const r = Math.max(size.x, size.y, size.z) * 0.5;
+  const dist = (r / Math.sin(THREE.MathUtils.degToRad(camera.fov * 0.5))) * 1.75;
+  camera.near = Math.max(dist * 0.004, r * 0.008);
+  camera.far  = dist * 14 + r * 12;
+  camera.updateProjectionMatrix();
+  camera.position.set(c.x + dist * 0.66, c.y + dist * 0.40, c.z + dist * 0.72);
+  controls.target.copy(c);
+  controls.update();
+  key.target.position.copy(c);
+  key.target.updateMatrixWorld();
+}
+
+function setWire(on) {
+  state.wire = on;
+  model.traverse(o => { if (o.isMesh && o.material && 'wireframe' in o.material) o.material.wireframe = on; });
+}
+
+/* --- панель кнопок (F) --- */
+const ui = el('ui');
+function mkGroup() { const d = document.createElement('div'); d.className = 'grp'; ui.appendChild(d); return d; }
+function mkSep() { const d = document.createElement('div'); d.className = 'sep'; ui.appendChild(d); }
+function mkBtn(text, host, fn, active) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = text;
+  if (active) b.classList.add('on');
+  b.addEventListener('click', () => fn(b));
+  host.appendChild(b);
+  return b;
+}
+const g1 = mkGroup();
+mkBtn('Каркас',   g1, b => { setWire(!state.wire); b.classList.toggle('on', state.wire); });
+mkBtn('Узлы',     g1, b => { state.nodes = !state.nodes; nodeHelpers.visible = state.nodes; b.classList.toggle('on', state.nodes); });
+mkBtn('Габариты', g1, b => { state.bbox = !state.bbox; boxHelper.visible = state.bbox; b.classList.toggle('on', state.bbox); });
+mkBtn('Сетка',    g1, b => { state.grid = !state.grid; grid.visible = state.grid; b.classList.toggle('on', state.grid); }, true);
+mkBtn('Автоповорот', g1, b => { state.spin = !state.spin; controls.autoRotate = state.spin; b.classList.toggle('on', state.spin); });
+mkBtn('Сброс камеры', g1, () => resetCamera());
+mkSep();
+const g2 = mkGroup();
+const lodBtns = [0, 1, 2].map(i => mkBtn('LOD' + i, g2, () => {
+  makeModel(i);
+  lodBtns.forEach((b, j) => b.classList.toggle('on', i === j));
+}, i === 0));
+mkSep();
+const g3 = mkGroup();
+mkBtn('Выстрел',      g3, () => fireCycle());
+mkBtn('Перезарядка', g3, () => reloadCycle());
+mkBtn('Скриншот PNG', g3, () => {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob(bl => saveBlob(bl, 'holo_exps3.png'));
+});
+mkBtn('Экспорт GLB', g3, () => {
+  new GLTFExporter().parse(
+    model,
+    res => saveBlob(new Blob([res], { type: 'model/gltf-binary' }), 'holo_exps3.glb'),
+    e => alert('Не удалось экспортировать GLB: ' + e),
+    { binary: true }
+  );
+});
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+el('bShot2').addEventListener('click', () => fireCycle());
+el('bReload2').addEventListener('click', () => reloadCycle());
+
+/* --- статистика (H) --- */
+function updateStats(full) {
+  if (!model) return;
+  if (full) {
+    let tris = 0, meshes = 0;
+    const mats = new Set();
+    model.traverse(o => {
+      if (!o.isMesh) return;
+      meshes++;
+      mats.add(o.material.uuid);
+      const g = o.geometry;
+      tris += g.index ? g.index.count / 3 : g.getAttribute('position').count / 3;
+    });
+    const s = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+    el('sTri').textContent = Math.round(tris).toLocaleString('ru-RU');
+    el('sMesh').textContent = meshes;
+    el('sMat').textContent = mats.size;
+    el('sBox').textContent = (s.x * 1000).toFixed(1) + '×' + (s.y * 1000).toFixed(1) + '×' + (s.z * 1000).toFixed(1);
+    el('sNodes').textContent = Object.keys(model.nodes || {}).length;
+    const v = validate(model);
+    el('nodecheck').innerHTML = v.ok
+      ? '<span class="ok">✓ узлы на месте</span>'
+      : '<span class="bad">✗ не хватает: ' + v.missing.join(', ') + '</span>';
+  }
+  el('sCalls').textContent = renderer.info.render.calls;
+}
+
+/* --- старт --- */
+makeModel(0);
+resetCamera();
+el('boot').remove();
+['ui', 'anim', 'stats', 'hint'].forEach(id => { el(id).hidden = false; });
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+let frame = 0;
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+  if ((frame++ % 15) === 0) updateStats(false);
+});
+</script>
+</body>
+</html>

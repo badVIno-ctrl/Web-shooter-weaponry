@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Сошки Harris — процедурная модель three.js</title>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}
+</script>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#15171a;color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+canvas{display:block}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+
+/* ---------- панели ---------- */
+.panel{position:fixed;z-index:10;background:rgba(22,24,27,.86);border:1px solid rgba(255,255,255,.14);
+  border-radius:12px;padding:10px 12px 12px;box-shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.35);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.tl{top:16px;left:16px;width:298px}
+.bl{bottom:16px;left:16px;width:298px}
+.tr{top:16px;right:16px;width:240px}
+.phead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ptitle{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:600}
+.collapse{width:28px;height:28px;flex:0 0 28px;border-radius:8px;border:1px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.05);color:rgba(255,255,255,.8);font-size:16px;line-height:1;cursor:pointer;padding:0}
+.collapse:hover{background:rgba(255,255,255,.13)}
+.pbody{margin-top:10px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}
+.pbody::-webkit-scrollbar{width:8px}
+.pbody::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:4px}
+.panel.min .pbody{display:none}
+/* обе левые панели делят высоту окна пополам и никогда не наезжают друг на друга */
+.tl .pbody{max-height:min(calc(50vh - 92px),540px);overflow-y:auto}
+.bl .pbody{max-height:min(calc(50vh - 92px),430px);overflow-y:auto}
+
+.row{display:flex;flex-wrap:wrap;gap:8px}
+button.b{min-height:40px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.16);
+  background:rgba(255,255,255,.06);color:rgba(255,255,255,.88);font-size:14px;font-family:inherit;
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;white-space:nowrap}
+button.b:hover{background:rgba(255,255,255,.13)}
+button.b:active{transform:translateY(1px)}
+button.b:focus-visible{outline:2px solid #5E9FE8;outline-offset:2px}
+button.b.on{background:rgba(94,159,232,.22);border-color:#5E9FE8;color:#dbeaff}
+button.b.grow{flex:1 1 0}
+.glabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.42);margin:14px 0 7px}
+.glabel:first-child{margin-top:0}
+
+.srow{margin-top:12px}
+.srow:first-child{margin-top:2px}
+.slab{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12.5px;
+  color:rgba(255,255,255,.72);margin-bottom:4px}
+.slab b{font-weight:600;color:#fff;font-variant-numeric:tabular-nums;font-size:12px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;cursor:pointer;margin:0;display:block}
+input[type=range]:focus-visible{outline:2px solid #5E9FE8;outline-offset:2px;border-radius:6px}
+input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:rgba(255,255,255,.17)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+  background:#5E9FE8;border:2px solid #15171a;margin-top:-6.5px}
+input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:rgba(255,255,255,.17)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border:2px solid #15171a;border-radius:50%;background:#5E9FE8}
+
+#statsText{margin:0;font-size:12px;line-height:1.6;color:rgba(255,255,255,.84);white-space:pre}
+.val{margin-top:10px;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.45}
+.val.ok{background:rgba(114,188,143,.12);border:1px solid rgba(114,188,143,.42);color:#9fe0bb}
+.val.bad{background:rgba(233,115,102,.12);border:1px solid rgba(233,115,102,.48);color:#ffb3aa}
+.val ul{margin:6px 0 0;padding-left:16px}
+
+.hint{position:fixed;right:16px;bottom:16px;z-index:10;max-width:44vw;text-align:right;font-size:12.5px;
+  line-height:1.5;color:rgba(255,255,255,.58);background:rgba(22,24,27,.74);border:1px solid rgba(255,255,255,.10);
+  border-radius:10px;padding:8px 11px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+
+/* ---------- загрузка / ошибка ---------- */
+#boot{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+  background:#15171a;padding:24px}
+#boot .card{max-width:480px;text-align:center}
+#boot h1{font-size:17px;font-weight:600;margin:0 0 8px}
+#boot p{font-size:13.5px;line-height:1.55;color:rgba(255,255,255,.6);margin:0}
+#boot code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:rgba(255,255,255,.75)}
+.spin{width:26px;height:26px;margin:0 auto 16px;border-radius:50%;border:2.5px solid rgba(255,255,255,.16);
+  border-top-color:#5E9FE8;animation:sp .9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#boot.err .spin{display:none}
+#boot.err h1{color:#E97366}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+
+/* ---------- узкие экраны ---------- */
+@media (max-width:780px){
+  .tl,.bl{width:196px}
+  .tr{width:158px}
+  .panel{padding:8px 10px 10px;border-radius:10px}
+  button.b{min-height:36px;padding:0 9px;font-size:12.5px}
+  #statsText{font-size:11px;line-height:1.5}
+  .hint{max-width:50vw;font-size:11px;padding:7px 9px}
+  .tl{top:10px;left:10px}.tr{top:10px;right:10px}.bl{bottom:10px;left:10px}
+  .hint{right:10px;bottom:10px}
+}
+@media (max-width:560px){
+  .hint{display:none}          /* на узком экране подсказка про мышь мешала панели анимации */
+}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="card">
+    <div class="spin"></div>
+    <h1 id="bootTitle">Загрузка three.js…</h1>
+    <p id="bootText">Модуль берётся с unpkg.com. Первый запуск требует интернета, дальше файл открывается из кэша браузера.</p>
+  </div>
+</div>
+
+<div class="panel tl" id="pTools" hidden>
+  <div class="phead"><span class="ptitle">Просмотр</span>
+    <button class="collapse" data-min="pTools" aria-label="Свернуть панель">−</button></div>
+  <div class="pbody">
+    <div class="glabel">Отображение</div>
+    <div class="row" id="rowView"></div>
+    <div class="glabel">Детализация</div>
+    <div class="row" id="rowLod"></div>
+    <div class="glabel">Действия</div>
+    <div class="row" id="rowAct"></div>
+  </div>
+</div>
+
+<div class="panel bl" id="pAnim" hidden>
+  <div class="phead"><span class="ptitle">Анимация деталей</span>
+    <button class="collapse" data-min="pAnim" aria-label="Свернуть панель">−</button></div>
+  <div class="pbody">
+    <div id="animRows"></div>
+    <div class="glabel">Циклы</div>
+    <div class="row" id="animBtns"></div>
+  </div>
+</div>
+
+<div class="panel tr" id="pStats" hidden>
+  <div class="phead"><span class="ptitle">Статистика</span>
+    <button class="collapse" data-min="pStats" aria-label="Свернуть панель">−</button></div>
+  <div class="pbody">
+    <pre id="statsText" class="mono"></pre>
+    <div id="valBox" class="val ok"></div>
+  </div>
+</div>
+
+<div class="hint" id="hint" hidden>ЛКМ — вращать · Колесо — зум · ПКМ (или Shift+ЛКМ) — панорама</div>
+
+<script>
+/* Страховка на случай, если CDN недоступен: показываем понятное сообщение, а не чёрный экран. */
+window.__viewerReady = false;
+window.__bootFail = function (msg) {
+  if (window.__viewerReady) return;
+  var b = document.getElementById('boot'); if (!b || b.classList.contains('err')) return;
+  b.classList.add('err');
+  document.getElementById('bootTitle').textContent = 'Не удалось загрузить three.js';
+  document.getElementById('bootText').innerHTML =
+    'Модуль <code>three@0.166.1</code> берётся с <code>unpkg.com</code> — при первом открытии файла нужен интернет.<br>' +
+    'Проверьте соединение или блокировщики запросов и обновите страницу (F5).<br><br><code>' +
+    String(msg || '').slice(0, 200) + '</code>';
+};
+setTimeout(function () { window.__bootFail('timeout: модуль не ответил за 15 с'); }, 15000);
+window.addEventListener('error', function (e) {
+  var t = e && e.target;
+  if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) window.__bootFail('ошибка загрузки скрипта');
+  else window.__bootFail(e && e.message);
+}, true);
+window.addEventListener('unhandledrejection', function (e) { window.__bootFail(e && e.reason); });
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+// ==== МОДЕЛЬ: НАЧАЛО ====
+/* =====================================================================
+   СКЛАДНЫЕ СОШКИ ТИПА HARRIS С РЕГУЛИРОВКОЙ ПО ВЫСОТЕ
+   Процедурная геометрия three.js. Единицы сцены — метры, mm(x) = x/1000.
+   Оси: −Z вперёд (по стволу), +Y вверх, +X вправо.
+   Origin (0,0,0) — центр верхней плоскости крепления к нижней планке Пикатинни;
+   ноги уходят в отрицательный Y.
+
+   ТАБЛИЦА РАЗМЕРОВ (мм)
+   ────────────────────────────────────────────────────────────────
+   Основание (голова)      70 (Z) × 40 (X) × 25 (Y)
+   Паз планки Пикатинни   21,2 ширина у устья, скосы 45° (2,8), глубина 5,0
+   Сухари в поперечных пазах   2 шт. × 5,35 с шагом 10,16
+   Барашковый винт          Головка Ø14, винт Ø5, ход по X
+   Шарниры                 оси Ø6 на x = ±11, y = −14, z = −38 + стопоры
+   Нога, основная секция    трубка Ø14, длина 92 (−4…−96 от оси шарнира)
+   Нога, выдвижная секция   трубка Ø11, длина 150, ряд из 6 отверстий Ø4
+   Фиксатор-кнопка           Ø7 сквозная + головка Ø10 на y = −88
+   Высота (от origin до грунта)  165…230, шаг 13 (5 шагов = 6 фиксированных положений)
+   Шаг по оси ноги          14,34 (13 / cos 25°)
+   Развод ног               25° от вертикали в стороны
+   Сложенная длина ноги     165 от оси шарнира вдоль −Z
+   Возвратная пружина        L 45, средний Ø12,6, 10 витков, проволока Ø1,2
+   Резиновый башмак         25 (Z) × 18 (X) × 12 (Y), 3 грунтозацепа
+   Рычаг перекоса (pan/tilt) маховик Ø22 слева, opts.panTilt
+   ────────────────────────────────────────────────────────────────
+   КОНТРАКТ
+   group.nodes = { mount, footL, footR, pivotL, pivotR }
+   group.parts = { legL, legR, legExtL, legExtR }
+   group.setDeployed(t)  t: 0 — сложены вдоль ствола, 1 — разложены
+   group.setHeight(step) step: 0..5 — фиксированные высоты 165…230 мм
+   group.dispose()
+   opts: { lod:0|1|2, deployed:0..1, heightStep:0..5, panTilt:bool, merged:bool }
+   opts.merged = true — склеить всё в 3 меша (3 draw calls, без шарниров).
+   ===================================================================== */
+function buildBipod(THREE, opts = {}) {
+  const O = Object.assign({
+    lod: 0, deployed: 1, heightStep: 0, panTilt: true, merged: false,
+  }, opts);
+
+  const mm = (x) => x / 1000;                 // миллиметры → метры сцены
+  const RAD = Math.PI / 180;
+  const HALF_PI = Math.PI / 2;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const lod = clamp(Math.round(O.lod) || 0, 0, 2);
+
+  // ---------- таблица размеров, мм ----------
+  const S = {
+    baseL: 70, baseW: 40, baseH: 25,           // основание 70×40×25
+    railW: 21.2, railChamf: 2.8, railDepth: 5, railPitch: 10.16, railLug: 5.35,
+    wingD: 14,                                 // барашковый винт Ø14
+    pivotX: 11, pivotY: -14, pivotZ: -38,      // оси шарниров
+    splay: 25,                                 // развод ног, градусы
+    hMin: 165, hMax: 230, hStep: 13, hSteps: 5,
+    legD: 14, extD: 11, holeD: 4,
+    footL: 25, footW: 18, footH: 12,
+    sprL: 45, sprMeanD: 12.6, sprCoils: 10, sprWire: 1.2,
+  };
+
+  // ---------- производные размеры (мм, вдоль оси ноги от оси шарнира) ----------
+  const COS = Math.cos(S.splay * RAD);
+  const ANKLE_AX = (S.hMin + S.pivotY - S.footH) / COS;        // 153,37 — до оси лапы, мин. высота
+  const EXT_TRAVEL = (S.hMax + S.pivotY - S.footH) / COS - ANKLE_AX; // 71,72 — полный ход
+  const EXT_STEP = EXT_TRAVEL / S.hSteps;                      // 14,34 — шаг фиксации
+  const EXT_LEN = 150;                                         // длина выдвижной трубки
+  const EXT_TOP0 = -(ANKLE_AX - EXT_LEN);                      // −3,37 — верх выдвижной секции
+  const TUBE_TOP = -4, TUBE_BOT = -96;                         // основная трубка Ø14
+  const BTN_Y = -88;                                           // фиксатор-кнопка
+  const SPR_TOP = -99;                                         // пружина −99…−144
+  const HOLE0 = BTN_Y - EXT_TOP0;                              // −84,63 — верхнее отверстие ряда
+
+  // ---------- детализация по LOD ----------
+  const Q = [
+    { tube: 10, small: 8, knob: 10, hole: 6, holes: 6, tread: 3, sprT: 80, sprR: 3 },
+    { tube: 8,  small: 6, knob: 8,  hole: 5, holes: 6, tread: 2, sprT: 40, sprR: 3 },
+    { tube: 6,  small: 5, knob: 6,  hole: 0, holes: 0, tread: 0, sprT: 24, sprR: 3 },
+  ][lod];
+
+  // ---------- материалы ----------
+  const MAT = {
+    steel:  new THREE.MeshStandardMaterial({ name: 'steelDark', color: 0x2a2d31, metalness: 0.80, roughness: 0.45 }),
+    rubber: new THREE.MeshStandardMaterial({ name: 'rubber',    color: 0x121314, metalness: 0.00, roughness: 0.95 }),
+    spring: new THREE.MeshStandardMaterial({ name: 'spring',    color: 0x8d9298, metalness: 0.90, roughness: 0.30 }),
+  };
+
+  // ---------- копилки геометрии: owner → материал → [BufferGeometry] ----------
+  const bins = {};
+  const put = (owner, mat, geo) => {
+    const b = bins[owner] || (bins[owner] = {});
+    (b[mat] || (b[mat] = [])).push(geo);
+    return geo;
+  };
+
+  // примитивы: все аргументы в миллиметрах, повороты — в радианах
+  function place(g, x, y, z, rx, ry, rz) {
+    if (rx) g.rotateX(rx);
+    if (ry) g.rotateY(ry);
+    if (rz) g.rotateZ(rz);
+    g.translate(mm(x || 0), mm(y || 0), mm(z || 0));
+    return g;
+  }
+  const box = (w, h, d, x, y, z, rx, ry, rz) =>
+    place(new THREE.BoxGeometry(mm(w), mm(h), mm(d)), x, y, z, rx, ry, rz);
+  const cyl = (r, h, seg, x, y, z, rx, ry, rz, open) =>
+    place(new THREE.CylinderGeometry(mm(r), mm(r), mm(h), seg, 1, !!open), x, y, z, rx, ry, rz);
+  const disc = (r, seg, x, y, z, rx, ry, rz) =>
+    place(new THREE.CircleGeometry(mm(r), seg), x, y, z, rx, ry, rz);
+  function profile(pts, depth, x, y, z) {                 // выдавливание профиля по Z
+    const sh = new THREE.Shape();
+    sh.moveTo(mm(pts[0][0]), mm(pts[0][1]));
+    for (let i = 1; i < pts.length; i++) sh.lineTo(mm(pts[i][0]), mm(pts[i][1]));
+    sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: mm(depth), bevelEnabled: false, steps: 1, curveSegments: 1 });
+    g.translate(mm(x || 0), mm(y || 0), mm(z || 0));
+    return g;
+  }
+  // настоящая винтовая пружина: TubeGeometry по спирали (ось −Y)
+  function springGeo(meanR, len, coils, wireR, tubular, radial) {
+    const pts = [];
+    for (let i = 0; i <= tubular; i++) {
+      const u = i / tubular, a = u * coils * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * mm(meanR), -u * mm(len), Math.sin(a) * mm(meanR)));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0);
+    return new THREE.TubeGeometry(curve, tubular, mm(wireR), radial, false);
+  }
+  // слияние геометрий без аддонов (BufferGeometryUtils недоступен внутри модели)
+  function mergeGeos(list) {
+    const src = [];
+    let n = 0;
+    for (const g of list) {
+      const t = g.index ? g.toNonIndexed() : g;
+      if (t !== g) g.dispose();
+      n += t.attributes.position.count;
+      src.push(t);
+    }
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+    let o3 = 0, o2 = 0;
+    for (const g of src) {
+      const c = g.attributes.position.count;
+      pos.set(g.attributes.position.array, o3);
+      if (g.attributes.normal) nor.set(g.attributes.normal.array, o3);
+      if (g.attributes.uv) uv.set(g.attributes.uv.array, o2);
+      o3 += c * 3; o2 += c * 2;
+      g.dispose();
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    out.computeBoundingBox();
+    out.computeBoundingSphere();
+    return out;
+  }
+
+  // =================== ОСНОВАНИЕ (голова + зажим планки) ===================
+  const group = new THREE.Group();
+  group.name = 'bipod_harris';
+
+  const mount = new THREE.Object3D();          // узел крепления = origin, верх плоскости планки
+  mount.name = 'mount';
+  group.add(mount);
+
+  {
+    const hw = S.railW / 2;                    // 10,6 — полуширина паза
+    const ch = S.railChamf;                    // 2,8 — скос 45°
+    const dp = -S.railDepth;                   // −5 — дно паза
+    const bw = S.baseW / 2;                    // 20 — полуширина основания
+    const bh = -S.baseH;                       // −25 — низ основания
+
+    // Профиль головы в XY, выдавлен по Z на 70 мм: слева губка со скосом 45°,
+    // справа полка −5, по которой ходит подвижный сухарь зажима.
+    put('base', 'steel', profile([
+      [-bw, bh], [bw, bh], [bw, dp], [-hw, dp],
+      [-hw, -ch], [-hw + ch, 0], [-bw, 0],
+    ], S.baseL, 0, 0, -S.baseL / 2));
+
+    // Подвижная губка зажима: ответный скос 45°, ходит по X от барашкового винта.
+    put('base', 'steel', profile([
+      [hw + 0.4, dp], [hw + 7.8, dp], [hw + 7.8, 0], [hw + 3.2, 0], [hw + 0.4, -ch],
+    ], S.baseL - 14, 0, 0, -(S.baseL - 14) / 2));
+
+    // Сухари в поперечные пазы планки: 2 шт. шириной 5,35 с шагом 10,16.
+    for (let i = 0; i < 2; i++) {
+      put('base', 'steel', box(S.railW - 2 * ch, 3, S.railLug, 0, dp + 1.5, (i - 0.5) * S.railPitch));
+    }
+
+    // Барашковый винт Ø14 справа: головка + две лопасти + винт Ø5.
+    put('base', 'steel', cyl(S.wingD / 2, 5, Q.knob, 30, -12, 0, 0, 0, HALF_PI));
+    put('base', 'steel', box(5, S.wingD + 4, 4, 30, -12, 0));
+    put('base', 'steel', cyl(2.5, 16, Q.small, 22, -12, 0, 0, 0, HALF_PI));
+
+    // Рычаг перекоса (pan/tilt): маховик Ø22 слева, включается opts.panTilt.
+    if (O.panTilt) {
+      put('base', 'steel', cyl(11, 6, Q.knob, -26, -14, 8, 0, 0, HALF_PI));
+      put('base', 'steel', cyl(3, 12, Q.small, -21, -14, 8, 0, 0, HALF_PI));
+    }
+
+    // Проушины шарниров с осями Ø6 и стопорами, x = ±11, y = −14, z = −38.
+    for (const sgn of [-1, 1]) {
+      put('base', 'steel', cyl(9, 5, Q.small, sgn * 2.5, S.pivotY, S.pivotZ, 0, 0, HALF_PI));
+      put('base', 'steel', cyl(3, 22, Q.small, sgn * 9, S.pivotY, S.pivotZ, 0, 0, HALF_PI));
+      put('base', 'steel', box(5, 6, 6, sgn * 7.5, S.pivotY - 6, S.pivotZ - 6));
+    }
+  }
+
+  // =================== НОГИ ===================
+  /** Одна нога: шарнир → основная секция → выдвижная секция → башмак → точка опоры. */
+  function buildLeg(side) {
+    const sgn = side === 'L' ? -1 : 1;
+    const oLeg = 'leg' + side, oExt = 'ext' + side, oPad = 'pad' + side;
+
+    // Шарнир: узел на оси, постоянный развод 25° наружу (вокруг Z).
+    // Складывание идёт вокруг локального X, поэтому сложенная нога ложится строго вдоль −Z.
+    const pivot = new THREE.Object3D();
+    pivot.name = 'pivot' + side;
+    pivot.position.set(mm(sgn * S.pivotX), mm(S.pivotY), mm(S.pivotZ));
+    pivot.rotation.z = sgn * S.splay * RAD;
+    group.add(pivot);
+
+    const leg = new THREE.Object3D();
+    leg.name = 'leg' + side;
+    pivot.add(leg);
+
+    // Основная трубка Ø14, −4…−96 по оси ноги, и проушина шарнира.
+    put(oLeg, 'steel', cyl(S.legD / 2, TUBE_TOP - TUBE_BOT, Q.tube, 0, (TUBE_TOP + TUBE_BOT) / 2, 0));
+    put(oLeg, 'steel', cyl(8, 14, Q.small, 0, 0, 0, 0, 0, HALF_PI));
+    // Подпружиненный фиксатор-кнопка: палец Ø7 сквозь трубку + головка Ø10 (ось Z).
+    put(oLeg, 'steel', cyl(3.5, 18, Q.small, 0, BTN_Y, 0, HALF_PI, 0, 0));
+    put(oLeg, 'steel', cyl(5, 3, Q.small, 0, BTN_Y, 9.5, HALF_PI, 0, 0));
+    // Возвратная пружина: настоящая винтовая кривая, 10 витков, средний Ø12,6, проволока Ø1,2.
+    put(oLeg, 'spring', place(springGeo(S.sprMeanD / 2, S.sprL, S.sprCoils, S.sprWire / 2, Q.sprT, Q.sprR), 0, SPR_TOP, 0));
+
+    // Выдвижная секция Ø11 с рядом отверстий Ø4 (шаг 14,34 по оси = 13 мм по высоте).
+    const ext = new THREE.Object3D();
+    ext.name = 'legExt' + side;
+    ext.position.y = mm(EXT_TOP0);
+    leg.add(ext);
+    put(oExt, 'steel', cyl(S.extD / 2, EXT_LEN, Q.tube, 0, -EXT_LEN / 2, 0));
+    if (Q.hole) {
+      for (let i = 0; i < Q.holes; i++) {
+        put(oExt, 'steel', cyl(S.holeD / 2, S.extD + 1, Q.hole, 0, HOLE0 + i * EXT_STEP, 0, HALF_PI, 0, 0, true));
+      }
+    }
+    put(oExt, 'steel', cyl(6, 12, Q.small, 0, -EXT_LEN, 0, 0, 0, HALF_PI));   // вилка лапы
+
+    // Резиновый башмак 25×18×12 с грунтозацепами.
+    const pad = new THREE.Object3D();
+    pad.name = 'pad' + side;
+    pad.position.y = mm(-EXT_LEN);
+    ext.add(pad);
+    const soleH = Q.tread ? S.footH - 2 : S.footH;
+    put(oPad, 'rubber', box(S.footW, soleH, S.footL, 0, -soleH / 2, 0));
+    for (let i = 0; i < Q.tread; i++) {
+      put(oPad, 'rubber', box(S.footW, 2, 5, 0, -(S.footH - 1), (i - (Q.tread - 1) / 2) * 8));
+    }
+
+    const foot = new THREE.Object3D();       // точка опоры = подошва
+    foot.name = 'foot' + side;
+    foot.position.y = mm(-S.footH);
+    pad.add(foot);
+
+    return { pivot, leg, ext, pad, foot };
+  }
+
+  const legs = { L: buildLeg('L'), R: buildLeg('R') };
+
+  // =================== КОНТРАКТ ===================
+  group.nodes = {
+    mount,
+    footL: legs.L.foot, footR: legs.R.foot,
+    pivotL: legs.L.pivot, pivotR: legs.R.pivot,
+  };
+  group.parts = {
+    legL: legs.L.leg, legR: legs.R.leg,
+    legExtL: legs.L.ext, legExtR: legs.R.ext,
+  };
+  // Штатные траектории деталей для слайдеров просмотрщика (метры/радианы).
+  group.partMotions = {
+    legL: { label: 'legL · складывание', rotation: [HALF_PI, 0, 0] },
+    legR: { label: 'legR · складывание', rotation: [HALF_PI, 0, 0] },
+    legExtL: { label: 'legExtL · выдвижение', position: [0, -mm(EXT_TRAVEL), 0] },
+    legExtR: { label: 'legExtR · выдвижение', position: [0, -mm(EXT_TRAVEL), 0] },
+  };
+
+  let _deployed = 1, _step = 0;
+  /** t: 0 — ноги сложены вдоль ствола (−Z), 1 — боевое положение с разводом 25°. */
+  group.setDeployed = function (t) {
+    _deployed = clamp(typeof t === 'number' ? t : 1, 0, 1);
+    const a = (1 - _deployed) * HALF_PI;
+    legs.L.leg.rotation.x = a;
+    legs.R.leg.rotation.x = a;
+    return _deployed;
+  };
+  /** step: 0..5 — фиксированные положения 165…230 мм; возвращает высоту �� мм. */
+  group.setHeight = function (step) {
+    _step = clamp(Math.round(step) || 0, 0, S.hSteps);
+    const y = mm(EXT_TOP0 - _step * EXT_STEP);
+    legs.L.ext.position.y = y;
+    legs.R.ext.position.y = y;
+    return S.hMin + _step * S.hStep;
+  };
+  group.getState = () => ({
+    deployed: _deployed, heightStep: _step, heightMm: S.hMin + _step * S.hStep,
+  });
+
+  group.setDeployed(O.deployed);
+  group.setHeight(O.heightStep);
+  group.updateMatrixWorld(true);
+
+  // =================== МЕШИ ===================
+  const meshList = [];
+  function meshesFor(owner, target) {
+    const b = bins[owner];
+    const made = [];
+    if (!b) return made;
+    for (const key in b) {
+      const mesh = new THREE.Mesh(mergeGeos(b[key]), MAT[key]);
+      mesh.name = owner + ':' + key;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      target.add(mesh);
+      meshList.push(mesh);
+      made.push(mesh);
+    }
+    delete bins[owner];
+    return made;
+  }
+
+  const owners = [
+    ['base', group],
+    ['legL', legs.L.leg], ['extL', legs.L.ext], ['padL', legs.L.pad],
+    ['legR', legs.R.leg], ['extR', legs.R.ext], ['padR', legs.R.pad],
+  ];
+
+  if (O.merged) {
+    // Запекаем всё в мировые координаты текущей позы → ровно 3 меша = 3 draw calls.
+    const all = {};
+    for (const [owner, holder] of owners) {
+      const b = bins[owner]; if (!b) continue;
+      for (const key in b) {
+        const list = all[key] || (all[key] = []);
+        for (const g of b[key]) list.push(g.applyMatrix4(holder.matrixWorld));
+      }
+      delete bins[owner];
+    }
+    for (const key in all) {
+      const mesh = new THREE.Mesh(mergeGeos(all[key]), MAT[key]);
+      mesh.name = 'merged:' + key;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      meshList.push(mesh);
+    }
+  } else {
+    for (const [owner, holder] of owners) meshesFor(owner, holder);
+
+    // Башмаки сами встают подошвой на грунт, как на шарнире реальных сошек.
+    const _q = new THREE.Quaternion(), _v = new THREE.Vector3();
+    const levelPad = (pad) => {
+      if (!pad.parent) return;
+      pad.parent.getWorldQuaternion(_q);
+      _v.set(0, -1, 0).applyQuaternion(_q);          // куда смотрит ось ноги
+      const k = clamp((-_v.y - 0.25) / 0.55, 0, 1);  // при складывании лапа свободно виснет
+      _q.invert();
+      pad.quaternion.set(0, 0, 0, 1).slerp(_q, k);
+      pad.updateMatrix();
+      pad.updateMatrixWorld(true);
+    };
+    for (const L of ['L', 'R']) {
+      const pad = legs[L].pad;
+      const mesh = pad.children.find((c) => c.isMesh);
+      if (mesh) mesh.onBeforeRender = () => levelPad(pad);
+    }
+  }
+
+  // =================== СЕРВИС ===================
+  group.dispose = function () {
+    const seen = new Set();
+    group.traverse((o) => {
+      if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); }
+    });
+    MAT.steel.dispose(); MAT.rubber.dispose(); MAT.spring.dispose();
+    return group;
+  };
+
+  group.userData.spec = {
+    heightMm: [S.hMin, S.hMax], stepMm: S.hStep, steps: S.hSteps + 1,
+    foldedMm: S.hMin, splayDeg: S.splay, lod,
+    extTravelMm: +EXT_TRAVEL.toFixed(2), extStepMm: +EXT_STEP.toFixed(2),
+  };
+  group.userData.validation = validate(group);
+  return group;
+}
+
+/** Проверка контракта модели: узлы, детали, API и бюджет. */
+function validate(group) {
+  const need = {
+    nodes: ['mount', 'footL', 'footR', 'pivotL', 'pivotR'],
+    parts: ['legL', 'legR', 'legExtL', 'legExtR'],
+    api: ['setDeployed', 'dispose'],
+  };
+  const missing = [];
+  for (const k of need.nodes) if (!(group.nodes && group.nodes[k] && group.nodes[k].isObject3D)) missing.push('nodes.' + k);
+  for (const k of need.parts) if (!(group.parts && group.parts[k] && group.parts[k].isObject3D)) missing.push('parts.' + k);
+  for (const k of need.api) if (typeof group[k] !== 'function') missing.push('group.' + k + '()');
+
+  let triangles = 0, meshes = 0;
+  const materials = new Set();
+  group.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    meshes++;
+    materials.add(o.material);
+    const g = o.geometry;
+    triangles += (g.index ? g.index.count : g.attributes.position.count) / 3;
+  });
+  const res = { ok: missing.length === 0, missing, triangles: Math.round(triangles), meshes, materials: materials.size };
+  if (!res.ok) console.warn('[buildBipod] не хватает:', missing);
+  return res;
+}
+// export { buildBipod, validate }
+// ==== МОДЕЛЬ: КОНЕЦ ====
+const build = buildBipod;
+window.buildBipod = buildBipod;
+window.validate = validate;
+
+/* =====================================================================
+   ПРОСМОТРЩИК
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+const mm2 = (v) => (v * 1000).toFixed(1);
+
+let renderer, scene, camera, controls, model, grid, ground, boxHelper, nodeGroup;
+const nodeHolders = [];
+const tweens = [];
+const sliders = {};
+const buttons = {};
+let partBase = {};
+let syncing = false;
+let statAcc = 1;
+const view = { wire: false, nodes: false, bounds: false, grid: true, spin: false, lod: 0 };
+const clock = new THREE.Clock();
+const _box = new THREE.Box3();
+const _v3 = new THREE.Vector3();
+
+/* ---------------- сцена ---------------- */
+function initScene() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x15171a);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 20);
+  camera.position.set(0.36, 0.22, 0.42);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.065;
+  controls.autoRotateSpeed = 1.4;
+  controls.screenSpacePanning = true;
+
+  // свет: key сверху-справа-спереди, холодный fill слева, контровой rim сзади + полусфера
+  const key = new THREE.DirectionalLight(0xffffff, 3.0);
+  key.position.set(0.45, 0.72, 0.55);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.near = 0.05;
+  key.shadow.camera.far = 3;
+  key.shadow.camera.left = -0.32;
+  key.shadow.camera.right = 0.32;
+  key.shadow.camera.top = 0.32;
+  key.shadow.camera.bottom = -0.32;
+  key.shadow.bias = -0.0006;
+  key.shadow.normalBias = 0.0025;
+  scene.add(key);
+
+  const fill = new THREE.DirectionalLight(0x8fb6ff, 0.85);
+  fill.position.set(-0.65, 0.28, 0.32);
+  scene.add(fill);
+
+  const rim = new THREE.DirectionalLight(0xbcd2ff, 1.7);
+  rim.position.set(0.1, 0.34, -0.72);
+  scene.add(rim);
+
+  scene.add(new THREE.HemisphereLight(0x9fb6cd, 0x181a1d, 0.55));
+
+  grid = new THREE.GridHelper(0.6, 24, 0x3d4450, 0x24282d);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.75;
+  scene.add(grid);
+
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShadowMaterial({ opacity: 0.36 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  boxHelper = new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(), new THREE.Vector3()), 0x5e9fe8);
+  boxHelper.visible = false;
+  if (boxHelper.material) { boxHelper.material.depthTest = false; boxHelper.material.transparent = true; }
+  boxHelper.renderOrder = 9;
+  scene.add(boxHelper);
+
+  nodeGroup = new THREE.Group();
+  nodeGroup.visible = false;
+  scene.add(nodeGroup);
+
+  window.addEventListener('resize', onResize);
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+/* ---------------- модель ---------------- */
+function makeModel(lod) {
+  if (model) {
+    scene.remove(model);
+    if (typeof model.dispose === 'function') model.dispose();
+    model = null;
+  }
+  model = build(THREE, { lod, panTilt: true, deployed: 1, heightStep: 0 });
+  model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(model);
+  window.model = model;                                  // для консоли
+
+  model.updateMatrixWorld(true);
+  _box.setFromObject(model);
+  grid.position.y = _box.min.y;
+  ground.position.y = _box.min.y - 0.0004;
+
+  buildNodeHelpers();
+  buildAnimPanel();
+  applyWireframe();
+  updateStats(true);
+}
+
+function fitCamera() {
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 0.2;
+  const dist = (maxDim / 2) / Math.tan((camera.fov * Math.PI) / 360) * 1.95;
+
+  camera.near = Math.max(maxDim / 1000, 0.0005);
+  camera.far = Math.max(maxDim * 120, 10);
+  camera.updateProjectionMatrix();
+  camera.position.set(center.x + dist * 0.72, center.y + dist * 0.42, center.z + dist * 0.92);
+  controls.target.copy(center);
+  controls.minDistance = maxDim * 0.25;
+  controls.maxDistance = maxDim * 14;
+  controls.update();
+}
+
+/* ---------------- хелперы узлов ---------------- */
+function makeLabel(text) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const c = cv.getContext('2d');
+  c.clearRect(0, 0, 256, 64);
+  c.font = 'bold 30px ui-monospace, Menlo, Consolas, monospace';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.lineWidth = 7;
+  c.strokeStyle = 'rgba(6,8,10,.9)';
+  c.strokeText(text, 128, 34);
+  c.fillStyle = '#eaf2ff';
+  c.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(cv);
+  if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(0.05, 0.0125, 1);
+  sp.renderOrder = 11;
+  return sp;
+}
+
+function buildNodeHelpers() {
+  for (const h of nodeHolders) {
+    nodeGroup.remove(h);
+    h.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    });
+  }
+  nodeHolders.length = 0;
+
+  const nodes = (model && model.nodes) || {};
+  for (const name of Object.keys(nodes)) {
+    const src = nodes[name];
+    if (!src || !src.isObject3D) continue;
+    const holder = new THREE.Group();
+    const axes = new THREE.AxesHelper(0.03);            // 30 мм
+    axes.material.depthTest = false;
+    axes.material.transparent = true;
+    axes.renderOrder = 10;
+    holder.add(axes);
+    const label = makeLabel(name);
+    label.position.set(0, 0.013, 0);
+    holder.add(label);
+    holder.userData.src = src;
+    nodeGroup.add(holder);
+    nodeHolders.push(holder);
+  }
+}
+
+function syncNodeHelpers() {
+  for (const h of nodeHolders) {
+    const m = h.userData.src.matrixWorld;
+    h.position.setFromMatrixPosition(m);
+    h.quaternion.setFromRotationMatrix(m);
+  }
+}
+
+function applyWireframe() {
+  model.traverse((o) => { if (o.isMesh && o.material) o.material.wireframe = view.wire; });
+}
+
+/* ---------------- штатные траектории деталей ---------------- */
+function guessMotion(name, obj) {
+  const n = String(name).toLowerCase();
+  const sz = _box.setFromObject(model).getSize(new THREE.Vector3());
+  const has = (...k) => k.some((w) => n.indexOf(w) >= 0);
+  if (has('mag', 'магаз')) return { label: name + ' · магазин вниз', position: [0, -sz.y * 0.5, 0] };
+  if (has('bolt', 'slide', 'затвор')) return { label: name + ' · ход назад', position: [0, 0, sz.z * 0.18] };
+  if (has('charg', 'handle', 'рукоят')) return { label: name + ' · взведение', position: [0, 0, sz.z * 0.15] };
+  if (has('trig', 'спуск')) return { label: name + ' · спуск', rotation: [0.42, 0, 0] };
+  if (has('safe', 'select', 'флаж', 'предохр')) return { label: name + ' · флажок', rotation: [0, 0, -1.2] };
+  if (has('pin', 'скоб', 'lever')) return { label: name + ' · скоба', rotation: [0, 0, -2.2] };
+  if (has('cover', 'hatch', 'крыш')) return { label: name + ' · крышка', rotation: [-1.3, 0, 0] };
+  if (has('stock', 'приклад')) return { label: name + ' · складывание', rotation: [0, -1.55, 0] };
+  if (has('ext', 'tele', 'выдв')) return { label: name + ' · выдвижение', position: [0, -sz.y * 0.3, 0] };
+  if (has('leg', 'fold', 'ног')) return { label: name + ' · складывание', rotation: [Math.PI / 2, 0, 0] };
+  return { label: name + ' · смещение', position: [0, 0, sz.z * 0.12] };
+}
+const motionFor = (name, obj) => (model.partMotions && model.partMotions[name]) || guessMotion(name, obj);
+
+function applyPart(name, s) {
+  const obj = model.parts[name], b = partBase[name];
+  if (!obj || !b) return;
+  const m = motionFor(name, obj);
+  const p = m.position || [0, 0, 0], r = m.rotation || [0, 0, 0];
+  obj.position.set(b.p.x + p[0] * s, b.p.y + p[1] * s, b.p.z + p[2] * s);
+  obj.rotation.set(b.r.x + r[0] * s, b.r.y + r[1] * s, b.r.z + r[2] * s, b.r.order);
+}
+
+/* ---------------- элементы интерфейса ---------------- */
+function mkButton(label, onClick, key) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'b';
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  if (key) buttons[key] = b;
+  return b;
+}
+
+function mkSlider(o) {
+  const wrap = document.createElement('div');
+  wrap.className = 'srow';
+  const lab = document.createElement('div');
+  lab.className = 'slab';
+  const nm = document.createElement('span');
+  nm.textContent = o.label;
+  const val = document.createElement('b');
+  lab.appendChild(nm); lab.appendChild(val);
+  const inp = document.createElement('input');
+  inp.type = 'range';
+  inp.min = o.min; inp.max = o.max; inp.step = o.step; inp.value = o.value;
+  inp.setAttribute('aria-label', o.label);
+  wrap.appendChild(lab); wrap.appendChild(inp);
+
+  const fmt = o.format || ((v) => v.toFixed(2));
+  const run = (fromUser) => {
+    const v = parseFloat(inp.value);
+    val.textContent = fmt(v);
+    o.oninput(v, fromUser);
+  };
+  inp.addEventListener('input', () => run(true));
+  val.textContent = fmt(parseFloat(inp.value));
+
+  sliders[o.id] = {
+    el: inp,
+    get: () => parseFloat(inp.value),
+    set: (v, silent) => {
+      inp.value = v;
+      if (silent) { val.textContent = fmt(parseFloat(inp.value)); return; }
+      run(false);
+    },
+  };
+  return wrap;
+}
+
+function refreshButtons() {
+  const on = (k, s) => { if (buttons[k]) buttons[k].classList.toggle('on', !!s); };
+  on('wire', view.wire); on('nodes', view.nodes); on('bounds', view.bounds);
+  on('grid', view.grid); on('spin', view.spin);
+  for (let i = 0; i < 3; i++) on('lod' + i, view.lod === i);
+}
+
+function buildToolPanel() {
+  const rv = $('rowView');
+  rv.appendChild(mkButton('Каркас', () => { view.wire = !view.wire; applyWireframe(); refreshButtons(); }, 'wire'));
+  rv.appendChild(mkButton('Узлы', () => { view.nodes = !view.nodes; nodeGroup.visible = view.nodes; refreshButtons(); }, 'nodes'));
+  rv.appendChild(mkButton('Габариты', () => { view.bounds = !view.bounds; boxHelper.visible = view.bounds; refreshButtons(); }, 'bounds'));
+  rv.appendChild(mkButton('Сетка', () => { view.grid = !view.grid; grid.visible = view.grid; ground.visible = view.grid; refreshButtons(); }, 'grid'));
+  rv.appendChild(mkButton('Автоповорот', () => { view.spin = !view.spin; controls.autoRotate = view.spin; refreshButtons(); }, 'spin'));
+  rv.appendChild(mkButton('Сброс камеры', () => fitCamera()));
+
+  const rl = $('rowLod');
+  for (let i = 0; i < 3; i++) {
+    rl.appendChild(mkButton('LOD' + i, () => setLod(i), 'lod' + i));
+    rl.lastChild.classList.add('grow');
+  }
+
+  const ra = $('rowAct');
+  ra.appendChild(mkButton('Выстрел', doFire));
+  ra.appendChild(mkButton('Перезарядка', doReload));
+  ra.appendChild(mkButton('Скриншот PNG', screenshot));
+  ra.appendChild(mkButton('Экспорт GLB', exportGLB));
+  ra.lastChild.classList.add('grow');
+
+  document.querySelectorAll('.collapse').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const p = $(btn.dataset.min);
+      p.classList.toggle('min');
+      btn.textContent = p.classList.contains('min') ? '+' : '−';
+    });
+  });
+  refreshButtons();
+}
+
+/* ---------------- панель анимации ---------------- */
+function buildAnimPanel() {
+  const host = $('animRows');
+  host.innerHTML = '';
+  for (const k of Object.keys(sliders)) delete sliders[k];
+  partBase = {};
+
+  const parts = model.parts || {};
+  const names = Object.keys(parts);
+  for (const name of names) {
+    const obj = parts[name];
+    if (!obj || !obj.isObject3D) continue;
+    // исходные position/rotation — чтобы слайдер всегда возвращал деталь на место
+    partBase[name] = { p: obj.position.clone(), r: obj.rotation.clone() };
+    host.appendChild(mkSlider({
+      id: 'part_' + name, label: motionFor(name, obj).label, min: 0, max: 1, step: 0.001, value: 0,
+      oninput: (v, fromUser) => {
+        applyPart(name, v);
+        if (!fromUser || syncing) return;
+        syncing = true;
+        if (name === 'legL' || name === 'legR') {
+          if (sliders.sys_deployed) sliders.sys_deployed.set(1 - v, true);
+          const other = name === 'legL' ? 'part_legR' : 'part_legL';
+          if (sliders[other]) sliders[other].set(v, true), applyPart(name === 'legL' ? 'legR' : 'legL', v);
+        }
+        if (name === 'legExtL' || name === 'legExtR') {
+          if (sliders.sys_height) sliders.sys_height.set(Math.round(v * 5), true);
+        }
+        syncing = false;
+      },
+    }));
+  }
+
+  // переключатели штатного API модели
+  const apiRow = document.createElement('div');
+  let hasApi = false;
+
+  if (typeof model.setDeployed === 'function') {
+    hasApi = true;
+    apiRow.appendChild(mkSlider({
+      id: 'sys_deployed', label: 'setDeployed · разложены', min: 0, max: 1, step: 0.001, value: 1,
+      format: (v) => (v < 0.02 ? 'сложены' : v > 0.98 ? 'боевое' : v.toFixed(2)),
+      oninput: (v) => {
+        model.setDeployed(v);
+        const was = syncing; syncing = true;
+        if (sliders.part_legL) sliders.part_legL.set(1 - v, true);
+        if (sliders.part_legR) sliders.part_legR.set(1 - v, true);
+        syncing = was;
+      },
+    }));
+  }
+  if (typeof model.setHeight === 'function') {
+    hasApi = true;
+    apiRow.appendChild(mkSlider({
+      id: 'sys_height', label: 'setHeight · высота', min: 0, max: 5, step: 1, value: 0,
+      format: (v) => (165 + v * 13) + ' мм',
+      oninput: (v) => {
+        model.setHeight(v);
+        const was = syncing; syncing = true;
+        if (sliders.part_legExtL) sliders.part_legExtL.set(v / 5, true);
+        if (sliders.part_legExtR) sliders.part_legExtR.set(v / 5, true);
+        syncing = was;
+      },
+    }));
+  }
+  const toggles = [
+    ['setReticle', 'Прицельная марка'],
+    ['setBeam', 'Луч'],
+    ['setLight', 'Фонарь'],
+    ['setAmmo', 'Патроны'],
+  ];
+  const tRow = document.createElement('div');
+  tRow.className = 'row';
+  tRow.style.marginTop = '10px';
+  for (const [fn, label] of toggles) {
+    if (typeof model[fn] !== 'function') continue;
+    hasApi = true;
+    let state = false;
+    const b = mkButton(label, () => { state = !state; model[fn](state); b.classList.toggle('on', state); });
+    tRow.appendChild(b);
+  }
+  if (tRow.children.length) apiRow.appendChild(tRow);
+
+  if (hasApi) {
+    const gl = document.createElement('div');
+    gl.className = 'glabel';
+    gl.textContent = 'Штатное API модели';
+    host.appendChild(gl);
+    host.appendChild(apiRow);
+  }
+
+  const ab = $('animBtns');
+  ab.innerHTML = '';
+  ab.appendChild(mkButton('Выстрел', doFire));
+  ab.appendChild(mkButton('Перезарядка', doReload));
+}
+
+/* ---------------- анимации-циклы ---------------- */
+function tween(dur, fn, done) { tweens.push({ t: 0, dur: Math.max(1, dur), fn, done }); }
+function stepTweens(dtMs) {
+  for (let i = tweens.length - 1; i >= 0; i--) {
+    const tw = tweens[i];
+    tw.t += dtMs;
+    const k = Math.min(1, tw.t / tw.dur);
+    tw.fn(k);
+    if (k >= 1) { tweens.splice(i, 1); if (tw.done) tw.done(); }
+  }
+}
+function wait(ms, done) { tween(ms, () => {}, done); }
+function findPart(keys) {
+  for (const n of Object.keys(model.parts || {})) {
+    const l = n.toLowerCase();
+    if (keys.some((k) => l.indexOf(k) >= 0)) return n;
+  }
+  return null;
+}
+function sweep(id, from, to, dur, done) {
+  const s = sliders[id];
+  if (!s) { if (done) done(); return; }
+  tween(dur, (k) => s.set(from + (to - from) * k), done);
+}
+
+let busy = false;
+function recoil(done) {
+  const z0 = model.position.z;
+  tween(45, (k) => { model.position.z = z0 + 0.006 * k; },
+    () => tween(45, (k) => { model.position.z = z0 + 0.006 * (1 - k); },
+      () => { model.position.z = z0; if (done) done(); }));
+}
+/** Цикл затвора 90 мс (45 назад + 45 вперёд). У сошек затвора нет — идёт отдача. */
+function boltCycle(done) {
+  const bolt = findPart(['bolt', 'slide', 'затвор']);
+  if (!bolt) { recoil(done); return; }
+  sweep('part_' + bolt, 0, 1, 45, () => sweep('part_' + bolt, 1, 0, 45, done));
+}
+function doFire() {
+  if (busy) return;
+  busy = true;
+  boltCycle(() => { busy = false; });
+}
+/** Магазин вниз → пауза → вверх → цикл затвора. Для сошек — сложить → пауза → разложить. */
+function doReload() {
+  if (busy) return;
+  busy = true;
+  const mag = findPart(['mag', 'магаз']);
+  if (mag) {
+    sweep('part_' + mag, 0, 1, 220, () => wait(260, () =>
+      sweep('part_' + mag, 1, 0, 220, () => boltCycle(() => { busy = false; }))));
+  } else if (sliders.sys_deployed) {
+    const v0 = sliders.sys_deployed.get();
+    sweep('sys_deployed', v0, 0, 320, () => wait(200, () =>
+      sweep('sys_deployed', 0, 1, 380, () => recoil(() => { busy = false; }))));
+  } else { busy = false; }
+}
+
+/* ---------------- экспорт ---------------- */
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+function screenshot() {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((b) => { if (b) download(b, 'bipod_harris.png'); }, 'image/png');
+}
+function exportGLB() {
+  const ex = new GLTFExporter();
+  ex.parse(model, (res) => {
+    const blob = (res instanceof ArrayBuffer)
+      ? new Blob([res], { type: 'model/gltf-binary' })
+      : new Blob([JSON.stringify(res)], { type: 'model/gltf+json' });
+    download(blob, (res instanceof ArrayBuffer) ? 'bipod_harris.glb' : 'bipod_harris.gltf');
+  }, (err) => { console.error(err); alert('Экспорт GLB не удался, см. консоль.'); }, { binary: true });
+}
+
+/* ---------------- статистика ---------------- */
+function updateStats() {
+  let tris = 0, meshes = 0;
+  const mats = new Set();
+  model.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    meshes++;
+    mats.add(o.material);
+    const g = o.geometry;
+    tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+  });
+  _box.setFromObject(model);
+  _box.getSize(_v3);
+  const nodeNames = Object.keys(model.nodes || {});
+  const st = model.getState ? model.getState() : null;
+  const pad = (a, b) => (a + '              ').slice(0, 14) + b;
+
+  $('statsText').textContent = [
+    pad('треугольники', Math.round(tris).toLocaleString('ru-RU')),
+    pad('меши', meshes),
+    pad('материалы', mats.size),
+    pad('draw calls', renderer.info.render.calls),
+    pad('узлы', nodeNames.length),
+    pad('LOD', view.lod),
+    '',
+    'bbox, мм',
+    pad('  X', mm2(_v3.x)),
+    pad('  Y', mm2(_v3.y)),
+    pad('  Z', mm2(_v3.z)),
+    st ? pad('высота, мм', st.heightMm + ' (' + st.heightStep + '/5)') : '',
+  ].filter((s) => s !== '').join('\n');
+
+  const v = (typeof validate === 'function') ? validate(model) : { ok: true, missing: [] };
+  const vb = $('valBox');
+  if (v.ok) {
+    vb.className = 'val ok';
+    vb.textContent = '✓ узлы на месте (' + nodeNames.join(', ') + ')';
+  } else {
+    vb.className = 'val bad';
+    vb.innerHTML = '✕ не хватает:<ul><li>' + v.missing.join('</li><li>') + '</li></ul>';
+  }
+}
+
+/* ---------------- LOD ---------------- */
+function setLod(n) {
+  const state = {};
+  for (const id of Object.keys(sliders)) state[id] = sliders[id].get();
+  view.lod = n;
+  makeModel(n);
+  syncing = true;
+  for (const id of Object.keys(state)) if (sliders[id]) sliders[id].set(state[id]);
+  syncing = false;
+  refreshButtons();
+}
+
+/* ---------------- цикл ---------------- */
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  stepTweens(dt * 1000);
+  controls.update();
+  if (view.nodes) syncNodeHelpers();
+  if (view.bounds) boxHelper.box.setFromObject(model);
+  renderer.render(scene, camera);
+  statAcc += dt;
+  if (statAcc > 0.25) { statAcc = 0; updateStats(); }
+}
+
+/* ---------------- старт ---------------- */
+try {
+  initScene();
+  makeModel(0);
+  buildToolPanel();
+  fitCamera();
+
+  for (const id of ['pTools', 'pAnim', 'pStats', 'hint']) $(id).hidden = false;
+  if (window.innerWidth < 700 || window.innerHeight < 620) {
+    for (const id of ['pAnim', 'pStats']) {
+      $(id).classList.add('min');
+      $(id).querySelector('.collapse').textContent = '+';
+    }
+  }
+  const boot = $('boot');
+  if (boot) boot.remove();
+  window.__viewerReady = true;
+
+  animate();
+  console.log('[bipod] ' + JSON.stringify(model.userData.validation) + ' ' + JSON.stringify(model.userData.spec));
+  console.log('[bipod] в консоли доступны: buildBipod(THREE, opts), validate(group), model');
+} catch (e) {
+  console.error(e);
+  window.__bootFail(e && e.message ? e.message : e);
+}
+</script>
+</body>
+</html>

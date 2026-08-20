@@ -1,0 +1,3035 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ПСО-1 4×24 — оптический прицел с живой картинкой</title>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}</script>
+<style>
+  :root{
+    --bg:#101113;
+    --panel:rgba(24,25,27,.84);
+    --panel2:rgba(18,19,21,.92);
+    --bd:rgba(255,255,255,.14);
+    --bd2:rgba(255,255,255,.08);
+    --tx:#ffffff;
+    --tx2:rgba(255,255,255,.62);
+    --tx3:rgba(255,255,255,.38);
+    --acc:#de9255;
+    --acc2:#5e9fe8;
+    --ok:#72bc8f;
+    --err:#e97366;
+    --mono:Menlo,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 12px 34px rgba(0,0,0,.42);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--tx);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  canvas{display:block;touch-action:none}
+
+  .panel{position:fixed;background:var(--panel);border:1px solid var(--bd);border-radius:12px;
+    box-shadow:var(--sh);backdrop-filter:blur(12px) saturate(1.2);-webkit-backdrop-filter:blur(12px) saturate(1.2);z-index:6}
+  .panel h3{margin:0 0 10px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);font-weight:700}
+
+  /* ── верхняя левая панель ── */
+  #topbar{left:16px;top:16px;padding:10px;display:flex;flex-direction:column;gap:8px;width:min(392px,calc(100vw - 32px))}
+  .grp{display:flex;flex-wrap:wrap;gap:6px}
+  .grp>.btn{flex:1 1 auto}
+  .btn{appearance:none;border:1px solid var(--bd);background:rgba(255,255,255,.05);color:var(--tx);
+    font:600 13.5px/1 var(--sans);min-height:44px;padding:12px 13px;border-radius:9px;cursor:pointer;white-space:nowrap;
+    transition:background .14s ease,border-color .14s ease,color .14s ease,transform .08s ease}
+  .btn:hover{background:rgba(255,255,255,.11)}
+  .btn:active{transform:translateY(1px)}
+  .btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .btn.on{background:var(--acc);border-color:var(--acc);color:#141517}
+  .btn.sm{min-height:36px;padding:9px 11px;font-size:12.5px}
+  .seg{display:flex;flex:1 1 auto;gap:4px;padding:4px;border:1px solid var(--bd2);border-radius:11px;background:rgba(0,0,0,.3)}
+  .seg .btn{flex:1 1 0;min-height:38px;border-color:transparent;background:transparent}
+  .seg .btn.on{background:var(--acc)}
+
+  /* ── панель деталей / оптики ── */
+  #tools{left:16px;bottom:16px;width:min(340px,calc(100vw - 32px));max-height:min(52vh,540px);overflow:auto;padding:14px;
+    scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+  #tools::-webkit-scrollbar{width:8px}
+  #tools::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:8px}
+  .row{margin-bottom:11px}
+  .row label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;color:var(--tx2);margin-bottom:6px}
+  .row label b{font:600 12px/1 var(--mono);color:var(--acc)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;margin:0}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:rgba(255,255,255,.15)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6.5px;border-radius:50%;
+    background:var(--acc);border:2px solid #141517;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:rgba(255,255,255,.15)}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--acc);border:2px solid #141517}
+  input[type=range]:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+  .toggles{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .divider{height:1px;background:var(--bd2);margin:12px 0}
+  .swatches{display:flex;gap:6px;margin-top:2px}
+  .sw{width:34px;height:34px;border-radius:8px;border:1px solid var(--bd);cursor:pointer;padding:0}
+  .sw.on{outline:2px solid var(--tx);outline-offset:2px}
+
+  /* ── статистика ── */
+  #stats{right:16px;top:16px;padding:12px 14px;min-width:250px;font:12px/1.62 var(--mono);color:var(--tx2)}
+  #stats b{color:var(--tx);font-weight:600}
+  #stats .k{display:inline-block;min-width:110px;color:var(--tx3)}
+  #check{margin-top:9px;padding-top:9px;border-top:1px solid var(--bd2);font:11.5px/1.5 var(--mono)}
+  .ok{color:var(--ok)}
+  .bad{color:var(--err)}
+
+  /* ── подсказка ── */
+  #hint{right:16px;bottom:16px;padding:11px 14px;font-size:12.5px;line-height:1.7;color:var(--tx2);max-width:min(330px,calc(100vw - 32px))}
+  #hint b{color:var(--tx);font-weight:600}
+  kbd{display:inline-block;min-width:20px;text-align:center;padding:2px 6px;border-radius:5px;border:1px solid var(--bd);
+    background:rgba(255,255,255,.07);font:600 11px/1.4 var(--mono);color:var(--tx)}
+
+  /* ── боевой HUD ── */
+  #hud{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:7;display:none;
+    flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:min(720px,calc(100vw - 32px))}
+  #hud.show{display:flex}
+  .hudRow{display:flex;gap:6px;width:100%;justify-content:center;flex-wrap:wrap}
+  .hCell{flex:1 1 118px;min-width:96px;background:var(--panel2);border:1px solid var(--bd);border-radius:10px;
+    padding:8px 11px;box-shadow:var(--sh);text-align:center}
+  .hCell span{display:block;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);margin-bottom:3px}
+  .hCell b{font:700 15px/1.15 var(--mono);color:var(--tx)}
+  .hCell b.acc{color:var(--acc)}
+  .hCell b.warn{color:var(--err)}
+  .hCell.act{pointer-events:auto}
+  .stepRow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .stepRow b{flex:1 1 auto}
+  .stepBtn{appearance:none;flex:0 0 28px;width:28px;height:28px;padding:0;border-radius:8px;
+    border:1px solid var(--bd);background:rgba(255,255,255,.06);color:var(--tx);
+    font:700 16px/1 var(--sans);cursor:pointer}
+  .stepBtn:hover{background:rgba(255,255,255,.15)}
+  .stepBtn:active{transform:translateY(1px)}
+  .stepBtn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .hudActions{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;pointer-events:auto}
+  .hudActions .btn{min-height:34px;padding:8px 12px;font-size:12.5px;background:var(--panel2)}
+  #breathWrap{width:210px;height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;
+    border:1px solid var(--bd2)}
+  #breathBar{height:100%;width:100%;background:linear-gradient(90deg,#72bc8f,#de9255);transition:background .3s}
+  #breathBar.low{background:linear-gradient(90deg,#e97366,#de9255)}
+
+  /* сообщение о попадании */
+  #hitmark{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:8;pointer-events:none;
+    font:700 13px/1 var(--mono);color:var(--acc);opacity:0;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+  #hitmark.show{animation:hitpop 1.15s ease-out}
+  @keyframes hitpop{0%{opacity:0;transform:translate(-50%,-50%) scale(.85)}
+    14%{opacity:1;transform:translate(-50%,-140%) scale(1)}
+    100%{opacity:0;transform:translate(-50%,-220%) scale(1)}}
+
+  /* марка от бедра */
+  #cross{position:fixed;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);z-index:7;display:none;pointer-events:none}
+  #cross.show{display:block}
+  #cross i{position:absolute;background:rgba(255,255,255,.78);box-shadow:0 0 3px rgba(0,0,0,.9)}
+  #cross i:nth-child(1){left:50%;top:0;width:1.5px;height:8px;margin-left:-.75px}
+  #cross i:nth-child(2){left:50%;bottom:0;width:1.5px;height:8px;margin-left:-.75px}
+  #cross i:nth-child(3){top:50%;left:0;height:1.5px;width:8px;margin-top:-.75px}
+  #cross i:nth-child(4){top:50%;right:0;height:1.5px;width:8px;margin-top:-.75px}
+
+  /* ── загрузка ── */
+  #loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;
+    gap:14px;background:radial-gradient(circle at 50% 42%,#1c1e21,#0d0e10 72%);z-index:50;text-align:center;padding:32px}
+  #loader .sp{width:34px;height:34px;border:3px solid rgba(255,255,255,.14);border-top-color:var(--acc);
+    border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #loader h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.01em}
+  #loader p{margin:0;max-width:540px;font-size:13.5px;line-height:1.7;color:var(--tx2)}
+  #loader code{font:12px/1.6 var(--mono);color:var(--acc);word-break:break-all}
+  @media (prefers-reduced-motion: reduce){#loader .sp{animation-duration:3s}}
+
+  #toast{position:fixed;left:50%;bottom:calc(18px + 92px);transform:translateX(-50%) translateY(12px);z-index:60;
+    padding:10px 16px;border-radius:10px;background:rgba(20,21,23,.95);border:1px solid var(--bd);
+    font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;max-width:calc(100vw - 32px)}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  #panelToggle{position:fixed;right:16px;top:16px;z-index:9;display:none}
+
+  @media (max-width:1000px){
+    #hint{display:none}
+    #stats{display:none}
+    #topbar{width:calc(100vw - 32px);padding:8px}
+    #tools{width:calc(100vw - 32px);max-height:36vh}
+    .hCell{flex:1 1 84px;min-width:84px;padding:7px 8px}
+    .hCell b{font-size:13px}
+  }
+  @media (max-width:640px){
+    body.hidepanels #topbar,body.hidepanels #tools{display:none}
+    #panelToggle{display:block}
+  }
+</style>
+</head>
+<body class="hidepanels">
+
+<div id="loader">
+  <div class="sp" id="spin"></div>
+  <h1 id="loadTitle">Загрузка three.js…</h1>
+  <p id="loadText">Модуль подгружается с CDN. После первой загрузки файл работает из кэша браузера.</p>
+</div>
+
+<button id="panelToggle" class="btn sm">Панели</button>
+
+<div id="topbar" class="panel" hidden>
+  <div class="grp">
+    <div class="seg" role="group" aria-label="Режим">
+      <button class="btn on" data-act="modeInspect">Осмотр</button>
+      <button class="btn" data-act="modeRange">Стрельбище</button>
+    </div>
+  </div>
+  <div class="grp">
+    <button class="btn sm" data-act="reset">Камера</button>
+    <button class="btn sm" data-act="deploy">К бою</button>
+    <button class="btn sm" data-act="illum">Подсветка</button>
+  </div>
+  <div class="grp">
+    <button class="btn sm" data-act="png">PNG</button>
+    <button class="btn sm" data-act="glb">GLB</button>
+  </div>
+</div>
+
+<div id="tools" class="panel" hidden>
+  <h3>Оптика и поправки</h3>
+  <div id="opticRows"></div>
+  <div class="swatches" id="reticleColors"></div>
+  <div class="divider"></div>
+  <h3>Подвижные детали</h3>
+  <div id="animRows"></div>
+  <div class="toggles" id="animToggles"></div>
+</div>
+
+<div id="stats" class="panel" hidden>
+  <div><span class="k">треугольники</span><b id="sTris">—</b></div>
+  <div><span class="k">меши прицела</span><b id="sMesh">—</b></div>
+  <div><span class="k">материалы</span><b id="sMat">—</b></div>
+  <div><span class="k">draw calls</span><b id="sCalls">—</b></div>
+  <div><span class="k">габариты, мм</span><b id="sBox">—</b></div>
+  <div><span class="k">FPS</span><b id="sFps">—</b></div>
+  <div id="check">—</div>
+</div>
+
+<div id="hint" class="panel" hidden>
+  <div id="hintInspect">
+    <b>ЛКМ</b> — вращение · <b>колесо</b> — зум · <b>ПКМ</b> — панорама<br>
+    Посмотрите в окуляр сзади — там живое изображение стрельбища.<br>
+    <kbd>M</kbd> — перейти к стрельбе
+  </div>
+  <div id="hintRange" hidden>
+    <b>ЛКМ перетащить</b> — наведение · <b>короткий клик</b> — выстрел<br>
+    <b>ПКМ</b> или <kbd>C</kbd> — взгляд в окуляр<br>
+    <kbd>Shift</kbd> задержать дыхание · <kbd>R</kbd> перезарядка<br>
+    <kbd>↑</kbd><kbd>↓</kbd> или колесо — дальность · <kbd>←</kbd><kbd>→</kbd> боковые<br>
+    <kbd>T</kbd> подсветка · <kbd>V</kbd> дальномер · <kbd>M</kbd> осмотр
+  </div>
+</div>
+
+<div id="hud">
+  <div class="hudRow">
+    <div class="hCell act"><span>Барабанчик дальности</span>
+      <div class="stepRow">
+        <button class="stepBtn" data-act="dialDn" aria-label="Дальность меньше">−</button>
+        <b id="hDist" class="acc">4 · 400 м</b>
+        <button class="stepBtn" data-act="dialUp" aria-label="Дальность больше">+</button>
+      </div>
+    </div>
+    <div class="hCell act"><span>Боковые, мил</span>
+      <div class="stepRow">
+        <button class="stepBtn" data-act="windDn" aria-label="Боковые влево">−</button>
+        <b id="hWind">0,0</b>
+        <button class="stepBtn" data-act="windUp" aria-label="Боковые вправо">+</button>
+      </div>
+    </div>
+    <div class="hCell"><span>Ветер</span><b id="hWx">—</b></div>
+    <div class="hCell"><span>Патроны</span><b id="hAmmo">10 / 10</b></div>
+    <div class="hCell"><span>Попадания</span><b id="hHits">0 / 0</b></div>
+  </div>
+  <div class="hudRow">
+    <div class="hCell"><span>До цели</span><b id="hAim">—</b></div>
+    <div class="hCell"><span>Полёт</span><b id="hTof">—</b></div>
+    <div class="hCell"><span>Скорость у цели</span><b id="hVel">—</b></div>
+    <div class="hCell"><span>Энергия</span><b id="hErg">—</b></div>
+    <div class="hCell"><span>Снос ветром</span><b id="hDrift">—</b></div>
+    <div class="hCell"><span>Кратность</span><b id="hMag">4,0×</b></div>
+  </div>
+  <div class="hudActions">
+    <button class="btn sm" data-act="ads">Прицел</button>
+    <button class="btn sm" data-act="fire">Огонь</button>
+    <button class="btn sm" data-act="reload">Перезарядка</button>
+    <button class="btn sm" data-act="rangefind">Дальномер</button>
+  </div>
+  <div id="breathWrap"><div id="breathBar"></div></div>
+</div>
+
+<div id="cross"><i></i><i></i><i></i><i></i></div>
+<div id="hitmark"></div>
+<div id="toast"></div>
+
+<script>
+/* Страховка: если модуль не стартовал (нет сети / нет importmap) — показать понятное сообщение. */
+window.__viewerReady = false;
+window.__threeReady = false;
+window.__failViewer = function (msg, kind) {
+  if (window.__viewerReady) return;
+  var l = document.getElementById('loader');
+  if (!l || l.dataset.failed === '1') return;
+  l.dataset.failed = '1';
+  var sp = document.getElementById('spin'); if (sp) sp.style.display = 'none';
+  var runtime = kind === 'runtime' || window.__threeReady;
+  document.getElementById('loadTitle').textContent = runtime ? 'Сбой при запуске сцены' : 'Не удалось загрузить three.js';
+  if (runtime) {
+    document.getElementById('loadText').innerHTML = (msg || 'Неизвестная ошибка.') +
+      '<br><br>three.js загрузился, споткнулась сама сцена. Подробности — в консоли браузера (F12).';
+    return;
+  }
+  document.getElementById('loadText').innerHTML =
+    (msg || 'Модуль не пришёл ни с одного из CDN.') +
+    '<br><br>Файл сам по себе самодостаточен, но библиотека three.js берётся из сети:' +
+    '<br><code>unpkg.com → cdn.jsdelivr.net → esm.sh</code>' +
+    '<br><br>Что делать: подключиться к интернету и обновить страницу (F5). Для полностью офлайн-сборки' +
+    ' положите рядом three.module.js и поменяйте адрес в importmap на <code>./three.module.js</code>.';
+};
+window.addEventListener('error', function (e) {
+  if (!window.__viewerReady) window.__failViewer(((e && e.message) || 'неизвестная ошибка'), window.__threeReady ? 'runtime' : 'load');
+}, true);
+window.addEventListener('unhandledrejection', function () {
+  if (!window.__viewerReady) window.__failViewer('Отклонённое обещание при старте.', window.__threeReady ? 'runtime' : 'load');
+});
+setTimeout(function () { if (!window.__threeReady) window.__failViewer('Истекло время ожидания CDN (20 с).', 'load'); }, 20000);
+</script>
+
+<script type="module">
+/* ═══════════════════════════════════════════════════════════════════════════
+   ПСО-1 4×24 — процедурная модель + рабочая оптика (render-to-texture)
+   Только один уровень детализации (бывший LOD0). LOD1/LOD2 удалены.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── загрузка three.js: unpkg → jsdelivr → esm.sh ─────────────────────────── */
+const CDNS = [
+  { core: 'https://unpkg.com/three@0.166.1/build/three.module.js',            addons: 'https://unpkg.com/three@0.166.1/examples/jsm/' },
+  { core: 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js',  addons: 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/' },
+  { core: 'https://esm.sh/three@0.166.1',                                      addons: 'https://esm.sh/three@0.166.1/examples/jsm/' }
+];
+let THREE = null, ADDONS = '';
+for (const c of CDNS) {
+  try { THREE = await import(/* @vite-ignore */ c.core); ADDONS = c.addons; break; }
+  catch (e) { console.warn('CDN недоступен:', c.core, e && e.message); }
+}
+if (!THREE) { window.__failViewer('Ни один из трёх CDN не отдал three.js.', 'load'); throw new Error('three.js unavailable');
+}
+window.__threeReady = true;
+
+/*==MODEL:START==*/
+/* ═══════════════════════════════════════════════════════════════════════════
+   МОДЕЛЬ ПСО-1 4×24 (прицел снайперский оптический для СВД)
+
+   Оси: −Z вперёд (в сторону объектива), +Y вверх, +X вправо. Единицы — метры.
+   Origin — центр посадочной плоскости бокового кронштейна («ласточкин хвост» 15 мм / 45°).
+
+   Габариты (мм)                  Значение           Положение по Z
+   Длина корпуса                   375                −190 … +185
+   Труба / оправа объектива        Ø42 / Ø44        −148 … +58 / −190 … −156
+   Световой диаметр объектива      24
+   Корпус окуляра / ступенька       Ø40 / Ø42→Ø34     +58 … +150
+   Наглазник резиновый              35                 +150 … +185
+   Кронштейн: длина / высота оси   130 / 68
+   Барабанчики: дальности / бок.  Ø34×22 / Ø30×20
+   Батарейный отсек               Ø20×45          −132 … −87
+   Удаление выходного зрачка        68                 узел exitPupil
+
+   Оптические данные: 4×, поле зрения 6° (104,7 мрад), сетка в миллирадианах.
+   ═══════════════════════════════════════════════════════════════════════════ */
+function buildPSO1(THREE, opts) {
+  opts = opts || {};
+  const Q   = Math.max(24, Math.min(160, opts.segments || 72));   // сегментов на оборот главной трубы
+  const Qs  = Math.max(16, Math.round(Q * 0.55));                 // сегментов для мелких тел вращения
+  const tex = opts.textures || {};
+  const mm  = (x) => x / 1000;
+  const AX  = 30;   // оптическая ось — вправо от плоскости рельса
+  const AY  = 68;   // оптическая ось — над посадочной поверхностью
+
+  /* ── примитивы (вход всегда в миллиметрах) ──────────────────────── */
+  function T(g, tr) {
+    if (tr) {
+      if (tr.rx) g.rotateX(tr.rx);
+      if (tr.ry) g.rotateY(tr.ry);
+      if (tr.rz) g.rotateZ(tr.rz);
+      if (tr.x || tr.y || tr.z) g.translate(mm(tr.x || 0), mm(tr.y || 0), mm(tr.z || 0));
+    }
+    return g;
+  }
+  const BOX  = (w, h, d, tr)            => T(new THREE.BoxGeometry(mm(w), mm(h), mm(d)), tr);
+  const CYL  = (rt, rb, h, s, open, tr) => T(new THREE.CylinderGeometry(mm(rt), mm(rb), mm(h), s, 1, !!open), tr);
+  const RING = (ri, ro, s, tr)          => T(new THREE.RingGeometry(mm(ri), mm(ro), s), tr);
+  const CIRC = (r, s, tr)               => T(new THREE.CircleGeometry(mm(r), s), tr);
+  const PLN  = (w, h, tr)               => T(new THREE.PlaneGeometry(mm(w), mm(h)), tr);
+  const TOR  = (r, t, rs, ts, tr)       => T(new THREE.TorusGeometry(mm(r), mm(t), rs, ts), tr);
+
+  /* ── тело вращения по профилю {r,z} вокруг оси Z.
+     Строит корректные нормали: плавные там, где излом профиля меньше smoothDeg,
+     и резкие на фасках — именно это даёт «точёный» вид детали.
+     Обход профиля в сторону +Z даёт наружную поверхность, в сторону −Z — внутреннюю. ── */
+  function revolve(prof, seg, smoothDeg) {
+    seg = seg || Q;
+    const lim = Math.cos((smoothDeg === undefined ? 38 : smoothDeg) * Math.PI / 180);
+    const n = prof.length;
+    const sn = [], arcs = [0];
+    let arc = 0;
+    for (let i = 0; i < n - 1; i++) {
+      const dr = prof[i + 1].r - prof[i].r, dz = prof[i + 1].z - prof[i].z;
+      const L = Math.hypot(dr, dz) || 1e-9;
+      sn.push([dz / L, -dr / L]);
+      arc += L; arcs.push(arc);
+    }
+    const total = arc || 1;
+    const nrm = (a) => { const L = Math.hypot(a[0], a[1]) || 1e-9; return [a[0] / L, a[1] / L]; };
+    const segs = [];
+    for (let i = 0; i < n - 1; i++) {
+      let a = sn[i], b = sn[i];
+      if (i > 0 && (sn[i - 1][0] * a[0] + sn[i - 1][1] * a[1]) > lim) a = nrm([sn[i - 1][0] + a[0], sn[i - 1][1] + a[1]]);
+      if (i < n - 2 && (sn[i + 1][0] * b[0] + sn[i + 1][1] * b[1]) > lim) b = nrm([sn[i + 1][0] + b[0], sn[i + 1][1] + b[1]]);
+      segs.push([
+        { r: prof[i].r,     z: prof[i].z,     nr: a[0], nz: a[1], v: arcs[i] / total },
+        { r: prof[i + 1].r, z: prof[i + 1].z, nr: b[0], nz: b[1], v: arcs[i + 1] / total }
+      ]);
+    }
+    const tri = segs.length * seg * 2;
+    const pos = new Float32Array(tri * 9), nor = new Float32Array(tri * 9), uvs = new Float32Array(tri * 6);
+    let p = 0, u = 0;
+    const put = (P, N, U) => {
+      pos[p] = P[0]; pos[p + 1] = P[1]; pos[p + 2] = P[2];
+      nor[p] = N[0]; nor[p + 1] = N[1]; nor[p + 2] = N[2]; p += 3;
+      uvs[u] = U[0]; uvs[u + 1] = U[1]; u += 2;
+    };
+    for (let i = 0; i < segs.length; i++) {
+      const A = segs[i][0], B = segs[i][1];
+      for (let j = 0; j < seg; j++) {
+        const t0 = j / seg * Math.PI * 2, t1 = (j + 1) / seg * Math.PI * 2;
+        const c0 = Math.cos(t0), s0 = Math.sin(t0), c1 = Math.cos(t1), s1 = Math.sin(t1);
+        const A0 = [mm(A.r * c0), mm(A.r * s0), mm(A.z)], A1 = [mm(A.r * c1), mm(A.r * s1), mm(A.z)];
+        const B0 = [mm(B.r * c0), mm(B.r * s0), mm(B.z)], B1 = [mm(B.r * c1), mm(B.r * s1), mm(B.z)];
+        const nA0 = [A.nr * c0, A.nr * s0, A.nz], nA1 = [A.nr * c1, A.nr * s1, A.nz];
+        const nB0 = [B.nr * c0, B.nr * s0, B.nz], nB1 = [B.nr * c1, B.nr * s1, B.nz];
+        const uA = [j / seg, A.v], uA1 = [(j + 1) / seg, A.v], uB = [j / seg, B.v], uB1 = [(j + 1) / seg, B.v];
+        put(A0, nA0, uA); put(A1, nA1, uA1); put(B1, nB1, uB1);
+        put(A0, nA0, uA); put(B1, nB1, uB1); put(B0, nB0, uB);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    return g;
+  }
+
+  /* ── алмазная накатка: реальная геометрия, а не зубцы по кругу ───── */
+  function knurl(rad, hgt, teeth, depth, seg, rows) {
+    seg = seg || Math.max(48, Math.round(teeth * 4));
+    rows = rows || Math.max(14, Math.round(hgt / 1.4));
+    const tri3 = (x) => { const f = x - Math.floor(x); return Math.abs(f * 2 - 1); };
+    const smoothstep = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+    const R = (th, t) => {
+      const a = tri3(th * teeth + t * hgt / 3.1), b = tri3(th * teeth - t * hgt / 3.1);
+      const k = Math.max(a, b);                       // ромбическая сетка гребне��
+      const taper = smoothstep(0, 0.09, t) * smoothstep(0, 0.09, 1 - t);
+      return rad - depth * (1 - k) * taper;
+    };
+    const pts = [];
+    for (let i = 0; i <= rows; i++) {
+      const t = i / rows, z = t * hgt;
+      const ring = [];
+      for (let j = 0; j <= seg; j++) {
+        const th = j / seg, a = th * Math.PI * 2, r = R(th, t);
+        ring.push([mm(r * Math.cos(a)), mm(r * Math.sin(a)), mm(z)]);
+      }
+      pts.push(ring);
+    }
+    const tri = rows * seg * 2;
+    const pos = new Float32Array(tri * 9), nor = new Float32Array(tri * 9), uvs = new Float32Array(tri * 6);
+    let p = 0, u = 0;
+    const face = (a, b, c, ua, ub, uc) => {
+      const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      let nx = e1[1] * e2[2] - e1[2] * e2[1], ny = e1[2] * e2[0] - e1[0] * e2[2], nz = e1[0] * e2[1] - e1[1] * e2[0];
+      const L = Math.hypot(nx, ny, nz) || 1e-9; nx /= L; ny /= L; nz /= L;
+      const tri0 = [a, b, c], uv0 = [ua, ub, uc];
+      for (let k = 0; k < 3; k++) {
+        pos[p] = tri0[k][0]; pos[p + 1] = tri0[k][1]; pos[p + 2] = tri0[k][2];
+        nor[p] = nx; nor[p + 1] = ny; nor[p + 2] = nz; p += 3;
+        uvs[u] = uv0[k][0]; uvs[u + 1] = uv0[k][1]; u += 2;
+      }
+    };
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < seg; j++) {
+        const A = pts[i][j], B = pts[i][j + 1], C = pts[i + 1][j + 1], D = pts[i + 1][j];
+        const uA = [j / seg, i / rows], uB = [(j + 1) / seg, i / rows];
+        const uC = [(j + 1) / seg, (i + 1) / rows], uD = [j / seg, (i + 1) / rows];
+        face(A, B, C, uA, uB, uC); face(A, C, D, uA, uC, uD);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    return g;
+  }
+
+  /* ── слияние геометрий одного материала → один draw call ────────── */
+  function merge(list) {
+    const src = list.filter(Boolean);
+    const flat = src.map((g) => (g.index ? g.toNonIndexed() : g));
+    let n = 0; for (const g of flat) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+    let o = 0;
+    for (const g of flat) {
+      const q = g.attributes.position;
+      pos.set(q.array, o * 3);
+      if (g.attributes.normal) nor.set(g.attributes.normal.array, o * 3);
+      if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+      o += q.count;
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    out.computeBoundingBox(); out.computeBoundingSphere();
+    for (const g of flat) g.dispose();
+    for (const g of src) if (flat.indexOf(g) < 0) g.dispose();
+    return out;
+  }
+
+  /* ── винт со шлицем ──────────────────────────────────────────────── */
+  function screw(d, h, tr) {
+    const g = [
+      CYL(d / 2, d / 2 * 0.94, h, 14, false, { y: h / 2 }),
+      BOX(d * 0.86, 0.5, d * 0.16, { y: h - 0.2 })
+    ];
+    const m = merge(g);
+    return T(m, tr);
+  }
+
+  /* ── материалы ────────────────────────────────────────────────────── */
+  const mats = {
+    paint: new THREE.MeshStandardMaterial({
+      name: 'blackWrinkle', color: 0x1b1d20, metalness: 0.28, roughness: 0.72,
+      map: tex.paintMap || null, normalMap: tex.paintNormal || null, roughnessMap: tex.paintRough || null,
+      envMapIntensity: 0.85
+    }),
+    steel: new THREE.MeshStandardMaterial({
+      name: 'steel', color: 0x9aa1a8, metalness: 0.96, roughness: 0.29,
+      normalMap: tex.steelNormal || null, envMapIntensity: 1.15
+    }),
+    blued: new THREE.MeshStandardMaterial({
+      name: 'bluedSteel', color: 0x3c4045, metalness: 0.92, roughness: 0.42, envMapIntensity: 1.0
+    }),
+    rubber: new THREE.MeshStandardMaterial({
+      name: 'rubber', color: 0x141517, metalness: 0.0, roughness: 0.94,
+      normalMap: tex.rubberNormal || null, envMapIntensity: 0.35, side: THREE.DoubleSide
+    }),
+    inner: new THREE.MeshStandardMaterial({ name: 'innerBore', color: 0x090a0b, metalness: 0.1, roughness: 0.95, side: THREE.FrontSide }),
+    glass: new THREE.MeshPhysicalMaterial({
+      name: 'coatedGlass', color: 0x0a1420, metalness: 0.0, roughness: 0.035,
+      clearcoat: 1.0, clearcoatRoughness: 0.02, transparent: true, opacity: 0.62,
+      iridescence: 0.85, iridescenceIOR: 1.38, iridescenceThicknessRange: [180, 640],
+      envMapIntensity: 2.0, side: THREE.FrontSide, depthWrite: false
+    }),
+    marks: new THREE.MeshStandardMaterial({
+      name: 'drumMarks', color: 0xffffff, metalness: 0.2, roughness: 0.55,
+      map: tex.drumMap || null, envMapIntensity: 0.6
+    }),
+    decal: new THREE.MeshStandardMaterial({
+      name: 'decal', color: 0xffffff, metalness: 0.3, roughness: 0.5,
+      map: tex.decalMap || null, transparent: true, alphaTest: 0.35,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    })
+  };
+
+  /* ── сборочные списки (opt — в системе координат оптической оси) ── */
+  const oPaint = [], oSteel = [], oBlued = [], oInner = [];   // вокруг оптической оси
+  const mPaint = [], mSteel = [];                             // кронштейн (система модели)
+
+  /* ── 1. КОРПУС: единый точёный профиль от объектива до окуляра ──── */
+  const body = [
+    { r: 12.6, z: -186.0 },   // внутренняя кромка под линзой (световой Ø24 + оправа)
+    { r: 14.2, z: -189.2 },   // фаска 45°
+    { r: 19.6, z: -190.0 },
+    { r: 22.0, z: -190.0 },   // торец оправы Ø44
+    { r: 22.0, z: -187.0 },
+    { r: 21.4, z: -184.6 },   // скругление кромки
+    { r: 21.4, z: -178.0 },
+    { r: 22.0, z: -175.0 },   // буртик оправы
+    { r: 22.0, z: -158.0 },
+    { r: 21.2, z: -152.5 },   // конический переход Ø44 → Ø42
+    { r: 21.0, z: -148.0 },
+    { r: 21.0, z: -124.0 },
+    { r: 21.9, z: -122.0 },   // поясок под хомут
+    { r: 21.9, z: -116.0 },
+    { r: 21.0, z: -114.0 },
+    { r: 21.0, z: -34.0 },
+    { r: 23.2, z: -30.0 },    // переход в корпус барабанчиков
+    { r: 23.2, z: 16.0 },
+    { r: 21.0, z: 20.0 },
+    { r: 21.0, z: 56.0 },
+    { r: 21.0, z: 58.0 },
+    { r: 17.0, z: 58.0 },     // характерная «ступенька» окуляра
+    { r: 17.0, z: 64.0 },
+    { r: 19.9, z: 67.0 },
+    { r: 20.0, z: 70.0 },
+    { r: 20.0, z: 118.0 },
+    { r: 20.7, z: 121.0 },    // посадочная шейка наглазника Ø41,4 — 36 мм опоры
+    { r: 20.7, z: 152.0 },
+    { r: 21.6, z: 154.0 },    // фиксирующий буртик: резина с него не соскакивает
+    { r: 21.6, z: 157.0 },
+    { r: 20.2, z: 159.0 },
+    { r: 18.4, z: 159.0 }     // внутренняя кромка окуляра
+  ];
+  oPaint.push(revolve(body, Q, 34));
+
+  // внутренняя тёмная труба (обход от окуляра к объективу → нормали внутрь)
+  oInner.push(revolve([
+    { r: 18.4, z: 159.0 }, { r: 17.6, z: 154.0 }, { r: 17.6, z: 146.0 }, { r: 17.6, z: 104.0 },
+    { r: 16.4, z: 100.0 }, { r: 16.4, z: 62.0 },  { r: 19.2, z: 54.0 },
+    { r: 19.2, z: -150.0 }, { r: 13.4, z: -166.0 }, { r: 12.6, z: -184.0 }
+  ], Math.max(32, Math.round(Q * 0.7)), 30));
+
+  // кольца жёсткости на трубе
+  [-96, -70].forEach((z) => {
+    oPaint.push(revolve([
+      { r: 21.0, z: z - 3.2 }, { r: 21.7, z: z - 2.2 }, { r: 21.7, z: z + 2.2 }, { r: 21.0, z: z + 3.2 }
+    ], Q, 26));
+  });
+
+  /* ── 2. БЛОК БАРАБАНЧИКОВ ─────────────────────────────────────── */
+  // верхняя бонка (барабанчик дальности) — тело вращения вокруг Y
+  const bossElev = revolve([
+    { r: 0.0,  z: 0.0 }, { r: 20.5, z: 0.0 }, { r: 20.5, z: 8.0 },
+    { r: 19.0, z: 11.0 }, { r: 19.0, z: 15.5 }, { r: 17.6, z: 17.0 }, { r: 0.0, z: 17.0 }
+  ], Qs, 30);
+  bossElev.rotateX(-Math.PI / 2);                 // +Z → +Y
+  oPaint.push(T(bossElev, { y: 12.0, z: -6 }));
+
+  // боковая бонка (боковые поправки) — смотрит в −X
+  const bossWind = revolve([
+    { r: 0.0,  z: 0.0 }, { r: 18.5, z: 0.0 }, { r: 18.5, z: 7.0 },
+    { r: 17.0, z: 10.0 }, { r: 17.0, z: 14.0 }, { r: 15.6, z: 15.5 }, { r: 0.0, z: 15.5 }
+  ], Qs, 30);
+  bossWind.rotateY(-Math.PI / 2);                 // +Z → −X
+  oPaint.push(T(bossWind, { x: -12.0, z: -6 }));
+
+  // правая заглушка с пломбой
+  const plug = revolve([
+    { r: 0, z: 0 }, { r: 12.5, z: 0 }, { r: 12.5, z: 5.0 }, { r: 11.0, z: 6.4 }, { r: 0, z: 6.4 }
+  ], Qs, 30);
+  plug.rotateY(Math.PI / 2);
+  oPaint.push(T(plug, { x: 12.0, z: -6 }));
+  oSteel.push(screw(5.0, 2.2, { rz: -Math.PI / 2, x: 18.4, z: -6 }));
+  oSteel.push(TOR(6.2, 0.55, 6, 20, { ry: Math.PI / 2, x: 18.6, z: -6 }));
+
+  // шильдик с гравировкой на корпусе барабанчиков
+  const decalGeo = new THREE.CylinderGeometry(mm(23.3), mm(23.3), mm(12), 40, 1, true, Math.PI - 0.62, 1.24);
+  decalGeo.rotateX(Math.PI / 2);          // ось цилиндра Y → Z (накладка ложится на верх корпуса)
+  decalGeo.translate(0, 0, mm(-6));
+
+  /* ── 3. БОКОВОЙ КРОНШТЕЙН «ласточкин хвост» 15 мм / 45° ─────── */
+  const sh = new THREE.Shape();
+  sh.moveTo(mm(0),    mm(-17));
+  sh.lineTo(mm(0),    mm(-7.5));
+  sh.lineTo(mm(-6),   mm(-13.5));
+  sh.lineTo(mm(-6),   mm(13.5));
+  sh.lineTo(mm(0),    mm(7.5));
+  sh.lineTo(mm(0),    mm(31));
+  sh.lineTo(mm(-15),  mm(35));
+  sh.lineTo(mm(-15),  mm(-17));
+  sh.closePath();
+  mPaint.push(T(new THREE.ExtrudeGeometry(sh, { depth: mm(130), bevelEnabled: false, curveSegments: 1, steps: 1 }), { z: -65 }));
+
+  // стойки и обоймы вокруг трубы
+  [-48, 42].forEach((z) => {
+    mPaint.push(BOX(38, 40, 17, { x: 10, y: 41, z: z }));
+    const clamp = revolve([
+      { r: 21.0, z: z - 8.5 }, { r: 24.6, z: z - 8.5 }, { r: 25.4, z: z - 7.2 },
+      { r: 25.4, z: z + 7.2 }, { r: 24.6, z: z + 8.5 }, { r: 21.0, z: z + 8.5 }
+    ], Qs, 34);
+    clamp.translate(mm(AX), mm(AY), 0);
+    mPaint.push(clamp);
+    mSteel.push(screw(6.2, 3.0, { x: AX, y: AY + 25.4, z: z }));
+    mSteel.push(screw(4.0, 2.2, { rx: Math.PI, x: AX, y: AY - 25.4, z: z }));
+  });
+
+  // рычаг-эксцентрик и фиксатор
+  mSteel.push(CYL(6.8, 6.8, 13, 20, false, { rz: Math.PI / 2, x: -21, y: 6, z: 44 }));
+  mSteel.push(BOX(7, 46, 9, { rz: -0.35, x: -24, y: -14, z: 44 }));
+  mSteel.push(CYL(5.6, 5.6, 9.4, 18, false, { rz: Math.PI / 2, x: -32, y: -35, z: 44 }));
+  mSteel.push(TOR(6.9, 1.0, 8, 22, { ry: Math.PI / 2, x: -21, y: 6, z: 44 }));
+  mSteel.push(BOX(8, 15, 11, { x: -19, y: 19, z: -52 }));
+  mSteel.push(CYL(3.1, 3.1, 11.4, 16, false, { rz: Math.PI / 2, x: -19, y: 19, z: -52 }));
+  [-30, 30].forEach((z) => mSteel.push(screw(6.4, 2.6, { rz: Math.PI / 2, x: -16.2, y: 22, z: z })));
+
+  /* ── 4. БАТАРЕЙНЫЙ ОТСЕК и тумблер подсветки ──────────────── */
+  const batt = revolve([
+    { r: 0,    z: -132.0 }, { r: 12.0, z: -132.0 }, { r: 12.0, z: -126.0 },
+    { r: 10.2, z: -124.0 }, { r: 10.2, z: -92.0 },  { r: 11.6, z: -89.0 },
+    { r: 11.6, z: -86.0 },  { r: 0,    z: -86.0 }
+  ], Qs, 30);
+  oPaint.push(T(batt, { y: -38 }));   // ось отсека параллельна трубе, крышка смотрит вперёд
+  oPaint.push(BOX(13, 16, 30, { y: -27.5, z: -108 }));                     // прилив к трубе
+  const swBody = revolve([
+    { r: 0, z: 0 }, { r: 7.2, z: 0 }, { r: 7.2, z: 6.4 }, { r: 5.6, z: 9.0 }, { r: 0, z: 9.0 }
+  ], 24, 30);
+  swBody.rotateY(-Math.PI / 2);
+  // основание утоплено в стенку отсека (его радиус 10,2 мм): деталь не висит в воздухе
+  oPaint.push(T(swBody, { x: -8.6, y: -38, z: -93 }));
+
+  /* ── 5. ОПТИКА ────────────────────────────────────────────────────── */
+  // передняя линза: слегка выпуклая, с просветлением (iridescence)
+  const lensFront = revolve([
+    { r: 0, z: -185.8 }, { r: 4.5, z: -185.7 }, { r: 8.6, z: -185.35 }, { r: 11.0, z: -185.0 }, { r: 12.6, z: -184.6 }
+  ], Q, 60);
+  const lensRear = revolve([
+    { r: 0, z: 146.2 }, { r: 6.0, z: 146.3 }, { r: 12.0, z: 146.6 }, { r: 16.0, z: 147.0 }, { r: 18.2, z: 147.4 }
+  ], Q, 60);
+
+  /* ── СБОРКА ──────────────────────────────────────────────────────── */
+  const group = new THREE.Group();
+  group.name = 'PSO1';
+  const optic = new THREE.Group();                 // всё, что живёт на оптической оси
+  optic.name = 'opticAxis';
+  optic.position.set(mm(AX), mm(AY), 0);
+  group.add(optic);
+
+  const parts = {}, nodes = {};
+  function addMesh(parent, list, mat, name, shadow) {
+    const m = new THREE.Mesh(merge(list), mat);
+    m.name = name;
+    m.castShadow = shadow !== false;
+    m.receiveShadow = shadow !== false;
+    parent.add(m);
+    return m;
+  }
+  addMesh(optic, oPaint, mats.paint, 'body');
+  addMesh(optic, oSteel, mats.steel, 'hardware');
+  if (oBlued.length) addMesh(optic, oBlued, mats.blued, 'screws');
+  addMesh(optic, oInner, mats.inner, 'innerBore', false);
+  addMesh(group, mPaint, mats.paint, 'mount');
+  addMesh(group, mSteel, mats.steel, 'mountHardware');
+  const decalMesh = addMesh(optic, [decalGeo], mats.decal, 'nameplate', false);
+  decalMesh.visible = !!tex.decalMap;
+
+  const glassFront = addMesh(optic, [lensFront], mats.glass, 'objectiveLens', false);
+  const glassRear  = addMesh(optic, [lensRear],  mats.glass, 'eyepieceLens', false);
+  glassFront.renderOrder = 4; glassRear.renderOrder = 4;
+
+  // тёмная подложка за передней линзой (глубина оптического блока)
+  addMesh(optic, [CIRC(12.4, Q, { z: -181.5 })], new THREE.MeshStandardMaterial({
+    name: 'lensStack', color: 0x05070a, metalness: 0.6, roughness: 0.25, envMapIntensity: 0.6
+  }), 'lensStack', false);
+
+  /* ── подвижные детали ─────────────────────────────────────────── */
+  function part(parent, name, x, y, z, rx, ry, rz) {
+    const socket = new THREE.Object3D();
+    socket.name = name + 'Socket';
+    socket.position.set(mm(x), mm(y), mm(z));
+    socket.rotation.set(rx || 0, ry || 0, rz || 0);
+    parent.add(socket);
+    const p = new THREE.Group(); p.name = name; socket.add(p);
+    parts[name] = p;
+    return p;
+  }
+  function partMesh(p, list, mat, name, shadow) { return addMesh(p, list, mat, name, shadow); }
+
+  // барабанчик: тело с накаткой + юбка + гладкая полоса под шкалу + крышка
+  function drum(p, rad, hgt, teeth) {
+    const up = (g) => g.rotateX(-Math.PI / 2);                       // профиль по +Z → ось барабанчика +Y
+    const bodyG = [], marksG = [];
+    bodyG.push(up(revolve([
+      { r: 0,        z: 0 },        { r: rad + 1.8, z: 0 },       { r: rad + 1.8, z: 3.0 },
+      { r: rad,      z: 4.2 },      { r: rad,       z: 5.0 }
+    ], Qs, 34)));                                                    // юбка
+    const kn = up(knurl(rad, hgt - 15.0, teeth, Math.min(1.05, rad * 0.05), Math.max(56, teeth * 4), 18));
+    bodyG.push(T(kn, { y: 5.0 }));                                   // накатка
+    bodyG.push(up(revolve([
+      { r: rad,      z: hgt - 10.0 }, { r: rad + 0.35, z: hgt - 9.4 }, { r: rad + 0.35, z: hgt - 2.6 },
+      { r: rad,      z: hgt - 2.0 },  { r: rad - 1.2,  z: hgt - 1.0 }, { r: rad - 1.2,  z: hgt },
+      { r: 4.6,      z: hgt },        { r: 4.6,        z: hgt + 1.4 }, { r: 0, z: hgt + 1.4 }
+    ], Qs, 34)));                                                    // поясок шкалы + крышка
+    // гладкая цилиндрическая полоса с текстурой шкалы (точно в границах пояска)
+    marksG.push(CYL(rad + 0.42, rad + 0.42, hgt - 16.4, Qs, true, { y: hgt - 6.0 }));
+    partMesh(p, bodyG, mats.paint, 'drumBody');
+    const mk = partMesh(p, marksG, mats.marks, 'drumScale');
+    mk.visible = !!tex.drumMap;
+    partMesh(p, [screw(5.2, 2.0, { y: hgt + 1.3 })], mats.steel, 'drumScrew');
+  }
+
+  const knobElev = part(optic, 'knobElev', 0, 27.0, -6, 0, 0, 0);
+  drum(knobElev, 17, 24, 26);
+  const knobWind = part(optic, 'knobWind', -27.0, 0, -6, 0, 0, Math.PI / 2);
+  drum(knobWind, 15, 22, 24);
+
+  // кольцо диоптрийной наводки (вращается)
+  const focus = part(optic, 'focusRing', 0, 0, 96, 0, 0, 0);
+  {
+    const fr = knurl(20.9, 20, 44, 0.62, 88, 14);        // ось накатки уже по +Z
+    partMesh(focus, [T(fr, { z: -10 }),
+      revolve([{ r: 20.0, z: -11.4 }, { r: 20.9, z: -10.2 }, { r: 20.9, z: -10.0 }], Qs, 30),
+      revolve([{ r: 20.9, z: 10.0 }, { r: 20.9, z: 10.2 }, { r: 20.0, z: 11.4 }], Qs, 30)
+    ], mats.paint, 'focusRingMesh');
+  }
+
+  // резиновый наглазник
+  // Муфта длиной 46 мм сидит на шейке корпуса (z = 121…159) на всём ходе
+  // выдвижения 0–16 мм: минимальное перекрытие с корпусом — 19 мм.
+  const eyecup = part(optic, 'eyecup', 0, 0, 124, 0, 0, 0);
+  partMesh(eyecup, [revolve([
+    { r: 20.3, z: 0 },    { r: 21.4, z: 1.2 },  { r: 23.6, z: 3.6 },  { r: 23.6, z: 26.0 },
+    { r: 24.4, z: 30.0 }, { r: 24.2, z: 34.0 }, { r: 27.0, z: 42.0 }, { r: 27.6, z: 45.4 },
+    { r: 27.6, z: 46.4 }, { r: 25.8, z: 45.8 }, { r: 22.6, z: 37.0 }, { r: 21.9, z: 31.0 },
+    { r: 21.9, z: 12.0 }, { r: 20.8, z: 9.0 },  { r: 20.8, z: 1.6 },  { r: 20.3, z: 0.4 }
+  ], Q, 44)], mats.rubber, 'eyecupMesh');
+
+  // откидная крышка объектива на шарнире
+  const capF = part(optic, 'lensCapFront', 0, 22.5, -190.6, 0, 0, 0);
+  partMesh(capF, [
+    revolve([
+      { r: 0, z: -5.0 }, { r: 21.0, z: -5.0 }, { r: 22.6, z: -3.6 }, { r: 22.6, z: 0.6 },
+      { r: 21.4, z: 1.6 }, { r: 3.0, z: 1.6 }, { r: 3.0, z: -0.4 }, { r: 0, z: -0.4 }
+    ], Qs, 34).translate(0, mm(-23), 0),
+    BOX(9, 12, 6.5, { y: -3.0, z: 3.0 }),   // ухо доходит до оси шарнира
+    BOX(28, 3.6, 4.6, { y: -13.0, z: -5.6 })
+  ], mats.paint, 'lensCapFrontMesh');
+  oPaint.push(BOX(11, 9, 10, { y: 20.0, z: -185.0 }));   // проушина шарнира на оправе объектива
+  addMesh(optic, [CYL(2.5, 2.5, 14, 14, false, { rz: Math.PI / 2, y: 22.5, z: -186.0 })], mats.steel, 'capHinge');
+
+  // крышка батарейного отсека
+  const battCap = part(optic, 'batteryCap', 0, -38, -132, 0, Math.PI, 0);   // локальная +Z → вперёд
+  {
+    const bc = knurl(11.4, 8.6, 20, 0.75, 48, 8);
+    partMesh(battCap, [
+      T(bc, { z: 1.6 }),
+      revolve([{ r: 0, z: 0 }, { r: 10.2, z: 0 }, { r: 11.4, z: 1.6 }], 40, 30),
+      revolve([{ r: 11.4, z: 10.2 }, { r: 11.4, z: 11.6 }, { r: 9.6, z: 12.6 },
+               { r: 3.2, z: 12.6 }, { r: 3.2, z: 13.4 }, { r: 0, z: 13.4 }], 40, 30)
+    ], mats.paint, 'batteryCapMesh');
+  }
+
+  // флажок тумблера подсветки
+  const swLever = part(optic, 'illumSwitch', -17.6, -38, -93, 0, 0, 0);
+  partMesh(swLever, [
+    CYL(2.3, 2.3, 5.0, 14, false, { rz: Math.PI / 2, x: -1.0 }),
+    BOX(4.2, 13, 3.4, { rz: 0.42, x: -2.6, y: 4.5 })
+  ], mats.steel, 'illumSwitchMesh');
+
+  /* ── узлы для интеграции в игру ──────────────────────────────── */
+  function mknode(parent, name, x, y, z) {
+    const o = new THREE.Object3D();
+    o.name = name;
+    o.position.set(mm(x), mm(y), mm(z));
+    parent.add(o); nodes[name] = o; return o;
+  }
+  mknode(group, 'mount', 0, 0, 0);
+  mknode(optic, 'sightAxis', 0, 0, -6);
+  mknode(optic, 'objectiveLens', 0, 0, -185);
+  mknode(optic, 'eyepieceLens', 0, 0, 147);
+  mknode(optic, 'reticlePlane', 0, 0, 142);
+  mknode(optic, 'exitPupil', 0, 0, 215);
+  mknode(optic, 'boreAxis', 0, -70, 0);      // ось канала ствола: 70 мм под оптической осью
+  mknode(optic, 'muzzle',   0, -70, -560);   // дульный срез
+
+  /* ── параметры анимации деталей ────────────────────────────── */
+  group.partsMeta = {
+    knobElev:     { label: 'Барабанчик дальности 1–10', pos: [0, 0, 0],      rot: [0, -Math.PI * 3.0, 0] },
+    knobWind:     { label: 'Боковые поправки',       pos: [0, 0, 0],      rot: [0,  Math.PI * 2.0, 0] },
+    focusRing:    { label: 'Диоптрийная наводка',      pos: [0, 0, 0],      rot: [0, 0, Math.PI * 0.6] },
+    eyecup:       { label: 'Наглазник (вытянуть)',      pos: [0, 0, 0.016], rot: [0, 0, 0] },
+    lensCapFront: { label: 'Крышка объектива (откинуть)', pos: [0, 0, 0],   rot: [-2.15, 0, 0] },
+    batteryCap:   { label: 'Крышка батарейного отсека', pos: [0, 0, 0.02], rot: [0, 0, -Math.PI * 3] },
+    illumSwitch:  { label: 'Тумблер подсветки',       pos: [0, 0, 0],      rot: [0.95, 0, 0] }
+  };
+  const baseT = {};
+  Object.keys(parts).forEach((k) => { baseT[k] = { p: parts[k].position.clone(), r: parts[k].rotation.clone() }; });
+  group.partT = {};
+  Object.keys(parts).forEach((k) => { group.partT[k] = 0; });
+  group.setPartT = function (name, t) {
+    const p = parts[name], m = group.partsMeta[name], b = baseT[name];
+    if (!p || !m) return group;
+    t = Math.max(0, Math.min(1, t));
+    p.position.set(b.p.x + m.pos[0] * t, b.p.y + m.pos[1] * t, b.p.z + m.pos[2] * t);
+    p.rotation.set(b.r.x + m.rot[0] * t, b.r.y + m.rot[1] * t, b.r.z + m.rot[2] * t);
+    group.partT[name] = t;
+    return group;
+  };
+
+  /* ── публичный API модели ─────────────────────────────────────── */
+  group.nodes = nodes;
+  group.parts = parts;
+  group.optic = optic;
+  group.materials = mats;
+  group.glass = { front: glassFront, rear: glassRear };
+
+  group.setDeployed = function (on) {
+    group.setPartT('lensCapFront', on ? 1 : 0);
+    group.setPartT('eyecup', on ? 1 : 0);
+    return group;
+  };
+  // поворот барабанчиков по реальным поправкам
+  group.setElevationDial = function (setting) {         // 1–10 (сотни метров)
+    group.setPartT('knobElev', Math.max(0, Math.min(1, (setting - 1) / 9)));
+    return group;
+  };
+  group.setWindageDial = function (mil) {               // ±5 мил
+    group.setPartT('knobWind', Math.max(0, Math.min(1, (mil + 5) / 10)));
+    return group;
+  };
+  group.dispose = function () {
+    group.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
+    Object.keys(mats).forEach((k) => mats[k].dispose());
+    return group;
+  };
+  group.userData = {
+    model: 'ПСО-1 4×24', unit: 'm', forward: '-Z', magnification: 4, fovDeg: 6,
+    eyeRelief: 0.068, exitPupilDia: 0.006, sightHeight: 0.070, muzzleFromSight: 0.554,
+    origin: 'центр посадочной поверхности бокового кронштейна'
+  };
+  return group;
+}
+
+/* ��роверка контракта модели: узлы, детали, полигоны, габариты. */
+function validate(group, THREE_) {
+  const T3 = THREE_ || (typeof THREE !== 'undefined' ? THREE : null);
+  const needNodes = ['mount', 'sightAxis', 'objectiveLens', 'eyepieceLens', 'reticlePlane', 'exitPupil'];
+  const needParts = ['knobElev', 'knobWind', 'eyecup', 'lensCapFront', 'batteryCap', 'focusRing', 'illumSwitch'];
+  const missing = [];
+  needNodes.forEach((n) => { if (!group.nodes || !group.nodes[n]) missing.push('nodes.' + n); });
+  needParts.forEach((n) => { if (!group.parts || !group.parts[n]) missing.push('parts.' + n); });
+  ['setDeployed', 'setPartT', 'dispose'].forEach((f) => { if (typeof group[f] !== 'function') missing.push(f + '()'); });
+
+  let triangles = 0, meshes = 0;
+  const matSet = new Set();
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes++;
+    if (o.material) matSet.add(o.material.uuid || o.material.name || meshes);
+    const g = o.geometry;
+    if (g && g.attributes && g.attributes.position) {
+      triangles += (g.index ? g.index.count : g.attributes.position.count) / 3;
+    }
+  });
+  let sizeMM = null;
+  if (T3 && T3.Box3) {
+    const b = new T3.Box3().setFromObject(group);
+    const s = b.getSize(new T3.Vector3());
+    sizeMM = { x: +(s.x * 1000).toFixed(1), y: +(s.y * 1000).toFixed(1), z: +(s.z * 1000).toFixed(1) };
+  }
+  const report = {
+    ok: missing.length === 0, missing: missing,
+    triangles: Math.round(triangles), meshes: meshes, materials: matSet.size, drawCalls: meshes,
+    nodes: group.nodes ? Object.keys(group.nodes).length : 0,
+    parts: group.parts ? Object.keys(group.parts).length : 0,
+    sizeMM: sizeMM
+  };
+  if (typeof console !== 'undefined') console.log('%cПСО-1 validate()', 'color:#de9255;font-weight:700', report);
+  return report;
+}
+/*==MODEL:END==*/
+
+/*==RETICLE:START==*/
+/* ═══════════════════════════════════════════════════════════════════════════
+   СЕТКА ПСО-1. Всё в миллирадианах (милах) — один мил текстуры равен
+   одному милу сцены, поэтому дальномер и выносы работают честно:
+     • главный угольник — основная точка прицеливания;
+     • три дополнительных угольника — вынос на 1100/1200/1300 м;
+     • горизонтальная шкала ±10 мил с оцифровкой через 5;
+     • дальномерная шкала слева внизу по росту фигуры 1,7 м (h = 1700/D мил).
+   ═══════════════════════════════════════════════════════════════════════════ */
+function drawPSOReticle(ctx, size, spanMil, o) {
+  o = o || {};
+  const ppm = size / spanMil;                 // пикселей на миллирадиан
+  const cx = size * 0.5, cy = size * 0.5;
+  const X = (m) => cx + m * ppm;
+  const Y = (m) => cy - m * ppm;
+  const W = (m) => Math.max(size / 620, m * ppm);
+  const ink = o.color || '#ffffff';
+
+  ctx.save();
+  ctx.strokeStyle = ink; ctx.fillStyle = ink;
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'miter'; ctx.miterLimit = 6;
+
+  const line = (x1, y1, x2, y2, w) => {
+    ctx.beginPath(); ctx.lineWidth = W(w);
+    ctx.moveTo(X(x1), Y(y1)); ctx.lineTo(X(x2), Y(y2)); ctx.stroke();
+  };
+  const label = (s, x, y, mil, align, base) => {
+    ctx.save();
+    ctx.font = '700 ' + Math.round(mil * ppm) + 'px "Liberation Sans", Arial, Helvetica, sans-serif';
+    ctx.textAlign = align || 'center';
+    ctx.textBaseline = base || 'top';
+    ctx.fillText(s, X(x), Y(y));
+    ctx.restore();
+  };
+
+  /* ── горизонтальная шкала боковых поправок ── */
+  line(-10, 0, -0.95, 0, 0.155);
+  line(0.95, 0, 10, 0, 0.155);
+  line(-21, 0, -10, 0, 0.10);                 // тонкое продолжение волоска
+  line(10, 0, 21, 0, 0.10);
+  for (let i = 1; i <= 10; i++) {
+    const big = (i % 5 === 0);
+    const h = big ? 1.15 : 0.5;
+    const w = big ? 0.175 : 0.125;
+    line(-i, 0, -i, -h, w);
+    line(i, 0, i, -h, w);
+  }
+  label('10', -10, -1.35, 1.25); label('5', -5, -1.35, 1.25);
+  label('5', 5, -1.35, 1.25);    label('10', 10, -1.35, 1.25);
+
+  /* ── главный угольник ── */
+  ctx.beginPath();
+  ctx.lineWidth = W(0.235);
+  ctx.moveTo(X(-2.15), Y(-2.15)); ctx.lineTo(X(0), Y(0)); ctx.lineTo(X(2.15), Y(-2.15));
+  ctx.stroke();
+
+  /* ── дополнительные угольники 1100 / 1200 / 1300 м ── */
+  [[-2.0, 0.95], [-3.6, 0.95], [-5.2, 0.95]].forEach((c) => {
+    ctx.beginPath(); ctx.lineWidth = W(0.19);
+    ctx.moveTo(X(-c[1]), Y(c[0] - c[1])); ctx.lineTo(X(0), Y(c[0])); ctx.lineTo(X(c[1]), Y(c[0] - c[1]));
+    ctx.stroke();
+  });
+
+  /* ── дальномерная шкала (фигура 1,7 м) ── */
+  const base = -8.7, xa = -16.8, xb = -4.6;
+  const px = (d) => xa + (xb - xa) * ((d - 200) / 800);
+  const ph = (d) => 1700 / d;
+  ctx.beginPath(); ctx.lineWidth = W(0.15);
+  for (let i = 0; i <= 64; i++) {
+    const d = 200 + (i / 64) * 800;
+    const x = X(px(d)), y = Y(base + ph(d));
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  line(xa, base, xb, base, 0.15);                       // базовая линия
+  line(xa, base, xa, base + ph(200), 0.15);             // левая стойка
+  line(xb, base, xb, base + ph(1000), 0.13);            // правая стойка
+  [200, 400, 600, 800, 1000].forEach((d) => {
+    line(px(d), base, px(d), base + 0.42, 0.13);
+    label(String(d / 100), px(d), base + ph(d) + 0.28, 1.2, 'center', 'bottom');
+  });
+
+  ctx.restore();
+  return { ppm: ppm, spanMil: spanMil };
+}
+/*==RETICLE:END==*/
+
+/* Собирает текстуру сетки: R — чёткая маска линий, G — ореол для подсветки. */
+function makeReticleTexture(THREE, size, spanMil, aniso) {
+  const c1 = document.createElement('canvas'); c1.width = c1.height = size;
+  const g1 = c1.getContext('2d', { willReadFrequently: true });
+  g1.clearRect(0, 0, size, size);
+  drawPSOReticle(g1, size, spanMil, {});
+
+  const c2 = document.createElement('canvas'); c2.width = c2.height = size;
+  const g2 = c2.getContext('2d', { willReadFrequently: true });
+  g2.filter = 'blur(' + Math.max(2, Math.round(size / 230)) + 'px)';
+  g2.drawImage(c1, 0, 0);
+  g2.filter = 'none';
+
+  const a = g1.getImageData(0, 0, size, size);
+  const b = g2.getImageData(0, 0, size, size);
+  const out = g1.createImageData(size, size);
+  for (let i = 0; i < a.data.length; i += 4) {
+    out.data[i] = a.data[i + 3];
+    out.data[i + 1] = b.data[i + 3];
+    out.data[i + 2] = 0;
+    out.data[i + 3] = 255;
+  }
+  g1.putImageData(out, 0, 0);
+
+  const t = new THREE.CanvasTexture(c1);
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.minFilter = THREE.LinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  t.anisotropy = aniso || 8;
+  t.needsUpdate = true;
+  return t;
+}
+
+/*==SCOPE_SHADER:START==*/
+/* Шейдер окуляра — ЧЕСТНАЯ ЛУЧЕВАЯ МОДЕЛЬ.
+   Раньше картинка просто натягивалась на диск по UV — увеличение получалось
+   случайным и зависело от fov камеры. Теперь для каждого фрагмента стекла
+   строится луч глаз → точка линзы, его видимый угол делится на кратность,
+   и только потом берётся отсчёт сцены. Отсюда сами собой возникают: точное 4×,
+   полевая диафрагма, выходной зрачок, туннельный эффект и затемнение сбоку. */
+const SCOPE_VERT = [
+  'varying vec3 vLocal;',
+  'void main() {',
+  '  vLocal = position;',
+  '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+  '}'
+].join('\n');
+
+const SCOPE_FRAG = [
+  'precision highp float;',
+  'uniform sampler2D tScene;',
+  'uniform sampler2D tReticle;',
+  'uniform vec3  uEyeLocal;',   // глаз в системе линзы окуляра, м
+  'uniform vec2  uEye;',
+  'uniform vec2  uParallax;',
+  'uniform vec3  uIllumColor;',
+  'uniform vec3  uTint;',
+  'uniform float uIllum;',
+  'uniform float uReticle;',
+  'uniform float uBright;',
+  'uniform float uCA;',
+  'uniform float uDistort;',
+  'uniform float uBlur;',
+  'uniform float uDirt;',
+  'uniform float uAxis;',
+  'uniform float uFlare;',
+  'uniform float uTime;',
+  'uniform float uMag;',        // кратность 4×
+  'uniform float uTanHalf;',    // tan(3°) — половина истинного поля
+  'uniform float uPupilR;',     // радиус выходного зрачка, м
+  'uniform float uPupilZ;',     // удаление выходного зрачка, м
+  'varying vec3 vLocal;',
+  '',
+  'float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }',
+  'vec2 warp(vec2 p, float k) { return p * (1.0 + k * dot(p, p)); }',
+  '',
+  'vec3 grab(vec2 q, float bl) {',
+  '  vec2 uv = q * 0.5 + 0.5;',
+  '  vec3 s = texture2D(tScene, uv).rgb;',
+  '  if (bl > 0.0007) {',
+  '    vec2 o1 = vec2(bl, 0.0), o2 = vec2(0.0, bl);',
+  '    vec2 o3 = vec2(bl, bl) * 0.7071, o4 = vec2(bl, -bl) * 0.7071;',
+  '    s += texture2D(tScene, uv + o1).rgb + texture2D(tScene, uv - o1).rgb;',
+  '    s += texture2D(tScene, uv + o2).rgb + texture2D(tScene, uv - o2).rgb;',
+  '    s += texture2D(tScene, uv + o3).rgb + texture2D(tScene, uv - o3).rgb;',
+  '    s += texture2D(tScene, uv + o4).rgb + texture2D(tScene, uv - o4).rgb;',
+  '    s /= 9.0;',
+  '  }',
+  '  return s;',
+  '}',
+  '',
+  'vec3 aces(vec3 x) {',
+  '  x *= 1.667;',
+  '  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);',
+  '}',
+  '',
+  'vec3 toSRGB(vec3 c) {',
+  '  c = max(c, vec3(0.0));',
+  '  return mix(c * 12.92, 1.055 * pow(c, vec3(0.41666)) - 0.055, step(vec3(0.0031308), c));',
+  '}',
+  '',
+  'void main() {',
+  '  /* 1. луч из зрачка глаза в точку на стекле окуляра */',
+  '  vec3 d = vLocal - uEyeLocal;',
+  '  float fz = max(-d.z, 1e-4);',
+  '  vec2 tanA = d.xy / fz;',
+  '',
+  '  /* 2. оптика сжимает видимый угол в uMag раз → угол на предмет */',
+  '  vec2 q0 = tanA / (uMag * uTanHalf);',
+  '  vec2 q  = warp(q0, uDistort);',
+  '  float rq = length(q);',
+  '',
+  '  float blur = uBlur * (0.0007 + 0.0062 * smoothstep(0.42, 1.05, rq));',
+  '  float ca = uCA * dot(q, q);',
+  '  vec3 col;',
+  '  col.r = grab(warp(q,  ca), blur).r;',
+  '  col.g = grab(q, blur).g;',
+  '  col.b = grab(warp(q, -ca), blur).b;',
+  '',
+  '  col *= uBright * uTint;',
+  '  col *= 1.0 - 0.26 * smoothstep(0.25, 1.0, rq);',
+  '',
+  '  /* 3. сетка лежит в фокальной плоскости — тот же угловой масштаб */',
+  '  vec2 ruv = q * 0.5 + 0.5 + uParallax;',
+  '  vec4 ret = texture2D(tReticle, ruv);',
+  '  float ln = clamp(ret.r * uReticle * 1.35, 0.0, 1.0);',
+  '  float gl = clamp(ret.g * uReticle, 0.0, 1.0);',
+  '  col = mix(col, col * 0.045, ln);',
+  '  col += uIllumColor * uIllum * (ln * 1.15 + gl * 0.55);',
+  '',
+  '  /* 4. пыль живёт на самом стекле, а не в картинке */',
+  '  vec2 gp = vLocal.xy * 640.0;',
+  '  float dust = smoothstep(0.9962, 1.0, h21(floor(gp)));',
+  '  col = mix(col, col * 0.30, dust * uDirt);',
+  '  col += uDirt * 0.015 * smoothstep(0.72, 1.0, h21(floor(gp * 0.34 + 7.0)));',
+  '',
+  '  vec2 fp = vec2(-0.40, 0.44) + uEye * 0.06;',
+  '  col += uFlare * vec3(0.30, 0.42, 0.78) * exp(-9.0 * length(q - fp));',
+  '  col += uFlare * vec3(0.24, 0.30, 0.15) * exp(-15.0 * length(q + fp * 0.62));',
+  '',
+  '  /* 5. ПОЛЕВАЯ ДИАФРАГМА: резкий край поля зрения 6° */',
+  '  col *= 1.0 - smoothstep(0.975, 1.0, rq);',
+  '',
+  '  /* 6. ВЫХОДНОЙ ЗРАЧОК: луч обязан пройти сквозь него.',
+  '     Отсюда честный eye-box: отошёл далеко — туннель, ушёл вбок — чернота. */',
+  '  vec3 rd = normalize(d);',
+  '  float rz = (rd.z > -1e-6) ? -1e-6 : rd.z;',
+  '  float tp = (uPupilZ - uEyeLocal.z) / rz;',
+  '  vec2 pp = uEyeLocal.xy + rd.xy * tp;',
+  '  float pupil = 1.0 - smoothstep(uPupilR * 0.55, uPupilR, length(pp));',
+  '  col *= pupil;',
+  '',
+  '  vec3 glass = vec3(0.010, 0.014, 0.022) + vec3(0.05, 0.07, 0.13) * pow(1.0 - min(rq, 1.0), 2.0) * 0.45;',
+  '  col = mix(glass, col, clamp(uAxis, 0.0, 1.0) * pupil);',
+  '',
+  '  gl_FragColor = vec4(toSRGB(aces(col)), 1.0);',
+  '}'
+].join('\n');
+/*==SCOPE_SHADER:END==*/
+
+/* ══ Процедурные текстуры материалов ══════════════════════════════ */
+function makeMaterialTextures(THREE, aniso) {
+  const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h || w; return c; };
+  const hash = (x, y, s) => { const n = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453; return n - Math.floor(n); };
+  const wrap = (v, p) => ((v % p) + p) % p;
+  function vnoise(x, y, per, s) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash(wrap(xi, per), wrap(yi, per), s),        b = hash(wrap(xi + 1, per), wrap(yi, per), s);
+    const c = hash(wrap(xi, per), wrap(yi + 1, per), s),    d = hash(wrap(xi + 1, per), wrap(yi + 1, per), s);
+    return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
+  }
+  function field(size, freq, oct, s, ridged, aspect) {
+    const out = new Float32Array(size * size);
+    const ax = aspect || 1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        let amp = 1, f = freq, sum = 0, norm = 0;
+        for (let o = 0; o < oct; o++) {
+          let n = vnoise(x / size * f * ax, y / size * f, Math.round(f * ax) || 1, s + o * 13);
+          if (ridged) n = 1 - Math.abs(n * 2 - 1);
+          sum += n * amp; norm += amp; amp *= 0.5; f *= 2;
+        }
+        out[y * size + x] = sum / norm;
+      }
+    }
+    return out;
+  }
+  function normalMap(h, size, strength) {
+    const c = canvas(size), g = c.getContext('2d'), im = g.createImageData(size, size);
+    const at = (x, y) => h[wrap(y, size) * size + wrap(x, size)];
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (at(x + 1, y) - at(x - 1, y)) * strength;
+        const dy = (at(x, y + 1) - at(x, y - 1)) * strength;
+        let nx = -dx, ny = -dy, nz = 1;
+        const L = Math.hypot(nx, ny, nz);
+        const i = (y * size + x) * 4;
+        im.data[i] = (nx / L * 0.5 + 0.5) * 255;
+        im.data[i + 1] = (ny / L * 0.5 + 0.5) * 255;
+        im.data[i + 2] = (nz / L * 0.5 + 0.5) * 255;
+        im.data[i + 3] = 255;
+      }
+    }
+    g.putImageData(im, 0, 0);
+    return c;
+  }
+  function grayMap(h, size, lo, hi) {
+    const c = canvas(size), g = c.getContext('2d'), im = g.createImageData(size, size);
+    for (let i = 0; i < size * size; i++) {
+      const v = Math.round((lo + (hi - lo) * h[i]) * 255);
+      im.data[i * 4] = im.data[i * 4 + 1] = im.data[i * 4 + 2] = v;
+      im.data[i * 4 + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+    return c;
+  }
+  function tint(h, size, r0, g0, b0, amt) {
+    const c = canvas(size), g = c.getContext('2d'), im = g.createImageData(size, size);
+    for (let i = 0; i < size * size; i++) {
+      const k = 1 + (h[i] - 0.5) * amt;
+      im.data[i * 4] = Math.min(255, r0 * k);
+      im.data[i * 4 + 1] = Math.min(255, g0 * k);
+      im.data[i * 4 + 2] = Math.min(255, b0 * k);
+      im.data[i * 4 + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+    return c;
+  }
+  const T = (cv, rx, ry, srgb) => {
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx || 1, ry || 1);
+    t.anisotropy = aniso || 8;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  };
+
+  const S = 512;
+  const wrinkle = field(S, 26, 4, 3.1, true);          // морщинистая краска
+  const grain   = field(S, 90, 2, 8.4, false);
+  for (let i = 0; i < wrinkle.length; i++) wrinkle[i] = wrinkle[i] * 0.82 + grain[i] * 0.18;
+  const brushed = field(S, 8, 3, 5.7, false, 26);      // шлифованный металл
+  const pebble  = field(S, 46, 3, 11.2, false);        // резина
+
+  /* шкалы барабанчиков: u — по окружности, v — по высоте */
+  function drumScale(kind) {
+    const w = 1600, h = 256;
+    const c = canvas(w, h), g = c.getContext('2d');
+    g.fillStyle = '#15171a'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#0f1113';
+    for (let i = 0; i < 900; i++) {
+      g.globalAlpha = 0.05 + Math.random() * 0.12;
+      g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 5, 1 + Math.random() * 3);
+    }
+    g.globalAlpha = 1;
+    g.strokeStyle = '#eef1f4'; g.fillStyle = '#eef1f4';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const marks = kind === 'wind'
+      ? ['5', '4', '3', '2', '1', '0', '1', '2', '3', '4', '5']
+      : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    const n = marks.length;
+    for (let i = 0; i < n; i++) {
+      const x = (i + 0.5) / n * w;
+      g.lineWidth = 4;
+      g.beginPath(); g.moveTo(x, h); g.lineTo(x, h - 58); g.stroke();
+      g.font = '700 92px "Liberation Sans", Arial, sans-serif';
+      g.fillText(marks[i], x, h * 0.40);
+      for (let k = 1; k < 5; k++) {
+        const xs = x + (k / 5) * (w / n);
+        g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(xs, h); g.lineTo(xs, h - 30); g.stroke();
+      }
+    }
+    return c;
+  }
+
+  /* гравировка на корпусе (повёрнута на 180°: цилиндрическая накладка смотрит вверх) */
+  function nameplate() {
+    const w = 1024, h = 256;
+    const c = canvas(w, h), g = c.getContext('2d');
+    g.clearRect(0, 0, w, h);
+    g.save();
+    g.translate(w, h); g.rotate(Math.PI);
+    g.fillStyle = '#c9ced4';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '700 104px "Liberation Sans", Arial, sans-serif';
+    g.fillText('ПСО-1', w * 0.34, h * 0.5);
+    g.font = '600 76px "Liberation Sans", Arial, sans-serif';
+    g.fillText('4×24', w * 0.68, h * 0.5);
+    g.restore();
+    return c;
+  }
+
+  return {
+    paintMap:     T(tint(wrinkle, S, 30, 33, 37, 0.55), 5, 3),
+    paintNormal:  T(normalMap(wrinkle, S, 2.6), 5, 3),
+    paintRough:   T(grayMap(wrinkle, S, 0.55, 0.92), 5, 3),
+    steelNormal:  T(normalMap(brushed, S, 1.1), 3, 3),
+    rubberNormal: T(normalMap(pebble, S, 3.2), 6, 4),
+    drumMap:      T(drumScale('elev'), 1, 1, true),
+    drumMapW:     T(drumScale('wind'), 1, 1, true),
+    decalMap:     T(nameplate(), 1, 1, true)
+  };
+}
+
+/*==WORLD:START==*/
+/* ══ Небо / IBL ════════════════════════════════════════════════════════ */
+function makeEquirect(THREE, kind) {
+  const w = 2048, h = 1024;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const rnd = (() => { let s = 12345; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; })();
+
+  if (kind === 'studio') {
+    const bg = g.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, '#2c3138'); bg.addColorStop(0.5, '#1a1d21'); bg.addColorStop(1, '#0b0c0d');
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    const box = (cx, cy, rw, rh, i) => {
+      const gr = g.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rw, rh));
+      gr.addColorStop(0, 'rgba(255,255,255,' + i + ')');
+      gr.addColorStop(0.55, 'rgba(255,255,255,' + (i * 0.35) + ')');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(cx, cy, rw, rh, 0, 0, 6.2832); g.fill();
+    };
+    box(w * 0.22, h * 0.30, 300, 190, 1.0);      // ключевой
+    box(w * 0.72, h * 0.34, 240, 150, 0.55);     // заполняющий
+    box(w * 0.50, h * 0.12, 420, 110, 0.42);     // верхний
+    box(w * 0.95, h * 0.55, 180, 130, 0.30);     // контровой
+  } else {
+    const sky = g.createLinearGradient(0, 0, 0, h * 0.5);
+    sky.addColorStop(0.00, '#2c5a92');
+    sky.addColorStop(0.55, '#7fa8cd');
+    sky.addColorStop(1.00, '#cbd6dc');
+    g.fillStyle = sky; g.fillRect(0, 0, w, h * 0.5);
+    const gnd = g.createLinearGradient(0, h * 0.5, 0, h);
+    gnd.addColorStop(0, '#7d7a5f'); gnd.addColorStop(0.25, '#54523f'); gnd.addColorStop(1, '#2a2a22');
+    g.fillStyle = gnd; g.fillRect(0, h * 0.5, w, h * 0.5);
+    // облака
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 150; i++) {
+      const x = rnd() * w, y = h * 0.06 + rnd() * h * 0.34;
+      const r = 30 + rnd() * 150, a = 0.05 + rnd() * 0.16;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, 'rgba(255,255,255,' + a + ')');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, r, r * 0.42, 0, 0, 6.2832); g.fill();
+    }
+    // солнце
+    const sx = w * 0.68, sy = h * 0.24;
+    const sg = g.createRadialGradient(sx, sy, 0, sx, sy, 260);
+    sg.addColorStop(0.00, 'rgba(255,252,240,1)');
+    sg.addColorStop(0.05, 'rgba(255,244,214,0.95)');
+    sg.addColorStop(0.30, 'rgba(255,232,190,0.28)');
+    sg.addColorStop(1.00, 'rgba(255,232,190,0)');
+    g.fillStyle = sg; g.beginPath(); g.arc(sx, sy, 260, 0, 6.2832); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  return t;
+}
+
+/* ══ Баллистика 7,62×54R СНБ ═══════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════
+   БАЛЛИСТИКА 7,62×54R (7Н1, СВД). Одна модель на всё: пристрелка барабанчика,
+   полёт пули, подсказки дальномера. Сопротивление — по числу Маха,
+   интегрирование — Рунге–Кутта 4-го порядка. Иного «приближённого»
+   расчёта в проекте нет, поэтому точка прицеливания и точка попадания
+   совпадают по построению.
+   ══════════════════════════════════════════════════════════════════════════ */
+function makeBallistics(opt) {
+  const o = Object.assign({
+    v0: 830,          // м/с — начальная скорость
+    mass: 0.0096,     // кг
+    dia: 0.00792,     // м — калибр по полям
+    form: 1.06,       // форм-фактор к таблице Cd
+    tempC: 15, pressHpa: 1013.25, humid: 0.45
+  }, opt || {});
+  const G = 9.80665;
+  const A = Math.PI * o.dia * o.dia / 4;
+
+  /* Cd(M) — остроконечная пуля с конической хвостовой частью */
+  const CDM = [0.00,0.40,0.70,0.85,0.90,0.95,1.00,1.05,1.10,1.20,1.35,1.50,1.75,2.00,2.25,2.50,3.00,4.00];
+  const CDV = [0.120,0.119,0.119,0.127,0.147,0.211,0.285,0.325,0.334,0.328,0.311,0.295,0.269,0.247,0.230,0.215,0.193,0.170];
+  function cdOf(m) {
+    if (m <= 0) return CDV[0];
+    if (m >= 4) return CDV[CDV.length - 1];
+    let i = 1; while (CDM[i] < m) i++;
+    const t = (m - CDM[i - 1]) / (CDM[i] - CDM[i - 1]);
+    return CDV[i - 1] + (CDV[i] - CDV[i - 1]) * t;
+  }
+
+  const cache = new Map(), tcache = new Map();
+  const env = { rho: 1.225, cs: 340.3, tempC: o.tempC, press: o.pressHpa, humid: o.humid };
+  function setAir(tempC, pressHpa, humid) {
+    env.tempC = tempC; env.press = pressHpa; env.humid = humid;
+    const T = tempC + 273.15;
+    const psat = 6.1078 * Math.pow(10, 7.5 * tempC / (tempC + 237.3));
+    const pv = Math.max(0, Math.min(1, humid)) * psat;
+    const pd = Math.max(1, pressHpa - pv);
+    env.rho = (pd * 100) / (287.058 * T) + (pv * 100) / (461.495 * T);
+    env.cs  = 331.3 * Math.sqrt(T / 273.15);
+    cache.clear(); tcache.clear();
+  }
+  setAir(o.tempC, o.pressHpa, o.humid);
+
+  /* коэффициент лобового сопротивления, 1/м:  a = kd(v)·v² */
+  function kd(v) { return 0.5 * env.rho * cdOf(v / env.cs) * o.form * A / o.mass; }
+
+  /* ── плоская задача (для пристрелки): x — по линии прицеливания, y — вверх ── */
+  function riseAt(a, D, hs, fwd) {
+    const dt = 0.0015;
+    let x = fwd, y = -hs, vx = o.v0 * Math.cos(a), vy = o.v0 * Math.sin(a), n = 0;
+    const d2 = (sx, sy, svx, svy, out) => {
+      const s = Math.hypot(svx, svy), k = kd(s) * s;
+      out[0] = svx; out[1] = svy; out[2] = -k * svx; out[3] = -k * svy - G;
+    };
+    const k1 = [0,0,0,0], k2 = [0,0,0,0], k3 = [0,0,0,0], k4 = [0,0,0,0];
+    while (x < D && n++ < 6000) {
+      const px = x, py = y;
+      d2(x, y, vx, vy, k1);
+      d2(x + k1[0]*dt/2, y + k1[1]*dt/2, vx + k1[2]*dt/2, vy + k1[3]*dt/2, k2);
+      d2(x + k2[0]*dt/2, y + k2[1]*dt/2, vx + k2[2]*dt/2, vy + k2[3]*dt/2, k3);
+      d2(x + k3[0]*dt,   y + k3[1]*dt,   vx + k3[2]*dt,   vy + k3[3]*dt,   k4);
+      x  += dt/6 * (k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
+      y  += dt/6 * (k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+      vx += dt/6 * (k1[2] + 2*k2[2] + 2*k3[2] + k4[2]);
+      vy += dt/6 * (k1[3] + 2*k2[3] + 2*k3[3] + k4[3]);
+      if (x >= D) return py + (y - py) * (D - px) / (x - px || 1e-9);
+    }
+    return y;
+  }
+
+  /* угол бросания (превышение оси канала ствола над линией прицеливания) */
+  function zeroAngle(D, hs, fwd) {
+    D = Math.max(25, D); hs = hs || 0; fwd = fwd || 0;
+    const key = Math.round(D * 10) + '|' + Math.round(hs * 1e4) + '|' + Math.round(fwd * 1e3);
+    const c = cache.get(key); if (c !== undefined) return c;
+    let a0 = (hs + 0.5 * G * Math.pow(D / o.v0, 2)) / D;
+    let f0 = riseAt(a0, D, hs, fwd);
+    let a1 = a0 - f0 / D, f1;
+    for (let i = 0; i < 14; i++) {
+      f1 = riseAt(a1, D, hs, fwd);
+      if (Math.abs(f1) < 1e-4) break;              // 0,1 мм на дистанции
+      const der = (f1 - f0) / (a1 - a0 || 1e-9);
+      a0 = a1; f0 = f1;
+      a1 = a1 - f1 / (Math.abs(der) > 1e-6 ? der : D);
+    }
+    cache.set(key, a1);
+    return a1;
+  }
+
+  /* ── полная таблица по дистанции (для ХУДа и дальномера) ── */
+  function table(D, hs, fwd) {
+    const key = Math.round(D) + '|' + Math.round((hs||0) * 1e4);
+    const c = tcache.get(key); if (c !== undefined) return c;
+    const a = zeroAngle(D, hs, fwd);
+    const dt = 0.0015;
+    let x = fwd || 0, y = -(hs || 0), z = 0, t = 0;
+    let vx = o.v0 * Math.cos(a), vy = o.v0 * Math.sin(a), vz = 0, n = 0;
+    let maxY = -1e9, maxYx = 0;
+    while (x < D && n++ < 6000) {
+      const px = x, pt = t, pvx = vx, pvy = vy;
+      const s = Math.hypot(vx, vy), k = kd(s) * s;
+      // RK2-Heun достаточно для сводки, шаг мелкий
+      const ax1 = -k * vx, ay1 = -k * vy - G;
+      const nvx = vx + ax1 * dt, nvy = vy + ay1 * dt;
+      const s2 = Math.hypot(nvx, nvy), k2c = kd(s2) * s2;
+      const ax2 = -k2c * nvx, ay2 = -k2c * nvy - G;
+      x += (vx + nvx) * 0.5 * dt; y += (vy + nvy) * 0.5 * dt;
+      vx += (ax1 + ax2) * 0.5 * dt; vy += (ay1 + ay2) * 0.5 * dt;
+      // боковой снос при ветре 1 м/с поперёк: z'' = -k·(vz - w)
+      const rz = vz - 1;
+      vz += -kd(s) * s * rz * dt;
+      z += vz * dt;
+      t += dt;
+      if (y > maxY) { maxY = y; maxYx = x; }
+      if (x >= D) { const f = (D - px) / (x - px || 1e-9); t = pt + (t - pt) * f; break; }
+    }
+    const v = Math.hypot(vx, vy);
+    const r = {
+      dist: D, angle: a, tof: t, vel: v,
+      energy: 0.5 * o.mass * v * v,
+      drop: 0.5 * G * t * t,
+      windPerMs: z,                       // м на 1 м/с бокового ветра
+      maxOrd: maxY, maxOrdAt: maxYx,
+      mach: v / env.cs
+    };
+    tcache.set(key, r);
+    return r;
+  }
+
+  /* ── полёт в мире: origin/dir/wind — обычные {x,y,z}; forward = −Z ── */
+  function shoot(origin, dir, wind, collide, maxRange, maxTime) {
+    const dt = 0.0015;
+    const p = { x: origin.x, y: origin.y, z: origin.z };
+    const v = { x: dir.x * o.v0, y: dir.y * o.v0, z: dir.z * o.v0 };
+    const w = wind || { x: 0, y: 0, z: 0 };
+    const pts = [{ x: p.x, y: p.y, z: p.z }], times = [0];
+    let t = 0, hit = null, n = 0, sample = 0;
+    const lim = maxRange || 1700, tlim = maxTime || 6;
+    const d = (px, py, pz, vx, vy, vz, out) => {
+      const rx = vx - w.x, ry = vy - w.y, rz = vz - w.z;
+      const s = Math.hypot(rx, ry, rz), k = kd(s) * s;
+      out[0] = vx; out[1] = vy; out[2] = vz;
+      out[3] = -k * rx; out[4] = -k * ry - G; out[5] = -k * rz;
+    };
+    const k1 = new Array(6), k2 = new Array(6), k3 = new Array(6), k4 = new Array(6);
+    while (t < tlim && n++ < 5000) {
+      const p0 = { x: p.x, y: p.y, z: p.z }, t0 = t;
+      d(p.x, p.y, p.z, v.x, v.y, v.z, k1);
+      d(p.x+k1[0]*dt/2, p.y+k1[1]*dt/2, p.z+k1[2]*dt/2, v.x+k1[3]*dt/2, v.y+k1[4]*dt/2, v.z+k1[5]*dt/2, k2);
+      d(p.x+k2[0]*dt/2, p.y+k2[1]*dt/2, p.z+k2[2]*dt/2, v.x+k2[3]*dt/2, v.y+k2[4]*dt/2, v.z+k2[5]*dt/2, k3);
+      d(p.x+k3[0]*dt,   p.y+k3[1]*dt,   p.z+k3[2]*dt,   v.x+k3[3]*dt,   v.y+k3[4]*dt,   v.z+k3[5]*dt,   k4);
+      p.x += dt/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]);
+      p.y += dt/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1]);
+      p.z += dt/6*(k1[2]+2*k2[2]+2*k3[2]+k4[2]);
+      v.x += dt/6*(k1[3]+2*k2[3]+2*k3[3]+k4[3]);
+      v.y += dt/6*(k1[4]+2*k2[4]+2*k3[4]+k4[4]);
+      v.z += dt/6*(k1[5]+2*k2[5]+2*k3[5]+k4[5]);
+      t += dt;
+      const h = collide ? collide(p0, p, t0, t) : null;
+      if (h) { hit = h; pts.push({ x: h.point.x, y: h.point.y, z: h.point.z }); times.push(h.time); break; }
+      if (++sample >= 4) { sample = 0; pts.push({ x: p.x, y: p.y, z: p.z }); times.push(t); }
+      const dx = p.x - origin.x, dy = p.y - origin.y, dz = p.z - origin.z;
+      if (dx*dx + dy*dy + dz*dz > lim * lim) break;
+    }
+    if (!hit) { pts.push({ x: p.x, y: p.y, z: p.z }); times.push(t); }
+    return { pts: pts, times: times, hit: hit, hitTime: times[times.length - 1], vel: Math.hypot(v.x, v.y, v.z) };
+  }
+
+  return {
+    opt: o, env: env, G: G, setAir: setAir, cdOf: cdOf, kd: kd,
+    riseAt: riseAt, zeroAngle: zeroAngle, table: table, shoot: shoot,
+    clear: () => { cache.clear(); tcache.clear(); }
+  };
+}
+
+
+/* ══ Стрельбище ════════════════════════════════════════════════════ */
+function buildRange(THREE, aniso) {
+  const root = new THREE.Group();
+  root.name = 'range';
+  const targets = [], flags = [], dust = [];
+  const rnd = (() => { let s = 987654321; return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; })();
+
+  /* ── грунт ── */
+  function groundTexture() {
+    const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = '#6b6a4e'; g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 26000; i++) {
+      const x = rnd() * S, y = rnd() * S, r = 1 + rnd() * 7;
+      const v = rnd();
+      g.fillStyle = v < 0.34 ? 'rgba(92,94,62,.5)' : v < 0.68 ? 'rgba(120,112,80,.42)' : 'rgba(58,56,42,.4)';
+      g.beginPath(); g.ellipse(x, y, r, r * (0.4 + rnd()), rnd() * 3.14, 0, 6.2832); g.fill();
+    }
+    for (let i = 0; i < 1400; i++) {                     // травинки / камни
+      const x = rnd() * S, y = rnd() * S;
+      g.strokeStyle = rnd() < 0.5 ? 'rgba(126,132,76,.55)' : 'rgba(80,74,52,.5)';
+      g.lineWidth = 1 + rnd() * 1.6;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 9, y - 4 - rnd() * 9); g.stroke();
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = aniso || 8;
+    return t;
+  }
+  const gTex = groundTexture();
+  gTex.repeat.set(140, 140);
+
+  /* Высота земли — единственный источник правды: по ней строится и меш,
+     и проверка попадания пули — поэтому рикошет всегда там, где видно. */
+  function groundHeight(x, z) {
+    const nz = (a, b) => Math.sin(a * 0.0032) * Math.cos(b * 0.0027) + Math.sin(a * 0.0111 + 1.7) * 0.42 * Math.cos(b * 0.0093);
+    const lane = Math.min(1, Math.max(0, (Math.abs(x) - 26) / 120));        // коридор стрельбы ровный
+    const far  = Math.min(1, Math.max(0, (-z - 1150) / 420));
+    return nz(x, z) * (2.6 * lane * lane) + far * far * 46 + nz(x * 3, z * 3) * 0.35 * lane;
+  }
+  const gGeo = new THREE.PlaneGeometry(3600, 3600, 180, 180);
+  gGeo.rotateX(-Math.PI / 2);
+  {
+    const pos = gGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, groundHeight(pos.getX(i), pos.getZ(i)));
+    gGeo.computeVertexNormals();
+  }
+  const ground = new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({
+    map: gTex, roughness: 0.96, metalness: 0, color: 0xffffff, dithering: true
+  }));
+  ground.receiveShadow = true;
+  ground.name = 'ground';
+  root.add(ground);
+
+  /* ── огневой рубеж ── */
+  const matWood = new THREE.MeshStandardMaterial({ color: 0x6b5233, roughness: 0.88 });
+  const matSteel = new THREE.MeshStandardMaterial({ color: 0x8b9095, roughness: 0.42, metalness: 0.85 });
+  const matRust  = new THREE.MeshStandardMaterial({ color: 0x7a5a44, roughness: 0.78, metalness: 0.35 });
+  const matSand  = new THREE.MeshStandardMaterial({ color: 0x8d8460, roughness: 0.95 });
+  const matPaint = new THREE.MeshStandardMaterial({ color: 0x3f4a37, roughness: 0.82 });
+
+  const bench = new THREE.Group();
+  for (let i = 0; i < 7; i++) {                                   // мешки с песком
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), matSand);
+    b.scale.set(1.9, 0.62, 1.0);
+    b.position.set(-0.62 + (i % 4) * 0.42, 0.16 + Math.floor(i / 4) * 0.2, -0.2 + (i % 2) * 0.06);
+    b.rotation.y = (rnd() - 0.5) * 0.5;
+    b.castShadow = b.receiveShadow = true;
+    bench.add(b);
+  }
+  bench.position.set(0, 0, 0.35);
+  root.add(bench);
+
+  /* ── текстуры мишеней ── */
+  function silhouetteTexture() {
+    const W = 256, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = '#4a5540';
+    g.beginPath();                                                 // грудная фигура
+    g.moveTo(W * 0.5, H * 0.06);
+    g.bezierCurveTo(W * 0.70, H * 0.06, W * 0.72, H * 0.24, W * 0.63, H * 0.30);
+    g.bezierCurveTo(W * 0.92, H * 0.36, W * 0.95, H * 0.62, W * 0.95, H * 0.98);
+    g.lineTo(W * 0.05, H * 0.98);
+    g.bezierCurveTo(W * 0.05, H * 0.62, W * 0.08, H * 0.36, W * 0.37, H * 0.30);
+    g.bezierCurveTo(W * 0.28, H * 0.24, W * 0.30, H * 0.06, W * 0.5, H * 0.06);
+    g.fill();
+    g.strokeStyle = 'rgba(226,230,214,.85)'; g.lineWidth = 3;
+    for (let i = 1; i <= 4; i++) { g.beginPath(); g.arc(W * 0.5, H * 0.55, 22 * i, 0, 6.2832); g.stroke(); }
+    g.fillStyle = 'rgba(226,230,214,.9)'; g.beginPath(); g.arc(W * 0.5, H * 0.55, 8, 0, 6.2832); g.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso || 8;
+    return t;
+  }
+  function boardTexture(txt) {
+    const W = 256, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    g.fillStyle = '#e8e4d8'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = '#20242a'; g.lineWidth = 7; g.strokeRect(6, 6, W - 12, H - 12);
+    g.fillStyle = '#20242a'; g.font = '700 64px "Liberation Sans", Arial, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(txt, W / 2, H / 2 + 4);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = aniso || 8;
+    return t;
+  }
+  const silTex = silhouetteTexture();
+
+  /* ── мишени ── */
+  function addTarget(dist, kind, offX) {
+    const pivot = new THREE.Group();
+    pivot.position.set(offX || 0, 0, -dist);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.0, 0.09), matWood);
+    post.position.y = 0.5; post.castShadow = true;
+    pivot.add(post);
+
+    const swing = new THREE.Group();
+    swing.position.y = 1.0;
+    pivot.add(swing);
+
+    let face, hw = 0, hh = 0, rad = 0;
+    if (kind === 'gong') {
+      const r = dist >= 600 ? 0.30 : 0.22;
+      rad = r;
+      face = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.016, 30), matSteel);
+      face.rotation.x = Math.PI / 2;
+      face.position.y = r + 0.12;
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.02), matRust);
+      arm.position.y = r * 2 + 0.14; swing.add(arm);
+    } else {
+      const h = 0.75, w = 0.5;
+      hw = w * 0.5; hh = h * 0.5;
+      face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({
+        map: silTex, transparent: true, alphaTest: 0.5, roughness: 0.94, side: THREE.DoubleSide
+      }));
+      face.position.y = h * 0.5 + 0.08;
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(w + 0.06, 0.04, 0.03), matWood);
+      frame.position.y = 0.06; swing.add(frame);
+    }
+    face.castShadow = true;
+    face.userData.hitZone = true;
+    swing.add(face);
+
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.21), new THREE.MeshStandardMaterial({
+      map: boardTexture(String(dist)), roughness: 0.9, side: THREE.DoubleSide
+    }));
+    board.position.set(0.42, 0.42, 0.02);
+    pivot.add(board);
+
+    root.add(pivot);
+    const t = {
+      dist: dist, kind: kind, pivot: pivot, swing: swing, face: face,
+      hw: hw, hh: hh, r: rad, offX: offX || 0,
+      hits: 0, vel: 0, ang: 0, down: false
+    };
+    face.userData.target = t;
+    targets.push(t);
+    return t;
+  }
+
+  [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].forEach((d, i) => {
+    addTarget(d, i % 3 === 1 ? 'gong' : 'silhouette', ((i % 3) - 1) * (0.9 + d * 0.0016));
+    if (d % 200 === 0) addTarget(d, 'gong', ((i % 2) ? -1 : 1) * (2.4 + d * 0.0022));
+  });
+
+  /* ── ветровые флажки ── */
+  const flagMat = new THREE.MeshStandardMaterial({ color: 0xd0512f, roughness: 0.9, side: THREE.DoubleSide });
+  [150, 350, 550, 750, 950].forEach((d, i) => {
+    const grp = new THREE.Group();
+    grp.position.set((i % 2 ? -1 : 1) * (3.2 + d * 0.004), 0, -d);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, 2.2, 8), matPaint);
+    pole.position.y = 1.1; pole.castShadow = true; grp.add(pole);
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.26, 8, 2), flagMat);
+    cloth.position.set(0.31, 1.95, 0);
+    cloth.castShadow = true;
+    const piv = new THREE.Group(); piv.position.y = 0; piv.add(cloth);
+    grp.add(piv);
+    root.add(grp);
+    flags.push({ group: grp, pivot: piv, cloth: cloth, base: cloth.geometry.attributes.position.array.slice(), phase: i * 1.7 });
+  });
+
+  /* ── дальний план: кусты, камни, столбы ── */
+  const bushGeo = new THREE.IcosahedronGeometry(1, 1);
+  const bushMat = new THREE.MeshStandardMaterial({ color: 0x4c5535, roughness: 1.0, flatShading: true });
+  const bushes = new THREE.InstancedMesh(bushGeo, bushMat, 260);
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x6a675c, roughness: 0.95, flatShading: true });
+  const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 160);
+  const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), ee = new THREE.Euler(), vv = new THREE.Vector3(), ss = new THREE.Vector3();
+  for (let i = 0; i < 260; i++) {
+    const side = rnd() < 0.5 ? -1 : 1;
+    const x = side * (7 + Math.pow(rnd(), 0.6) * 240);
+    const z = -rnd() * 1350 + 40;
+    const s = 0.5 + rnd() * 1.9;
+    ee.set(rnd(), rnd() * 6.28, rnd() * 0.3);
+    m4.compose(vv.set(x, s * 0.42, z), qq.setFromEuler(ee), ss.set(s * 1.5, s * 0.8, s * 1.4));
+    bushes.setMatrixAt(i, m4);
+  }
+  for (let i = 0; i < 160; i++) {
+    const side = rnd() < 0.5 ? -1 : 1;
+    const x = side * (5 + Math.pow(rnd(), 0.7) * 260);
+    const z = -rnd() * 1400 + 30;
+    const s = 0.25 + rnd() * 1.5;
+    ee.set(rnd() * 3, rnd() * 6.28, rnd() * 3);
+    m4.compose(vv.set(x, s * 0.3, z), qq.setFromEuler(ee), ss.set(s, s * 0.7, s));
+    rocks.setMatrixAt(i, m4);
+  }
+  bushes.castShadow = rocks.castShadow = true;
+  bushes.receiveShadow = rocks.receiveShadow = true;
+  bushes.instanceMatrix.needsUpdate = rocks.instanceMatrix.needsUpdate = true;
+  root.add(bushes, rocks);
+
+  // земляной вал за мишенями
+  const berm = new THREE.Mesh(new THREE.CylinderGeometry(9, 26, 14, 28, 1, false, 0, Math.PI), 
+    new THREE.MeshStandardMaterial({ color: 0x6d6a50, roughness: 1.0 }));
+  berm.rotation.y = Math.PI / 2;
+  berm.position.set(0, -1.2, -1120);
+  berm.scale.set(1, 0.55, 6.5);
+  berm.receiveShadow = true;
+  root.add(berm);
+
+  /* ── всплески попаданий ── */
+  const puffGeo = new THREE.PlaneGeometry(1, 1);
+  const puffTex = (() => {
+    const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    gr.addColorStop(0, 'rgba(214,204,178,.95)');
+    gr.addColorStop(0.45, 'rgba(190,178,150,.5)');
+    gr.addColorStop(1, 'rgba(190,178,150,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, S, S);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  for (let i = 0; i < 14; i++) {
+    const m = new THREE.Mesh(puffGeo, new THREE.MeshBasicMaterial({
+      map: puffTex, transparent: true, depthWrite: false, opacity: 0
+    }));
+    m.visible = false;
+    m.renderOrder = 3;
+    root.add(m);
+    dust.push({ mesh: m, life: 0, size: 1 });
+  }
+  let dustIdx = 0;
+  function spawnDust(pos, scale) {
+    const d = dust[dustIdx = (dustIdx + 1) % dust.length];
+    d.mesh.position.copy(pos);
+    d.mesh.visible = true;
+    d.life = 1;
+    d.size = scale || 1;
+    d.mesh.material.opacity = 0.95;
+    d.mesh.scale.setScalar(0.2 * d.size);
+  }
+
+  /* ── трассер ── */
+  const tracer = new THREE.Mesh(
+    new THREE.SphereGeometry(0.055, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffcf82, transparent: true, opacity: 0.9 })
+  );
+  tracer.visible = false;
+  root.add(tracer);
+
+  const hitZones = [];
+  targets.forEach((t) => hitZones.push(t.face));
+  hitZones.push(ground, berm);
+
+  /* Точное пересечение шага траектории с мишенями — без райкаста.
+     Лучи проверялись раз в четыре шага и прошивали цель насквозь; теперь
+     проверяется КАЖДЫЙ шаг и учитывается текущее положение качающейся мишени. */
+  const _c0 = new THREE.Vector3(), _c1 = new THREE.Vector3(), _cm = new THREE.Matrix4();
+  const BERM_Z = -1118;
+  function collide(p0, p1, t0, t1) {
+    let bs = 2, bt = null, bk = null;
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      const d0 = p0.z + t.dist, d1 = p1.z + t.dist;
+      if ((d0 > 2 && d1 > 2) || (d0 < -2 && d1 < -2)) continue;
+      const f = t.face;
+      f.updateWorldMatrix(true, false);
+      _cm.copy(f.matrixWorld).invert();
+      _c0.set(p0.x, p0.y, p0.z).applyMatrix4(_cm);
+      _c1.set(p1.x, p1.y, p1.z).applyMatrix4(_cm);
+      let s, u, v;
+      if (t.kind === 'gong') {
+        /* диск цилиндра лежит в плоскости XZ собственной системы */
+        if ((_c0.y >= 0) === (_c1.y >= 0)) continue;
+        s = _c0.y / (_c0.y - _c1.y);
+        u = _c0.x + (_c1.x - _c0.x) * s; v = _c0.z + (_c1.z - _c0.z) * s;
+        if (u * u + v * v > t.r * t.r) continue;
+      } else {
+        if ((_c0.z >= 0) === (_c1.z >= 0)) continue;
+        s = _c0.z / (_c0.z - _c1.z);
+        u = _c0.x + (_c1.x - _c0.x) * s; v = _c0.y + (_c1.y - _c0.y) * s;
+        if (Math.abs(u) > t.hw || Math.abs(v) > t.hh) continue;
+      }
+      if (s >= 0 && s <= 1 && s < bs) { bs = s; bt = t; bk = t.kind; }
+    }
+    /* земля */
+    const gy0 = p0.y - groundHeight(p0.x, p0.z), gy1 = p1.y - groundHeight(p1.x, p1.z);
+    if (gy1 <= 0 && gy0 > 0) {
+      const s = gy0 / (gy0 - gy1);
+      if (s < bs) { bs = s; bt = null; bk = 'ground'; }
+    }
+    /* пулеулавливающий вал */
+    if (p1.z <= BERM_Z && p0.z > BERM_Z) {
+      const s = (p0.z - BERM_Z) / (p0.z - p1.z);
+      if (s < bs) { bs = s; bt = null; bk = 'berm'; }
+    }
+    if (bs > 1) return null;
+    return {
+      point: {
+        x: p0.x + (p1.x - p0.x) * bs,
+        y: p0.y + (p1.y - p0.y) * bs,
+        z: p0.z + (p1.z - p0.z) * bs
+      },
+      time: t0 + (t1 - t0) * bs,
+      target: bt, kind: bk
+    };
+  }
+
+  function update(dt, camPos, wind) {
+    // флажки: разворот по ветру + колыхание
+    const wAng = Math.atan2(wind.x, wind.z);
+    const wStr = Math.min(1, Math.hypot(wind.x, wind.z) / 8);
+    for (const f of flags) {
+      f.pivot.rotation.y = wAng + Math.PI / 2;
+      f.cloth.rotation.z = -0.9 + wStr * 0.85 + Math.sin(performance.now() * 0.004 + f.phase) * 0.09 * (0.3 + wStr);
+      const p = f.cloth.geometry.attributes.position, b = f.base;
+      for (let i = 0; i < p.count; i++) {
+        const x = b[i * 3], y = b[i * 3 + 1];
+        p.setZ(i, Math.sin(performance.now() * 0.008 + x * 9 + f.phase) * 0.05 * (x + 0.31) * (0.3 + wStr));
+        p.setY(i, y);
+      }
+      p.needsUpdate = true;
+    }
+    // мишени: качание/падение
+    for (const t of targets) {
+      if (t.vel !== 0 || t.ang !== 0) {
+        t.vel += (t.down ? -14 : -34) * t.ang * dt;
+        t.vel *= (t.down ? 0.995 : 0.965);
+        t.ang += t.vel * dt;
+        if (t.down) t.ang = Math.max(-1.45, Math.min(1.45, t.ang));
+        if (!t.down && Math.abs(t.ang) < 0.002 && Math.abs(t.vel) < 0.01) { t.ang = 0; t.vel = 0; }
+        t.swing.rotation.x = t.kind === 'gong' ? 0 : t.ang;
+        t.swing.rotation.z = t.kind === 'gong' ? t.ang : 0;
+      }
+    }
+    // пыль
+    for (const d of dust) {
+      if (d.life <= 0) continue;
+      d.life -= dt * 0.75;
+      if (d.life <= 0) { d.mesh.visible = false; continue; }
+      const k = 1 - d.life;
+      d.mesh.scale.setScalar((0.25 + k * 2.1) * d.size);
+      d.mesh.material.opacity = Math.max(0, d.life * 0.9);
+      d.mesh.position.y += dt * 0.35 * d.size;
+      d.mesh.lookAt(camPos);
+    }
+  }
+
+  function dispose() {
+    root.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        ms.forEach((m) => { for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } m.dispose(); });
+      }
+    });
+  }
+
+  return {
+    root: root, targets: targets, hitZones: hitZones, tracer: tracer,
+    collide: collide, groundHeight: groundHeight,
+    spawnDust: spawnDust, update: update, dispose: dispose
+  };
+}
+/*==WORLD:END==*/
+
+/*==VIEWER:START==*/
+const $  = (s) => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const nfmt  = (v, d) => v.toFixed(d).replace('.', ',');
+
+setLoad('Сборка модели…', 'Генерируются текстуры, геометрия и оптика.');
+function setLoad(a, b) {
+  const t = document.getElementById('loadTitle'), p = document.getElementById('loadText');
+  if (t) t.textContent = a;
+  if (p) p.textContent = b;
+}
+
+/* ══ РЕНДЕРЕР ══════════════════════════════════════════════════ */
+const renderer = new THREE.WebGLRenderer({
+  antialias: true, alpha: false, stencil: false,
+  powerPreference: 'high-performance', preserveDrawingBuffer: true
+});
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+renderer.setPixelRatio(DPR);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
+renderer.autoClear = false;
+document.body.appendChild(renderer.domElement);
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+/* ══ СЦЕНА И ОСВЕЩЕНИЕ ═══════════════════════════════════════ */
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+const skyTex = makeEquirect(THREE, 'sky');
+const envOutdoor = pmrem.fromEquirectangular(skyTex).texture;
+const studioTex = makeEquirect(THREE, 'studio');
+const envStudio = pmrem.fromEquirectangular(studioTex).texture;
+scene.environment = envOutdoor;
+scene.background = skyTex;
+scene.fog = new THREE.Fog(0xb9c6ce, 420, 3000);
+
+const sun = new THREE.DirectionalLight(0xfff2dc, 2.9);
+sun.position.set(-90, 78, -46);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 90;
+sun.shadow.camera.left = -22; sun.shadow.camera.right = 22;
+sun.shadow.camera.top = 22;   sun.shadow.camera.bottom = -22;
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.02;
+scene.add(sun, sun.target);
+scene.add(new THREE.HemisphereLight(0xa9c6e8, 0x5b563c, 0.55));
+const fillLight = new THREE.DirectionalLight(0xbdd4ee, 0.5);
+fillLight.position.set(60, 34, 70);
+scene.add(fillLight);
+
+/* ══ МОДЕЛЬ ═════════════════════════════════════════════════════ */
+const matTex = makeMaterialTextures(THREE, maxAniso);
+const model  = buildPSO1(THREE, { segments: 84, textures: matTex });
+const report = validate(model, THREE);
+const nodes  = model.nodes;
+
+/* Опора с оружием: модель висит в системе головы так, чтобы выходной зрачок был у глаза */
+const EXIT = new THREE.Vector3();
+nodes.exitPupil.getWorldPosition(EXIT);              // модель ещё в начале координат
+const weapon = new THREE.Group();
+weapon.name = 'weaponRig';
+weapon.add(model);
+model.position.set(-EXIT.x, -EXIT.y, -EXIT.z);       // глаз → в выходной зрачок
+
+/* упрощённая туша винтовки — только чтобы прицел не висел в воздухе */
+const rifle = new THREE.Group();
+{
+  const mBody = new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.68, metalness: 0.35,
+    normalMap: matTex.paintNormal, envMapIntensity: 0.8 });
+  const mWood = new THREE.MeshStandardMaterial({ color: 0x6a4526, roughness: 0.72, metalness: 0.0 });
+  const mBar  = new THREE.MeshStandardMaterial({ color: 0x2b2e31, roughness: 0.36, metalness: 0.9 });
+  const put = (g, mat, x, y, z, rx) => {
+    const m = new THREE.Mesh(g, mat);
+    m.position.set(x, y, z); if (rx) m.rotation.x = rx;
+    m.castShadow = true; m.receiveShadow = true; rifle.add(m); return m;
+  };
+  put(new THREE.BoxGeometry(0.040, 0.062, 0.240), mBody, 0.030, -0.041, 0.010);      // ствольная коробка
+  put(new THREE.BoxGeometry(0.014, 0.030, 0.150), mBody, 0.006, -0.028, 0.010);      // планка-кронштейн
+  put(new THREE.CylinderGeometry(0.0105, 0.0092, 0.500, 20), mBar, 0.030, -0.050, -0.360, Math.PI / 2);
+  put(new THREE.BoxGeometry(0.052, 0.050, 0.230), mWood, 0.030, -0.055, -0.230);     // цевьё
+  put(new THREE.BoxGeometry(0.046, 0.072, 0.250), mWood, 0.030, -0.062, 0.240);      // приклад
+  put(new THREE.BoxGeometry(0.026, 0.090, 0.034), mWood, 0.030, -0.096, 0.108);      // рукоятка
+  put(new THREE.CylinderGeometry(0.0075, 0.0075, 0.150, 12), mBar, 0.030, -0.086, -0.150, Math.PI / 2);
+}
+rifle.position.copy(model.position);
+weapon.add(rifle);
+weapon.visible = false;
+scene.add(weapon);
+
+/* Подставки в режиме осмотра нет: модель рисуется отдельной камерой поверх
+   мира, и любой диск (это и было «чёрное колесо») перекрывал сам прицел. */
+
+/* ══ ЖИВАЯ ОПТИКА: render target + экран окуляра ═══════════════════════ */
+const SCOPE_FOV_DEG = 6;                                    // поле зрения ПСО-1
+const SCOPE_FOV_MIL = 2 * Math.tan(SCOPE_FOV_DEG * Math.PI / 360) * 1000;   // ≈ 104,7 мил
+const SCOPE_MAG      = 4;                                   // кратность
+const SCOPE_TAN_HALF = Math.tan(SCOPE_FOV_DEG * Math.PI / 360);              // tan 3°
+const SCOPE_APP_DEG  = 2 * Math.atan(SCOPE_MAG * SCOPE_TAN_HALF) * 180 / Math.PI;  // видимое поле ≈ 23,7°
+const EYE_RELIEF     = 0.068;                               // удаление выходного зрачка, м
+const EXIT_PUPIL_R   = 0.0042;                              // радиус зрачка + зрачок глаза
+const PARALLAX_M     = 300;                                 // параллакс устранён на 300 м
+const ADS_FOV_DEG    = SCOPE_APP_DEG * 1.14;                // круг окуляра занимает 88 % высоты
+function pickRtSize() {
+  const need = Math.max(window.innerWidth, window.innerHeight) * Math.min(2, window.devicePixelRatio || 1);
+  let p = 1024; while (p < need && p < 2048) p *= 2;
+  return Math.min(p, renderer.capabilities.maxTextureSize);
+}
+let rtSize = pickRtSize();
+const rtScope = new THREE.WebGLRenderTarget(rtSize, rtSize, {
+  minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+  type: THREE.HalfFloatType, colorSpace: THREE.NoColorSpace, samples: 4,
+  depthBuffer: true, stencilBuffer: false
+});
+const camScope = new THREE.PerspectiveCamera(SCOPE_FOV_DEG, 1, 0.12, 3400);
+
+const reticleTex = makeReticleTexture(THREE, 1536, SCOPE_FOV_MIL, maxAniso);
+const ocMat = new THREE.ShaderMaterial({
+  vertexShader: SCOPE_VERT, fragmentShader: SCOPE_FRAG, toneMapped: false, transparent: false,
+  uniforms: {
+    tScene:      { value: rtScope.texture },
+    tReticle:    { value: reticleTex },
+    uEye:        { value: new THREE.Vector2(0, 0) },
+    uEyeLocal:   { value: new THREE.Vector3(0, 0, EYE_RELIEF) },
+    uMag:        { value: SCOPE_MAG },
+    uTanHalf:    { value: SCOPE_TAN_HALF },
+    uPupilR:     { value: EXIT_PUPIL_R },
+    uPupilZ:     { value: EYE_RELIEF },
+    uParallax:   { value: new THREE.Vector2(0, 0) },
+    uIllumColor: { value: new THREE.Color(0xff4a2a) },
+    uTint:       { value: new THREE.Color(1.02, 0.995, 0.90) },
+    uIllum:      { value: 0.0 },
+    uReticle:    { value: 1.0 },
+    uBright:     { value: 1.06 },
+    uCA:         { value: 0.010 },
+    uDistort:    { value: 0.045 },
+    uBlur:       { value: 1.0 },
+    uDirt:       { value: 0.45 },
+    uAxis:       { value: 0.0 },
+    uFlare:      { value: 0.0 },
+    uTime:       { value: 0 }
+  }
+});
+const ocular = new THREE.Mesh(new THREE.CircleGeometry(0.0177, 96), ocMat);
+ocular.name = 'ocularImage';
+ocular.position.set(0, 0, -0.0016);
+ocular.renderOrder = 3;
+nodes.eyepieceLens.add(ocular);
+
+/* ══ СТРЕЛЬБИЩЕ ══════════════════════════════════════════════ */
+const range = buildRange(THREE, maxAniso);
+scene.add(range.root);
+/* 7,62×54R СНБ (7Н1): масса 9,6 г, высота оси прицела над каналом ствола 70 мм. */
+const BALL_HS = 0.070;                       // совпадает с узлом boreAxis в модели
+const BALL_FWD = 0.560;                      // дульный срез впереди центра прицела
+const ball = makeBallistics({ v0: 830, mass: 0.0096, dia: 0.00792, form: 1.06 });
+ball.sightHeight = BALL_HS;
+ball.fwd = BALL_FWD;
+ball.v0 = 830;
+/* Фасад для интерфейса: все величины берутся из одной и той же таблицы. */
+ball.at    = (D) => ball.table(Math.max(1, D), BALL_HS, BALL_FWD);
+ball.tof   = (D) => ball.at(D).tof;
+ball.vel   = (D) => ball.at(D).vel;
+ball.drop  = (D) => ball.at(D).drop;
+ball.drift = (D, wLat) => ball.at(D).windPerMs * wLat;
+
+/* ══ ТРАЕКТОРИЯ ══════════════════════════════════════════
+   Один и тот же численный интегратор считает и угол превышения
+   (пристрелку барабанчика), и реальный полёт пули. Именно поэтому при
+   барабанчике N пуля приходит ровно в центральный угольник на N·100 м. */
+const windVec = new THREE.Vector3();
+
+/* угол между осью ствола и линией прицеливания для дальности D0, рад */
+function superElevation(D0) { return ball.zeroAngle(Math.max(25, D0), BALL_HS, BALL_FWD); }
+
+/* Полная траектория в мировых координатах: сопротивление считается
+   относительно воздуха (отсюда снос ветром), препятствия ищутся лучом по отрезкам. */
+function traceTrajectory(origin, dir, w, maxRange) {
+  const r = ball.shoot(origin, dir, w, range.collide, maxRange || 1800, 6.0);
+  const pts = [];
+  for (let i = 0; i < r.pts.length; i++) pts.push(new THREE.Vector3(r.pts[i].x, r.pts[i].y, r.pts[i].z));
+  const last = pts[pts.length - 1];
+  const hit = r.hit ? {
+    point: new THREE.Vector3(r.hit.point.x, r.hit.point.y, r.hit.point.z),
+    target: r.hit.target || null, kind: r.hit.kind
+  } : null;
+  return {
+    pts: pts, times: r.times, hit: hit, vel: r.vel,
+    hitTime: r.hitTime,
+    dist: (hit ? hit.point : last).distanceTo(origin)
+  };
+}
+
+/* ══ КАМЕРЫ ════════════════════════════════════════════════════ */
+const aspect0 = window.innerWidth / window.innerHeight;
+const camFar  = new THREE.PerspectiveCamera(42, aspect0, 0.10, 3600);
+const camNear = new THREE.PerspectiveCamera(42, aspect0, 0.0035, 4);
+
+const EYE_H = 1.14;                                   // высота глаза на огневом рубеже, м
+const shooter = { x: 0, y: EYE_H, z: 1.6, yaw: 0, pitch: 0 };
+
+/* орбита режима осмотра */
+const orbit = {
+  theta: -0.86, phi: 1.30, radius: 0.62,
+  target: new THREE.Vector3(0, EYE_H, 0),
+  tTheta: -0.86, tPhi: 1.30, tRadius: 0.62,
+  tTarget: new THREE.Vector3(0, EYE_H, 0)
+};
+function orbitReset(immediate) {
+  orbit.tTheta = -0.86; orbit.tPhi = 1.30; orbit.tRadius = 0.62;
+  orbit.tTarget.set(0, EYE_H, -0.23);
+  if (immediate) { orbit.theta = orbit.tTheta; orbit.phi = orbit.tPhi; orbit.radius = orbit.tRadius; orbit.target.copy(orbit.tTarget); }
+}
+orbitReset(true);
+
+/* ══ СОСТОЯНИЕ ═════════════════════════════════════════════════ */
+const S = {
+  mode: 'inspect',            // inspect | range
+  ads: false, adsT: 0,
+  deployed: false,
+  illum: false,
+  dial: 4,                    // барабанчик дальности 1…10 (сотни метров)
+  wind: 0,                    // боковые поправки, мил
+  ammo: 10, mag: 10, shots: 0, hits: 0,
+  breath: 1, holding: false,
+  recoil: 0, recoilV: 0, recoilYaw: 0,
+  lastRange: 0,
+  t: 0
+};
+const wind = { x: 0, z: 0, phase: 0 };            // штиль: без ветра пуля идёт точно в угольник
+
+/* ══ УПРАВЛЕНИЕ ═════════════════════════════════════════════
+   Осмотр:     ЛКМ — вращение, ПКМ — панорама, колесо — зум.
+   Стрельбище: перетаскивание ЛКМ — наведение, короткий клик — выстрел,
+                ПКМ — взгляд в окуляр, колесо — барабанчик дальности.
+   Захват курсора (pointer lock) не используется: из-за него не нажимались
+   панели (в том числе барабанчик дальности) и сыпались ошибки setPointerCapture. */
+const el = renderer.domElement;
+el.style.cursor = 'grab';
+const ptrs = new Map();
+let dragBtn = -1, lastX = 0, lastY = 0, pinch0 = 0, movedPx = 0, tapT = 0;
+
+el.addEventListener('contextmenu', (e) => e.preventDefault());
+
+el.addEventListener('pointerdown', (e) => {
+  /* указатель мог уже быть отпущен — без try это падает InvalidStateError */
+  try { el.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  movedPx = 0;
+  tapT = performance.now();
+  lastX = e.clientX;
+  lastY = e.clientY;
+  dragBtn = e.button;
+  audio();
+  if (ptrs.size === 2) {
+    const p = [...ptrs.values()];
+    pinch0 = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    if (S.mode === 'range') setADS(!S.ads);
+    return;
+  }
+  if (S.mode === 'inspect') el.style.cursor = 'grabbing';
+  else if (e.pointerType === 'mouse' && e.button === 2) setADS(!S.ads);
+});
+
+el.addEventListener('pointermove', (e) => {
+  if (!ptrs.has(e.pointerId)) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  movedPx += Math.abs(dx) + Math.abs(dy);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (ptrs.size === 2) {                                   // щипок — зум осмотра
+    const p = [...ptrs.values()];
+    const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    if (S.mode === 'inspect' && pinch0 > 0) orbit.tRadius = clamp(orbit.tRadius * (pinch0 / Math.max(1, d)), 0.16, 3.4);
+    pinch0 = d;
+    return;
+  }
+  if (S.mode === 'inspect') {
+    if (dragBtn === 0) {
+      orbit.tTheta -= dx * 0.0062;
+      orbit.tPhi = clamp(orbit.tPhi - dy * 0.0062, 0.16, Math.PI - 0.16);
+    } else if (dragBtn === 2 || dragBtn === 1) {
+      const k = orbit.radius * 0.0016;
+      const right = new THREE.Vector3().setFromMatrixColumn(camFar.matrixWorld, 0);
+      const up    = new THREE.Vector3().setFromMatrixColumn(camFar.matrixWorld, 1);
+      orbit.tTarget.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
+    }
+  } else if (dragBtn === 0) {
+    /* 1 пиксель экрана = 1 пиксель наведения: в окуляре поле зрения 6°,
+       поэтому шаг автоматически становится в четыре раза мельче — как у настоящей оптики. */
+    const fovEff = lerp(camFar.fov, camFar.fov / SCOPE_MAG, S.adsT) * Math.PI / 180;
+    const k = fovEff / Math.max(200, window.innerHeight);
+    aimBy(-dx * k, -dy * k);
+  }
+});
+
+function endPointer(e) {
+  const wasBtn = dragBtn;
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch0 = 0;
+  if (ptrs.size === 0) dragBtn = -1;
+  el.style.cursor = S.mode === 'inspect' ? 'grab' : 'crosshair';
+  try { if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); } catch (err) { /* уже отпущен */ }
+  /* выстрел — только короткий клик без протяжки, чтобы наведение не стреляло */
+  if (S.mode === 'range' && wasBtn === 0 && movedPx < 8 && performance.now() - tapT < 350) fire();
+}
+el.addEventListener('pointerup', endPointer);
+el.addEventListener('pointercancel', endPointer);
+
+el.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (S.mode === 'inspect') {
+    orbit.tRadius = clamp(orbit.tRadius * (1 + Math.sign(e.deltaY) * 0.12), 0.16, 3.4);
+  } else if (e.shiftKey) {
+    setWind(S.wind - Math.sign(e.deltaY) * 0.5);
+  } else {
+    setDial(S.dial - Math.sign(e.deltaY));
+  }
+}, { passive: false });
+
+function aimBy(dyaw, dpitch) {
+  shooter.yaw += dyaw;
+  shooter.pitch = clamp(shooter.pitch + dpitch, -0.36, 0.30);
+}
+
+window.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;   // не мешаем ползункам
+  const k = e.key.toLowerCase();
+  if (k === 'm') { setMode(S.mode === 'inspect' ? 'range' : 'inspect'); e.preventDefault(); }
+  else if (k === 'c') { if (S.mode === 'range') setADS(!S.ads); }
+  else if (k === 't') { setIllum(!S.illum); }
+  else if (k === 'r') { reload(); }
+  else if (k === 'v') { rangeFind(); }
+  else if (k === 'shift') { S.holding = true; }
+  else if (k === 'arrowup')    { setDial(S.dial + 1); e.preventDefault(); }
+  else if (k === 'arrowdown')  { setDial(S.dial - 1); e.preventDefault(); }
+  else if (k === 'arrowleft')  { setWind(S.wind - 0.5); e.preventDefault(); }
+  else if (k === 'arrowright') { setWind(S.wind + 0.5); e.preventDefault(); }
+  else if (k === ' ' && S.mode === 'range') { fire(); e.preventDefault(); }
+});
+window.addEventListener('keyup', (e) => { if (e.key.toLowerCase() === 'shift') S.holding = false; });
+/*==VIEWER:CORE_END==*/
+
+/* ══ РЕЖИМЫ, БАРАБАНЧИКИ, ЗВУК ═══════════════════════════════════ */
+let toastT = 0;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 2300);
+}
+
+let actx = null;
+function audio() {
+  if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); }
+  if (actx && actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function sfx(kind, when) {
+  const a = audio(); if (!a) return;
+  const t0 = a.currentTime + (when || 0);
+  const out = a.createGain(); out.connect(a.destination);
+  if (kind === 'shot') {
+    out.gain.value = 0.5;
+    const n = a.createBufferSource();
+    const buf = a.createBuffer(1, a.sampleRate * 0.4, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.2);
+    n.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = 'lowpass';
+    bp.frequency.setValueAtTime(5200, t0); bp.frequency.exponentialRampToValueAtTime(340, t0 + 0.34);
+    n.connect(bp); bp.connect(out); n.start(t0);
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(140, t0); o.frequency.exponentialRampToValueAtTime(46, t0 + 0.22);
+    g.gain.setValueAtTime(0.9, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.3);
+    o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 0.32);
+  } else if (kind === 'ding') {
+    out.gain.value = 0.28;
+    [1180, 1790, 2630].forEach((f, i) => {
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = 'sine'; o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.02);
+      g.gain.setValueAtTime(0.5 / (i + 1), t0);
+      g.gain.exponentialRampToValueAtTime(0.0005, t0 + 1.1 - i * 0.25);
+      o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 1.2);
+    });
+  } else if (kind === 'thud') {
+    out.gain.value = 0.22;
+    const n = a.createBufferSource();
+    const buf = a.createBuffer(1, a.sampleRate * 0.2, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 5);
+    n.buffer = buf;
+    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    n.connect(lp); lp.connect(out); n.start(t0);
+  } else {
+    out.gain.value = kind === 'dry' ? 0.30 : 0.16;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'square'; o.frequency.value = kind === 'dry' ? 900 : 2400;
+    g.gain.setValueAtTime(0.5, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05);
+    o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + 0.06);
+  }
+}
+
+function setMode(m) {
+  S.mode = m;
+  document.querySelectorAll('[data-act="modeInspect"]').forEach((b) => b.classList.toggle('on', m === 'inspect'));
+  document.querySelectorAll('[data-act="modeRange"]').forEach((b) => b.classList.toggle('on', m === 'range'));
+  $('#hintInspect').hidden = m !== 'inspect';
+  $('#hintRange').hidden = m !== 'range';
+  $('#hud').classList.toggle('show', m === 'range');
+  $('#cross').classList.toggle('show', m === 'range');
+  rifle.visible = m === 'range';
+  scene.environment = m === 'inspect' ? envStudio : envOutdoor;
+  renderer.toneMappingExposure = m === 'inspect' ? 1.06 : 1.0;
+  el.style.cursor = m === 'inspect' ? 'grab' : 'crosshair';
+  if (m === 'range') { setADS(false); toast('Наведение — перетаскивание ЛКМ · ПКМ — взгляд в окуляр · клик — выстрел'); }
+  renderer.shadowMap.needsUpdate = true;
+}
+function setADS(on) {
+  S.ads = !!on;
+  $('#cross').classList.toggle('show', S.mode === 'range' && !S.ads);
+  document.querySelectorAll('[data-act="ads"]').forEach((b) => b.classList.toggle('on', S.ads));
+}
+function setDial(v) {
+  S.dial = clamp(Math.round(v), 1, 10);
+  model.setElevationDial(S.dial);
+  sfx('click');
+  syncUI();
+}
+function setWind(v) {
+  S.wind = clamp(Math.round(v * 2) / 2, -5, 5);
+  model.setWindageDial(S.wind);
+  sfx('click');
+  syncUI();
+}
+function setIllum(on) {
+  S.illum = !!on;
+  ocMat.uniforms.uIllum.value = S.illum ? 0.85 : 0.0;
+  model.setPartT('illumSwitch', S.illum ? 1 : 0);
+  document.querySelectorAll('[data-act="illum"]').forEach((b) => b.classList.toggle('on', S.illum));
+  const s = document.getElementById('sl_uIllum');
+  if (s) { s.value = String(S.illum ? 0.85 : 0); s.dispatchEvent(new Event('input')); }
+}
+function reload() {
+  if (S.ammo === S.mag) return;
+  S.ammo = S.mag; sfx('click'); toast('Магазин снаряжён: 10 патронов'); syncHUD();
+}
+
+/* ══ ЛИНИЯ ПРИЦЕЛИВАНИЯ И ВЫСТРЕЛ ════════════════════════════ */
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e1 = new THREE.Euler();
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _vc = new THREE.Vector3();
+const crossEl = $('#cross');
+
+/* ГЛАВНОЕ ПРАВИЛО ПРИЦЕЛИВАНИЯ.
+   Мышь ведёт ЛИНИЮ ПРИЦЕЛИВАНИЯ — ту самую, что проходит через вершину
+   центрального угольника. Барабанчики не двигают сетку по экрану, они
+   ПОДНИМАЮТ СТВОЛ над этой линией на угол броска — ровно как в железе.
+   Именно здесь была главная ошибка: раньше мышь вела СТВОЛ, а сетка уезжала
+   вниз от него — пуля всегда уходила выше точки, куда смотрел игрок. */
+function tubeQuat(out) {                                  // линия прицеливания
+  _e1.set(aimPitch(), aimYaw(), 0, 'YXZ');
+  return (out || _q1).setFromEuler(_e1);
+}
+function boreQuat(out) {                                  // ось канала ствола
+  const q = tubeQuat(_q1).clone();
+  _e1.set(superElevation(S.dial * 100), S.wind / 1000, 0, 'YXZ');
+  q.multiply(_q2.setFromEuler(_e1));
+  return out ? out.copy(q) : q;
+}
+
+/* Куда смотрит угольник: шаг по линии прицеливания С ТОЙ ЖЕ проверкой
+   столкновений, что и у пули. Цель и попадание меряются одной линейкой. */
+const _pa = { x: 0, y: 0, z: 0 }, _pb = { x: 0, y: 0, z: 0 };
+const _av = new THREE.Vector3(), _ao = new THREE.Vector3();
+function probeLOS(origin, dir, maxD, step) {
+  const st = step || 1.5;
+  _pb.x = origin.x; _pb.y = origin.y; _pb.z = origin.z;
+  for (let d = 0; d < maxD; d += st) {
+    _pa.x = _pb.x; _pa.y = _pb.y; _pa.z = _pb.z;
+    const e = d + st;
+    _pb.x = origin.x + dir.x * e; _pb.y = origin.y + dir.y * e; _pb.z = origin.z + dir.z * e;
+    const h = range.collide(_pa, _pb, d, e);
+    if (h) return {
+      point: new THREE.Vector3(h.point.x, h.point.y, h.point.z),
+      dist: Math.hypot(h.point.x - origin.x, h.point.y - origin.y, h.point.z - origin.z),
+      target: h.target, kind: h.kind
+    };
+  }
+  return null;
+}
+let swayY = 0, swayP = 0;
+function aimYaw()   { return shooter.yaw + swayY + S.recoilYaw * 0.02; }
+function aimPitch() { return shooter.pitch + swayP + S.recoil * 0.02; }
+
+let activeShot = null;
+function fire() {
+  if (S.mode !== 'range') { setMode('range'); return; }
+  if (S.ammo <= 0) { sfx('dry'); toast('Магазин пуст — нажмите R'); return; }
+
+  /* 1. Геометрия выстрела считается ДО отдачи. */
+  const qLos  = tubeQuat(_q1).clone();                    // линия прицеливания (сетка)
+  const qBore = boreQuat();                               // ось канала ствола
+  const losDir   = new THREE.Vector3(0, 0, -1).applyQuaternion(qLos);
+  const boreDir  = new THREE.Vector3(0, 0, -1).applyQuaternion(qBore);
+  const upLos    = new THREE.Vector3(0, 1, 0).applyQuaternion(qLos);
+  const rightLos = new THREE.Vector3(1, 0, 0).applyQuaternion(qLos);
+
+  /* Начало линии прицеливания — центр прицела; дульный срез ниже на 70 мм
+     и впереди на 560 мм — ровно те числа, что заложены в расчёт пристрелки. */
+  const sightPos = new THREE.Vector3();
+  nodes.sightAxis.getWorldPosition(sightPos);
+  const muzzle = sightPos.clone().addScaledVector(upLos, -BALL_HS).addScaledVector(losDir, BALL_FWD);
+
+  /* 2. Точка прицеливания */
+  const aim = probeLOS(sightPos, losDir, 2200, 1.5);
+  const aimPoint = aim ? aim.point : null;
+  if (aim) S.lastRange = aim.dist;
+
+  /* 3. Честная траектория: гравитация + сопротивление воздуха + снос ветром */
+  windVec.set(wind.x, 0, wind.z);
+  const shot = traceTrajectory(muzzle, boreDir, windVec, 1800);
+
+  /* 4. И только теперь отдача — она влияет на следующий выстрел */
+  S.ammo--; S.shots++;
+  sfx('shot');
+  S.recoilV += 3.0;
+  S.recoilYaw += (Math.random() - 0.5) * 0.5;
+  S.breath = Math.max(0, S.breath - 0.06);
+
+  const dist = shot.dist;
+  const tof  = shot.hitTime;
+  activeShot = { pts: shot.pts, times: shot.times, tEnd: tof, t: 0, i: 0 };
+  range.tracer.visible = true;
+  range.tracer.position.copy(shot.pts[0]);
+
+  const hit = shot.hit;
+  const tgt = hit ? hit.target : null;
+  if (hit) {
+    const hp = hit.point.clone();
+    setTimeout(() => {
+      range.spawnDust(hp, tgt ? 0.35 : 1.0);
+      sfx(tgt && tgt.kind === 'gong' ? 'ding' : 'thud', dist / 343);
+    }, tof * 1000);
+  }
+
+  let dev = '';
+  if (hit && aimPoint) {
+    _v1.copy(hit.point).sub(aimPoint);
+    dev = devText(_v1.dot(rightLos), _v1.dot(upLos), Math.max(1, dist));
+  }
+  if (tgt) {
+    S.hits++;
+    tgt.hits++;
+    setTimeout(() => {
+      if (tgt.kind === 'gong') { tgt.vel += 3.4; }
+      else { tgt.down = true; tgt.vel -= 3.0; }
+    }, tof * 1000);
+    showHit('ПОПАДАНИЕ · ' + Math.round(tgt.dist) + ' м' + (dev ? ' · ' + dev : ' · в марку'), tof);
+  } else {
+    showHit('Промах · ' + Math.round(dist) + ' м' + (dev ? ' · ' + dev : ''), tof);
+  }
+  syncHUD();
+}
+
+/* отклонение точки попадания от точки прицеливания, в тысячных */
+function devText(dh, dv, dist) {
+  const mh = dh / dist * 1000, mv = dv / dist * 1000;
+  const out = [];
+  if (Math.abs(mv) >= 0.05) out.push((mv > 0 ? 'выше ' : 'ниже ') + nfmt(Math.abs(mv), 1) + ' мил');
+  if (Math.abs(mh) >= 0.05) out.push((mh > 0 ? 'правее ' : 'левее ') + nfmt(Math.abs(mh), 1) + ' мил');
+  return out.join(' · ');
+}
+function showHit(text, delay) {
+  setTimeout(() => {
+    const h = $('#hitmark');
+    h.textContent = text;
+    h.classList.remove('show'); void h.offsetWidth; h.classList.add('show');
+  }, (delay || 0) * 1000);
+}
+function rangeFind() {
+  const q = tubeQuat(_q1);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  const origin = new THREE.Vector3(); nodes.sightAxis.getWorldPosition(origin);
+  const pr = probeLOS(origin, dir, 2000, 1.0);
+  if (!pr) { toast('Цель не определена'); return; }
+  const d = pr.dist;
+  S.lastRange = d;
+  const suggest = clamp(Math.round(d / 100), 1, 10);
+  const wLat = wind.x * right.x + wind.z * right.z;              // боковая составляющая ветра
+  const milW = ball.drift(d, wLat) / d * 1000;                   // сколько ставить на боковом барабанчике
+  toast('Дальность ≈ ' + Math.round(d) + ' м · барабанчик ' + suggest
+    + ' · боковые ' + (milW >= 0 ? '+' : '−') + nfmt(Math.abs(milW), 1)
+    + ' · фигура 1,7 м = ' + nfmt(1700 / d, 1) + ' мил');
+}
+
+/* ══ ИНТЕРФЕЙС ═══════════════════════════════════════════════ */
+function addSlider(host, id, label, min, max, step, value, fmt, onInput) {
+  const row = document.createElement('div'); row.className = 'row';
+  const lab = document.createElement('label');
+  const span = document.createElement('span'); span.textContent = label;
+  const b = document.createElement('b');
+  lab.append(span, b);
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.id = 'sl_' + id;
+  inp.min = String(min); inp.max = String(max); inp.step = String(step); inp.value = String(value);
+  inp.setAttribute('aria-label', label);
+  const paint = () => { b.textContent = fmt(parseFloat(inp.value)); };
+  inp.addEventListener('input', () => { paint(); onInput(parseFloat(inp.value)); });
+  paint();
+  row.append(lab, inp);
+  host.appendChild(row);
+  return inp;
+}
+
+const optHost = $('#opticRows');
+const slDial = addSlider(optHost, 'dial', 'Барабанчик дальности', 1, 10, 1, S.dial,
+  (v) => v + ' · ' + (v * 100) + ' м', (v) => { S.dial = v; model.setElevationDial(v); syncHUD(); });
+const slWind = addSlider(optHost, 'wind', 'Боковые поправки', -5, 5, 0.5, S.wind,
+  (v) => nfmt(v, 1) + ' мил', (v) => { S.wind = v; model.setWindageDial(v); syncHUD(); });
+addSlider(optHost, 'uBright', 'Яркость картинки', 0.5, 1.8, 0.01, 1.06,
+  (v) => nfmt(v, 2) + '×', (v) => { ocMat.uniforms.uBright.value = v; });
+addSlider(optHost, 'uIllum', 'Подсветка сетки', 0, 1.4, 0.01, 0,
+  (v) => v < 0.02 ? 'выкл' : nfmt(v, 2), (v) => { ocMat.uniforms.uIllum.value = v; S.illum = v > 0.02;
+    document.querySelectorAll('[data-act="illum"]').forEach((b) => b.classList.toggle('on', S.illum));
+    model.setPartT('illumSwitch', S.illum ? 1 : 0); });
+addSlider(optHost, 'uCA', 'Хроматизм края', 0, 1, 0.01, 0.4,
+  (v) => nfmt(v, 2), (v) => { ocMat.uniforms.uCA.value = v * 0.025; });
+addSlider(optHost, 'uDistort', 'Дисторсия', -1, 1, 0.01, 0.38,
+  (v) => nfmt(v, 2), (v) => { ocMat.uniforms.uDistort.value = v * 0.12; });
+addSlider(optHost, 'uBlur', 'Замыливание края', 0, 2, 0.01, 1,
+  (v) => nfmt(v, 2), (v) => { ocMat.uniforms.uBlur.value = v; });
+addSlider(optHost, 'uDirt', 'Пыль на стекле', 0, 1, 0.01, 0.45,
+  (v) => nfmt(v, 2), (v) => { ocMat.uniforms.uDirt.value = v; });
+addSlider(optHost, 'windx', 'Боковой ветер', -10, 10, 0.1, wind.x,
+  (v) => nfmt(Math.abs(v), 1) + ' м/с ' + (v > 0.05 ? '→' : v < -0.05 ? '←' : ''), (v) => { wind.x = v; syncHUD(); });
+
+const colHost = $('#reticleColors');
+[['#ff3a22', 'красная'], ['#ff9a3c', 'янтарная'], ['#4dff87', 'зелёная'], ['#7fc4ff', 'голубая'], ['#ffffff', 'белая']]
+  .forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'sw' + (i === 0 ? ' on' : '');
+    b.style.background = c[0];
+    b.title = 'Подсветка: ' + c[1];
+    b.setAttribute('aria-label', 'Подсветка сетки: ' + c[1]);
+    b.addEventListener('click', () => {
+      colHost.querySelectorAll('.sw').forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+      ocMat.uniforms.uIllumColor.value.set(c[0]);
+      if (!S.illum) setIllum(true);
+    });
+    colHost.appendChild(b);
+  });
+
+const animHost = $('#animRows');
+Object.keys(model.partsMeta).forEach((name) => {
+  addSlider(animHost, 'p_' + name, model.partsMeta[name].label, 0, 1, 0.01, model.partT[name] || 0,
+    (v) => Math.round(v * 100) + '%', (v) => model.setPartT(name, v));
+});
+function syncPartSliders() {
+  Object.keys(model.partsMeta).forEach((name) => {
+    const s = document.getElementById('sl_p_' + name);
+    if (s) { s.value = String(model.partT[name] || 0); s.dispatchEvent(new Event('input')); }
+  });
+}
+const togHost = $('#animToggles');
+[['Все детали — к бою', () => { S.deployed = true; model.setDeployed(true); syncPartSliders(); }],
+ ['Сложить', () => { S.deployed = false; model.setDeployed(false); syncPartSliders(); }]]
+  .forEach((t) => {
+    const b = document.createElement('button');
+    b.className = 'btn sm'; b.textContent = t[0];
+    b.addEventListener('click', t[1]);
+    togHost.appendChild(b);
+  });
+
+function syncUI() {
+  if (slDial) { slDial.value = String(S.dial); slDial.dispatchEvent(new Event('input')); }
+  if (slWind) { slWind.value = String(S.wind); slWind.dispatchEvent(new Event('input')); }
+  syncHUD();
+}
+function syncHUD() {
+  $('#hDist').textContent = S.dial + ' · ' + (S.dial * 100) + ' м';
+  $('#hWind').textContent = nfmt(S.wind, 1);
+  $('#hWx').textContent = nfmt(Math.abs(wind.x), 1) + ' м/с ' + (wind.x > 0.05 ? '→' : wind.x < -0.05 ? '←' : '');
+  const am = $('#hAmmo');
+  am.textContent = S.ammo + ' / ' + S.mag;
+  am.className = S.ammo === 0 ? 'warn' : '';
+  $('#hHits').textContent = S.hits + ' / ' + S.shots;
+  syncBal();
+}
+
+/* Живая баллистическая сводка для той дальности, куда реально смотрит угольник. */
+const _wr = new THREE.Vector3();
+function syncBal() {
+  const D = Math.max(25, S.aimDist || S.dial * 100);
+  const b = ball.at(D);
+  _wr.set(1, 0, 0).applyQuaternion(tubeQuat(_q1));
+  const wLat = wind.x * _wr.x + wind.z * _wr.z;
+  const dr = b.windPerMs * wLat;
+  $('#hAim').textContent   = S.aimDist ? Math.round(S.aimDist) + ' м' : '—';
+  $('#hTof').textContent   = b.tof.toFixed(2).replace('.', ',') + ' с';
+  $('#hVel').textContent   = Math.round(b.vel) + ' м/с';
+  $('#hErg').textContent   = Math.round(b.energy) + ' Дж';
+  $('#hDrift').textContent = Math.abs(dr) < 0.005 ? '—'
+    : Math.round(Math.abs(dr) * 100) + ' см ' + (dr > 0 ? '→' : '←');
+}
+
+/* Кнопки верхней панели. Служебных осей узлов, каркаса и габаритной рамки
+   больше нет — это был отладочный мусор поверх модели. */
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const a = b.dataset.act;
+  audio();
+  if (a === 'modeInspect') setMode('inspect');
+  else if (a === 'modeRange') setMode('range');
+  else if (a === 'ads') { if (S.mode !== 'range') setMode('range'); setADS(!S.ads); }
+  else if (a === 'fire') fire();
+  else if (a === 'reload') reload();
+  else if (a === 'rangefind') rangeFind();
+  else if (a === 'dialUp') setDial(S.dial + 1);
+  else if (a === 'dialDn') setDial(S.dial - 1);
+  else if (a === 'windUp') setWind(S.wind + 0.5);
+  else if (a === 'windDn') setWind(S.wind - 0.5);
+  else if (a === 'reset') {
+    if (S.mode === 'inspect') orbitReset(false);
+    else { shooter.yaw = 0; shooter.pitch = 0; }
+  } else if (a === 'deploy') {
+    S.deployed = !S.deployed; b.classList.toggle('on', S.deployed);
+    model.setDeployed(S.deployed); syncPartSliders();
+  } else if (a === 'illum') {
+    setIllum(!S.illum);
+  } else if (a === 'png') {
+    renderFrame();
+    renderer.domElement.toBlob((blob) => {
+      if (!blob) { toast('Не удалось сохранить снимок'); return; }
+      saveBlob(blob, 'pso1_4x24.png');
+      toast('Снимок сохранён');
+    }, 'image/png');
+  } else if (a === 'glb') {
+    exportGLB();
+  }
+});
+$('#panelToggle').addEventListener('click', () => document.body.classList.toggle('hidepanels'));
+
+/* Скачивание через blob: на file:// ссылка с data:-адресом ругается в консоль
+   («unsafe attempt to load URL…») и часто вообще ничего не сохраняет. */
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(() => { link.remove(); URL.revokeObjectURL(url); }, 4000);
+}
+
+async function exportGLB() {
+  toast('Экспорт GLB…');
+  try {
+    const mod = await import(ADDONS + 'exporters/GLTFExporter.js');
+    const wasOc = ocular.visible;
+    ocular.visible = false;
+    new mod.GLTFExporter().parse(model, (buf) => {
+      ocular.visible = wasOc;
+      saveBlob(new Blob([buf], { type: 'model/gltf-binary' }), 'pso1_4x24.glb');
+      toast('GLB готов — один уровень детализации');
+    }, () => toast('Ошибка экспорта'), { binary: true, onlyVisible: true });
+  } catch (err) {
+    toast('Экспортёр не загрузился (нет сети)');
+  }
+}
+
+/* ══ ОБНОВЛЕНИЕ КАДРА ══════════════════════════════════════════ */
+renderer.info.autoReset = false;
+const camPos   = new THREE.Vector3();
+const headQuat = new THREE.Quaternion();
+const sunDir   = new THREE.Vector3().copy(sun.position).normalize();
+let opticActive = true, shadowClock = 0, statClock = 0, fps = 60, frames = 0, fpsClock = 0;
+
+function updateSim(dt) {
+  S.t += dt;
+  ocMat.uniforms.uTime.value = S.t;
+
+  /* ветер с порывами */
+  wind.phase += dt * 0.35;
+  wind.z = Math.sin(wind.phase * 0.7) * 0.22 * Math.abs(wind.x);   // порывы только при ветре
+
+  /* дыхание и колебание точки прицеливания */
+  if (S.mode === 'range') {
+    const holdOK = S.holding && S.breath > 0.001;
+    S.breath = holdOK ? Math.max(0, S.breath - dt * 0.16) : Math.min(1, S.breath + dt * 0.11);
+    const fatigue = 1 + (1 - S.breath) * 1.6;
+    const amp = (S.ads ? 0.0012 : 0.0035) * (holdOK ? 0.18 : 1) * fatigue;
+    swayY = (Math.sin(S.t * 1.05) + 0.45 * Math.sin(S.t * 2.37 + 1.1)) * amp;
+    swayP = (Math.sin(S.t * 1.63 + 0.6) + 0.40 * Math.sin(S.t * 0.83)) * amp * 0.8;
+    const bar = $('#breathBar');
+    if (bar) { bar.style.width = (S.breath * 100).toFixed(0) + '%'; bar.style.background = S.breath < 0.25 ? 'var(--err)' : 'var(--acc)'; }
+  } else { swayY = swayP = 0; }
+
+  /* отдача — пружина */
+  S.recoilV += (-46 * S.recoil - 9.5 * S.recoilV) * dt;
+  S.recoil  += S.recoilV * dt;
+  S.recoilYaw *= Math.exp(-7 * dt);
+
+  /* камера и оружие */
+  if (S.mode === 'inspect') {
+    const s = 1 - Math.pow(0.0015, dt);
+    orbit.theta  = lerp(orbit.theta,  orbit.tTheta,  s);
+    orbit.phi    = lerp(orbit.phi,    orbit.tPhi,    s);
+    orbit.radius = lerp(orbit.radius, orbit.tRadius, s);
+    orbit.target.lerp(orbit.tTarget, s);
+    weapon.position.set(0, EYE_H, 0);
+    weapon.quaternion.identity();
+    const sp = Math.sin(orbit.phi), cp = Math.cos(orbit.phi);
+    camPos.set(
+      orbit.target.x + orbit.radius * sp * Math.sin(orbit.theta),
+      Math.max(0.06, orbit.target.y + orbit.radius * cp),
+      orbit.target.z + orbit.radius * sp * Math.cos(orbit.theta)
+    );
+    camFar.position.copy(camPos);
+    camFar.up.set(0, 1, 0);
+    camFar.lookAt(orbit.target);
+    camFar.fov = 34;
+  } else {
+    S.adsT = lerp(S.adsT, S.ads ? 1 : 0, 1 - Math.pow(0.0009, dt));
+    _e1.set(aimPitch(), aimYaw(), 0, 'YXZ');
+    headQuat.setFromEuler(_e1);
+    camPos.set(shooter.x, shooter.y - S.recoil * 0.004, shooter.z);
+    camFar.position.copy(camPos);
+    camFar.quaternion.copy(headQuat);
+    camFar.fov = lerp(52, ADS_FOV_DEG, S.adsT);
+    const bob = S.adsT * 0.0011 * (S.holding ? 0.25 : 1);
+    _v1.set(
+      lerp(0.085, Math.sin(S.t * 1.7) * bob, S.adsT),
+      lerp(-0.115, Math.cos(S.t * 1.15) * bob, S.adsT),
+      lerp(0.045, 0, S.adsT) + S.recoil * 0.02
+    ).applyQuaternion(headQuat);
+    weapon.position.copy(camPos).add(_v1);
+    weapon.quaternion.copy(headQuat);
+    weapon.rotateX(lerp(-0.07, 0, S.adsT));
+    weapon.rotateY(lerp(0.10, 0, S.adsT));
+  }
+  camFar.updateProjectionMatrix();
+  camFar.updateMatrixWorld(true);
+  weapon.updateMatrixWorld(true);
+
+  camNear.position.copy(camFar.position);
+  camNear.quaternion.copy(camFar.quaternion);
+  camNear.fov = camFar.fov;
+  camNear.aspect = camFar.aspect;
+  camNear.updateProjectionMatrix();
+
+  /* Положение глаза в системе линзы окуляра — всё остальное шейдер
+     считает по лучам: кратность не «нарисована», а следует из геометрии. */
+  _v2.copy(camFar.position);
+  nodes.eyepieceLens.worldToLocal(_v2);
+  _v2.z += 0.0016;                                  // сдвиг самого диска окуляра
+  ocMat.uniforms.uEyeLocal.value.copy(_v2);
+  const radial = Math.hypot(_v2.x, _v2.y);
+  const zBack  = _v2.z;
+  const zFac = zBack > 0.004 ? 1 - clamp(Math.abs(zBack - EYE_RELIEF) / 0.115, 0, 1) : 0;
+  const rFac = 1 - clamp(radial / 0.030, 0, 1);
+  const axis = zFac * rFac;
+  ocMat.uniforms.uAxis.value = axis;
+  ocMat.uniforms.uEye.value.set(clamp(_v2.x / 0.022, -1, 1), clamp(_v2.y / 0.022, -1, 1));
+  /* Параллакс честный: сетка совмещена с изображением только на PARALLAX_M;
+     на других дальностях сдвиг головы уводит сетку по цели. */
+  const parK = (1 / PARALLAX_M - 1 / Math.max(25, S.aimDist || S.lastRange || PARALLAX_M)) * 26;
+  ocMat.uniforms.uParallax.value.set(-_v2.x * parK, _v2.y * parK);
+  opticActive = axis > 0.004 || S.mode === 'inspect';
+
+  /* Камера оптики = ось трубы. Сетка всегда в центре поля, а поправки
+     барабанчиков уводят СТВОЛ — ровно как в настоящем прицеле. */
+  nodes.objectiveLens.getWorldPosition(camScope.position);
+  if (S.mode === 'range') camScope.quaternion.copy(tubeQuat(_q1));
+  else nodes.sightAxis.getWorldQuaternion(camScope.quaternion);
+  camScope.updateMatrixWorld(true);
+
+  /* Дальность до того, во что смотрит угольник — для метки, параллакса и сводки.
+     Десять раз в секунду: глаз разницы не видит, кадр не страдает. */
+  if (S.mode === 'range') {
+    S.aimClock = (S.aimClock || 0) + dt;
+    if (S.aimClock > 0.1) {
+      S.aimClock = 0;
+      _av.set(0, 0, -1).applyQuaternion(tubeQuat(_q1));
+      nodes.sightAxis.getWorldPosition(_ao);
+      const pr = probeLOS(_ao, _av, 1900, 3);
+      S.aimDist = pr ? pr.dist : 0;
+      S.aimTarget = pr ? pr.target : null;
+      syncBal();
+    }
+  }
+
+  /* блик от солнца в объективе */
+  _v3.set(0, 0, -1).applyQuaternion(camScope.quaternion);
+  ocMat.uniforms.uFlare.value = clamp((_v3.dot(sunDir) - 0.80) / 0.20, 0, 1);
+
+  /* Марка «от бедра» ставится туда, куда реально смотрит линия прицеливания,
+     а не в центр экрана: иначе пуля уходит выше метки на угол превышения. */
+  if (S.mode === 'range' && !S.ads && crossEl) {
+    camFar.updateMatrixWorld(true);
+    camFar.matrixWorldInverse.copy(camFar.matrixWorld).invert();
+    _vc.copy(camScope.position).addScaledVector(_v3, Math.max(25, S.aimDist || 400)).project(camFar);
+    crossEl.style.left = ((_vc.x * 0.5 + 0.5) * 100).toFixed(2) + '%';
+    crossEl.style.top  = ((-_vc.y * 0.5 + 0.5) * 100).toFixed(2) + '%';
+  }
+
+  /* трассер */
+  if (activeShot) {
+    activeShot.t += dt;
+    if (activeShot.t >= activeShot.tEnd) { activeShot = null; range.tracer.visible = false; }
+    else {
+      /* идём по той же ломаной, по которой считалось попадание */
+      const T = activeShot.times, PT = activeShot.pts;
+      let i = activeShot.i;
+      while (i < T.length - 2 && T[i + 1] < activeShot.t) i++;
+      activeShot.i = i;
+      const j = Math.min(i + 1, PT.length - 1);
+      const f = j > i ? clamp((activeShot.t - T[i]) / Math.max(1e-6, T[j] - T[i]), 0, 1) : 0;
+      range.tracer.position.copy(PT[i]).lerp(PT[j], f);
+    }
+  }
+
+  range.update(dt, camPos, wind);
+
+  shadowClock += dt;
+  if (shadowClock > 0.25) { shadowClock = 0; renderer.shadowMap.needsUpdate = true; }
+
+  sun.target.position.set(camPos.x, 0, camPos.z - 8);
+  sun.position.set(camPos.x - 9, 12, camPos.z - 3);
+  sun.target.updateMatrixWorld();
+}
+
+/* ══ РЕНДЕР: оптика → мир → прицел ═══════════════════════════════ */
+function renderFrame() {
+  renderer.info.reset();
+  weapon.visible = false;
+
+  if (opticActive) {
+    renderer.setRenderTarget(rtScope);
+    renderer.clear(true, true, false);
+    renderer.render(scene, camScope);
+    renderer.setRenderTarget(null);
+  }
+
+  renderer.clear(true, true, false);
+  renderer.render(scene, camFar);
+
+  renderer.clearDepth();
+  weapon.visible = true;
+  range.root.visible = false;
+  const bg = scene.background, fg = scene.fog;
+  scene.background = null; scene.fog = null;
+  renderer.render(scene, camNear);
+  scene.background = bg; scene.fog = fg;
+  range.root.visible = true;
+  weapon.visible = false;
+}
+
+/* ══ СТАТИСТИКА ═══════════════════════════════════════════════ */
+const RU = (n) => n.toLocaleString('ru-RU');
+$('#sTris').textContent = RU(report.triangles);
+$('#sMesh').textContent = RU(report.meshes);
+$('#sMat').textContent  = RU(report.materials);
+$('#sBox').textContent  = report.sizeMM
+  ? [report.sizeMM.z, report.sizeMM.y, report.sizeMM.x].map((v) => Math.round(v)).join(' × ') + ' мм'
+  : '—';
+/* САМОПРОВЕРКА. Главное утверждение всего прицела: если барабанчик стоит
+   на дальности D, то пуля на дальности D обязана прийти точно в линию прицеливания.
+   Стреляем всеми десятью установками тем же интегратором, что и в игре. */
+const selfTest = (function () {
+  let worst = 0, worstD = 0;
+  for (let d = 1; d <= 10; d++) {
+    const D = d * 100;
+    const a = ball.zeroAngle(D, BALL_HS, BALL_FWD);
+    const o = { x: 0, y: -BALL_HS, z: -BALL_FWD };            // дульный срез
+    const dir = { x: 0, y: Math.sin(a), z: -Math.cos(a) };    // ось ствола
+    const plane = function (p0, p1, t0, t1) {
+      if (p1.z > -D) return null;
+      const f = (p0.z + D) / (p0.z - p1.z);
+      return {
+        point: { x: p0.x + (p1.x - p0.x) * f, y: p0.y + (p1.y - p0.y) * f, z: -D },
+        time: t0 + (t1 - t0) * f
+      };
+    };
+    const r = ball.shoot(o, dir, { x: 0, y: 0, z: 0 }, plane, D + 20, 6);
+    const err = r.hit ? Math.abs(r.hit.point.y) * 100 : 1e3;  // промах по высоте, см
+    if (err > worst) { worst = err; worstD = D; }
+  }
+  return { worst: worst, at: worstD, mag: SCOPE_APP_DEG / SCOPE_FOV_DEG };
+})();
+
+const chk = $('#check');
+{
+  const C = (ok, t) => '<span style="color:var(' + (ok ? '--ok' : '--err') + ')">' + (ok ? '✓ ' : '✗ ') + t + '</span>';
+  const num = (v, k) => v.toFixed(k).replace('.', ',');
+  const bOK = selfTest.worst < 2, mOK = Math.abs(selfTest.mag - SCOPE_MAG) < 0.02;
+  chk.className = '';
+  chk.innerHTML = [
+    report.ok
+      ? C(true, 'LOD 0 — единственный уровень детализации · узлов: ' + report.nodes + ' · подвижных деталей: ' + report.parts)
+      : C(false, 'не собрано: ' + report.missing.join(', ')),
+    C(bOK, 'баллистика: ТП = ТПоп на 100…1000 м, макс. расхождение ' + num(selfTest.worst, 2) + ' см'),
+    C(mOK, 'оптика: увеличение ' + num(selfTest.mag, 2) + '× · поле ' + num(SCOPE_FOV_DEG, 1) + '° = '
+      + Math.round(SCOPE_FOV_MIL) + ' мил · выходной зрачок ⌀' + num(EXIT_PUPIL_R * 2000, 1)
+      + ' мм на ' + Math.round(EYE_RELIEF * 1000) + ' мм')
+  ].join('<br>');
+  console.log('[ПСО-1] самопроверка:', {
+    расхождение_см: +selfTest.worst.toFixed(3),
+    худшая_дальность_м: selfTest.at,
+    увеличение: +selfTest.mag.toFixed(3)
+  });
+}
+
+/* ══ ЦИКЛ ══════════════════════════════════════════════════════ */
+let lastT = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  updateSim(dt);
+  renderFrame();
+
+  frames++; fpsClock += dt; statClock += dt;
+  if (fpsClock > 0.5) { fps = frames / fpsClock; frames = 0; fpsClock = 0; }
+  if (statClock > 0.5) {
+    statClock = 0;
+    $('#sFps').textContent = fps.toFixed(0);
+    $('#sCalls').textContent = RU(renderer.info.render.calls);
+  }
+}
+
+function onResize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camFar.aspect = w / h; camFar.updateProjectionMatrix();
+  camNear.aspect = w / h; camNear.updateProjectionMatrix();
+  renderer.shadowMap.needsUpdate = true;
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
+
+/* ══ СТАРТ ════════════════════════════════════════════════════ */
+['#topbar', '#tools', '#stats', '#hint', '#panelToggle'].forEach((s) => {
+  const n = $(s); if (n) n.removeAttribute('hidden');
+});
+model.setElevationDial(S.dial);
+model.setWindageDial(S.wind);
+setMode('inspect');
+syncUI();
+onResize();
+renderer.shadowMap.needsUpdate = true;
+updateSim(0.016);
+renderFrame();
+
+const loaderEl = $('#loader');
+if (loaderEl) {
+  loaderEl.classList.add('hide');
+  loaderEl.style.opacity = '0';
+  loaderEl.style.pointerEvents = 'none';
+  setTimeout(() => { loaderEl.style.display = 'none'; }, 650);
+}
+window.__viewerReady = true;
+requestAnimationFrame(tick);
+
+/* публичный API для встраивания в игру */
+window.PSO1 = {
+  THREE, scene, renderer, model, nodes, range, ball,
+  cameras: { world: camFar, weapon: camNear, optic: camScope },
+  scopeMaterial: ocMat,
+  renderTarget: rtScope,
+  state: S,
+  setMode, setADS, setDial, setWind, setIllum, fire, reload, rangeFind,
+  report
+};
+/*==VIEWER:END==*/
+</script>
+</body>
+</html>

@@ -1,0 +1,3040 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>M84 — светошумовая граната · боевое применение</title>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.166.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.166.1/examples/jsm/"}}
+</script>
+<style>
+  :root{
+    --bg:#0e1013;
+    --panel:rgba(17,19,23,.78);
+    --brd:rgba(255,255,255,.13);
+    --txt:#eef1f5;
+    --dim:rgba(238,241,245,.56);
+    --dim2:rgba(238,241,245,.34);
+    --red:#e0503f;
+    --redh:#ef6250;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none !important}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  canvas{display:block}
+
+  /* Загрузчик */
+  #loader{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px;background:var(--bg);text-align:center;padding:32px}
+  #loader .spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.14);
+    border-top-color:var(--red);animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){#loader .spin{animation-duration:3s}}
+  #loader .t{font-size:17px;line-height:1.5;font-weight:600}
+  #loader .s{font-size:14px;line-height:1.65;color:var(--dim);max-width:560px}
+  #loader code{font-family:var(--mono);font-size:12.5px;color:var(--txt);word-break:break-all}
+  #loader.err .spin{display:none}
+  #loader.err .t{color:var(--red)}
+
+  /* Виньетка и вспышка */
+  #vig{position:fixed;inset:0;z-index:10;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 42%,rgba(0,0,0,0) 42%,rgba(0,0,0,.55) 100%)}
+  #veil{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;background:#fff;will-change:opacity}
+  /* Остаточный образ на сетчатке после вспышки */
+  #ghost{position:fixed;inset:0;z-index:49;pointer-events:none;opacity:0;mix-blend-mode:screen;
+    background:radial-gradient(ellipse 40% 30% at 50% 50%,
+      rgba(70,225,255,.55) 0%, rgba(40,120,255,.24) 45%, rgba(0,0,0,0) 74%);
+    will-change:opacity}
+
+  /* Шапка */
+  #tag{position:fixed;z-index:20;top:18px;left:18px;padding:9px 13px;border-radius:10px;
+    background:var(--panel);border:1px solid var(--brd);backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px)}
+  #tag b{display:block;font-size:13px;font-weight:600;letter-spacing:.02em}
+  #tag i{display:block;margin-top:3px;font-style:normal;font-family:var(--mono);font-size:11px;color:var(--dim2)}
+
+  /* Звук */
+  #snd{position:fixed;z-index:20;top:18px;right:18px;width:44px;height:44px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--txt);
+    background:var(--panel);border:1px solid var(--brd);backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);transition:background .12s,border-color .12s}
+  #snd:hover{background:rgba(255,255,255,.13)}
+  #snd:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+  #snd.off{color:var(--dim2)}
+  #snd svg{width:20px;height:20px;display:block}
+
+  /* Нижняя панель управления */
+  #hud{position:fixed;z-index:20;left:50%;bottom:26px;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:12px;width:min(420px,calc(100vw - 32px))}
+  #st{display:flex;align-items:center;gap:9px;padding:7px 13px;border-radius:999px;
+    background:var(--panel);border:1px solid var(--brd);backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);font-family:var(--mono);font-size:12px;color:var(--dim);
+    white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  #dot{width:7px;height:7px;border-radius:50%;background:#72bc8f;flex:0 0 auto;
+    box-shadow:0 0 0 3px rgba(114,188,143,.16)}
+  #dot.warn{background:#e8b45c;box-shadow:0 0 0 3px rgba(232,180,92,.18)}
+  #dot.hot{background:var(--red);box-shadow:0 0 0 3px rgba(224,80,63,.20)}
+  #dot.cold{background:#7d8189;box-shadow:0 0 0 3px rgba(125,129,137,.14)}
+
+  #go{font:inherit;font-size:15px;font-weight:650;letter-spacing:.14em;text-transform:uppercase;
+    color:#fff;background:var(--red);border:1px solid rgba(255,255,255,.18);border-radius:11px;
+    min-height:54px;padding:0 40px;cursor:pointer;
+    box-shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(224,80,63,.26);
+    transition:background .12s,transform .08s,box-shadow .12s}
+  #go:hover:not(:disabled){background:var(--redh)}
+  #go:active:not(:disabled){transform:translateY(1px)}
+  #go:focus-visible{outline:2px solid #fff;outline-offset:3px}
+  #go:disabled{background:rgba(255,255,255,.07);color:var(--dim2);cursor:default;
+    border-color:var(--brd);box-shadow:none}
+  #go.reset{background:rgba(255,255,255,.08);color:var(--txt);border-color:var(--brd);
+    box-shadow:0 1px 2px rgba(0,0,0,.35)}
+  #go.reset:hover{background:rgba(255,255,255,.15)}
+
+  #hint{position:fixed;z-index:20;left:18px;bottom:22px;max-width:min(44ch,38vw);line-height:1.55;font-family:var(--mono);font-size:11.5px;
+    color:var(--dim2);line-height:1.6;pointer-events:none}
+
+  @media (max-width:760px){
+    #tag{top:14px;left:14px;padding:8px 11px}
+    #tag i{display:none}
+    #snd{top:14px;right:14px}
+    #hint{display:none}
+    #hud{bottom:20px;gap:10px}
+    #go{font-size:14px;padding:0 28px;min-height:52px;width:100%}
+  }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="spin"></div>
+  <div class="t">Загрузка three.js…</div>
+  <div class="s">Модуль тянется с unpkg.com. Интернет нужен только при первом запуске — дальше файл работает из кэша браузера.</div>
+</div>
+
+<div id="vig"></div>
+<div id="veil"></div>
+<div id="ghost"></div>
+
+<div id="tag" hidden>
+  <b>M84 · светошумовая граната</b>
+  <i>замедлитель 1,5 с · 7 млн кд · 175 дБ</i>
+</div>
+
+<button id="snd" hidden aria-label="Звук: включён" title="Звук">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M4 9.5h3.2L12 5.5v13L7.2 14.5H4z"/>
+    <path id="w1" d="M15.6 9.2a4 4 0 0 1 0 5.6"/>
+    <path id="w2" d="M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/>
+    <path id="wx" d="M16.5 9.5l5 5m0-5l-5 5" hidden/>
+  </svg>
+</button>
+
+<div id="hud" hidden>
+  <div id="st"><i id="dot"></i><span id="stt">Готова · чека на месте</span></div>
+  <button id="go">Выдернуть чеку</button>
+</div>
+
+<div id="hint" hidden>Потяни кольцо мышью · Space — действие · R — сброс</div>
+
+<script type="module">
+let THREE, OrbitControls, RoomEnvironment = null;
+try {
+  THREE = await import('three');
+  ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  try { ({ RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js')); }
+  catch (e) { RoomEnvironment = null; }
+} catch (e) {
+  const l = document.getElementById('loader');
+  l.classList.add('err');
+  l.querySelector('.t').textContent = 'Не удалось загрузить three.js с CDN';
+  l.querySelector('.s').innerHTML =
+    'Проверьте интернет и откройте файл ещё раз. После первой успешной загрузки модуль останется в кэше браузера и файл будет работать офлайн.<br><br>' +
+    'Если сеть в порядке — возможно, заблокирован <code>unpkg.com</code>.<br><br><code>' +
+    String(e && e.message ? e.message : e).replace(/[<>&]/g, '') + '</code>';
+  throw e;
+}
+
+/* ============================================================================
+   МОДЕЛЬ M84 — единственное качество (бывший LOD0, сегментация поднята).
+   ЕДИНИЦЫ: метры, mm(x) = x/1000. Цифры в комментариях — реальные миллиметры.
+   ОСИ: +Y вверх (запал сверху), +X — сторона скобы.
+   ORIGIN: геометрический центр стального корпуса.
+============================================================================ */
+function buildFlashbang(THREE, opts = {}) {
+  const mm = (x) => x / 1000;
+  const TAU = Math.PI * 2;
+
+  const o = Object.assign({ holes: true, wear: true }, opts);
+
+  // Максимальное качество: LOD-ветки убраны, сегментация повышена.
+  const SEG_BODY  = 48;  // радиальных сегментов на корпус
+  const SEG_SMALL = 24;  // запал, ударник
+  const SEG_TUBE  = 10;  // сечение прутка чеки и кольца
+  const SEG_RING  = 32;  // кольцо по окружности
+  const HOLE_SUB  = 6;   // подпоясов на отверстие (круглость окна)
+  const HOLES_ON  = !!o.holes;
+  const WEAR_ON   = !!o.wear;
+
+  const group = new THREE.Group();
+  group.name = 'M84_Flashbang';
+
+  /* ============ МАТЕРИАЛЫ ============ */
+  const steelDark = new THREE.MeshStandardMaterial({ name: 'steelDark', color: 0x35383c, metalness: 0.70, roughness: 0.52 });
+  const chargeMat = new THREE.MeshStandardMaterial({ name: 'charge',    color: 0x141517, metalness: 0.15, roughness: 0.90 });
+  const steel     = new THREE.MeshStandardMaterial({ name: 'steel',     color: 0x6a6d72, metalness: 0.85, roughness: 0.32 });
+  const wearMat   = new THREE.MeshStandardMaterial({ name: 'wear',      color: 0x8f949b, metalness: 0.94, roughness: 0.20 });
+  const materials = [steelDark, chargeMat, steel, wearMat];
+
+  /* ============ УТИЛИТЫ ============ */
+  function flipGeo(g) {
+    const idx = g.index;
+    if (idx) { const a = idx.array; for (let i = 0; i < a.length; i += 3) { const t = a[i]; a[i] = a[i + 2]; a[i + 2] = t; } idx.needsUpdate = true; }
+    const n = g.attributes.normal;
+    if (n) { const a = n.array; for (let i = 0; i < a.length; i++) a[i] = -a[i]; n.needsUpdate = true; }
+    return g;
+  }
+
+  function mergeGeos(list) {
+    list = list.filter(Boolean);
+    if (list.length === 1) return list[0];
+    let verts = 0, inds = 0;
+    for (const g of list) {
+      verts += g.attributes.position.count;
+      inds  += g.index ? g.index.count : g.attributes.position.count;
+    }
+    const pos = new Float32Array(verts * 3);
+    const nrm = new Float32Array(verts * 3);
+    const idx = new Uint32Array(inds);
+    let vo = 0, io = 0;
+    for (const g of list) {
+      pos.set(g.attributes.position.array, vo * 3);
+      if (g.attributes.normal) nrm.set(g.attributes.normal.array, vo * 3);
+      if (g.index) {
+        const gi = g.index.array;
+        for (let i = 0; i < gi.length; i++) idx[io + i] = gi[i] + vo;
+        io += gi.length;
+      } else {
+        const c = g.attributes.position.count;
+        for (let i = 0; i < c; i++) idx[io + i] = i + vo;
+        io += c;
+      }
+      vo += g.attributes.position.count;
+      g.dispose();
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    out.setIndex(new THREE.BufferAttribute(idx, 1));
+    return out;
+  }
+
+  const lathe = (pts, seg) => new THREE.LatheGeometry(pts.map((p) => new THREE.Vector2(p[0], p[1])), seg);
+  const at = (g, x, y, z, rz) => { if (rz) g.rotateZ(rz); g.translate(x || 0, y || 0, z || 0); return g; };
+  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+
+  /* ============ ГЕОМЕТРИЯ КОРПУСА ============ */
+  const R_OUT    = mm(22.5);   // наружный радиус Ø45
+  const R_IN     = mm(20.5);   // внутренний радиус, стенка 2.0
+  const H_BODY   = mm(133);    // высота корпуса
+  const HY       = H_BODY / 2; // 66.5
+  const R_FILLET = mm(4);      // скругление торцов
+  const HOLE_R   = mm(4);      // отверстие Ø8
+  const N_HOLES  = 6;          // на пояс
+  const BELT_HI  = mm(33.25);  // верхний пояс отверстий
+  const BELT_LO  = mm(-33.25); // нижний пояс отверстий
+  const FY       = HY;         // уровень посадки запала
+
+  const dys = [];
+  for (let k = 0; k <= HOLE_SUB; k++) dys.push(-HOLE_R + (2 * HOLE_R * k) / HOLE_SUB);
+  const halfAngs = [];
+  for (let k = 0; k < HOLE_SUB; k++) {
+    const mid = (dys[k] + dys[k + 1]) / 2;
+    const w = Math.sqrt(Math.max(0, HOLE_R * HOLE_R - mid * mid));
+    halfAngs.push(Math.asin(Math.min(0.985, w / R_OUT)));
+  }
+
+  function sideWall(a, y0, y1, flip) {
+    const s = Math.sin(a), c = Math.cos(a);
+    const p = new Float32Array([
+      R_IN * s,  y0, R_IN * c,
+      R_OUT * s, y0, R_OUT * c,
+      R_OUT * s, y1, R_OUT * c,
+      R_IN * s,  y1, R_IN * c,
+    ]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    g.setIndex(flip ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3]);
+    g.computeVertexNormals();
+    return g;
+  }
+
+  function ledge(center, y, from, to, up) {
+    const a0 = Math.min(from, to), len = Math.abs(to - from);
+    if (len < 1e-5) return null;
+    const seg = Math.max(2, Math.min(8, Math.round(len / 0.04)));
+    const g = new THREE.RingGeometry(R_IN, R_OUT, seg, 1, a0, len);
+    g.rotateX(-Math.PI / 2);
+    g.rotateY(center - Math.PI / 2);
+    g.translate(0, y, 0);
+    if (!up) flipGeo(g);
+    return g;
+  }
+
+  function solidBand(y0, y1) {
+    if (y1 - y0 < 1e-6) return null;
+    const g = new THREE.CylinderGeometry(R_OUT, R_OUT, y1 - y0, SEG_BODY, 1, true);
+    g.translate(0, (y0 + y1) / 2, 0);
+    return g;
+  }
+
+  function holeBelt(beltY, out) {
+    const step = TAU / N_HOLES;
+    for (let k = 0; k < HOLE_SUB; k++) {
+      const y0 = beltY + dys[k], y1 = beltY + dys[k + 1];
+      const ha = halfAngs[k];
+      const span = step - 2 * ha;
+      const segs = Math.max(3, Math.round((SEG_BODY * span) / TAU));
+      for (let i = 0; i < N_HOLES; i++) {
+        const c = i * step;
+        const a0 = c + ha, a1 = c + step - ha;
+        const arc = new THREE.CylinderGeometry(R_OUT, R_OUT, y1 - y0, segs, 1, true, a0, span);
+        arc.translate(0, (y0 + y1) / 2, 0);
+        out.push(arc);
+        out.push(sideWall(a0, y0, y1, false));
+        out.push(sideWall(a1, y0, y1, true));
+      }
+    }
+    for (let i = 0; i < N_HOLES; i++) {
+      const c = i * step;
+      for (let k = 0; k <= HOLE_SUB; k++) {
+        const y = beltY + dys[k];
+        const hp = k > 0 ? halfAngs[k - 1] : null;
+        const hn = k < HOLE_SUB ? halfAngs[k] : null;
+        if (hp === null) { out.push(ledge(c, y, -hn, hn, true)); continue; }
+        if (hn === null) { out.push(ledge(c, y, -hp, hp, false)); continue; }
+        if (Math.abs(hn - hp) < 1e-5) continue;
+        const up = hn > hp;
+        out.push(ledge(c, y, hp, hn, up));
+        out.push(ledge(c, y, -hn, -hp, up));
+      }
+    }
+  }
+
+  const shell = [];
+  if (HOLES_ON) {
+    shell.push(solidBand(-HY + R_FILLET, BELT_LO - HOLE_R));
+    holeBelt(BELT_LO, shell);
+    shell.push(solidBand(BELT_LO + HOLE_R, BELT_HI - HOLE_R));
+    holeBelt(BELT_HI, shell);
+    shell.push(solidBand(BELT_HI + HOLE_R, HY - R_FILLET));
+  } else {
+    shell.push(solidBand(-HY + R_FILLET, HY - R_FILLET));
+  }
+
+  /* ---- Крышки с проточками ---- */
+  const fMid = R_FILLET * Math.SQRT1_2;
+
+  const topProfile = [
+    [R_IN,             HY - mm(7)],
+    [mm(11),           HY - mm(7)],
+    [mm(11),           HY],
+    [mm(15.5),         HY],
+    [mm(15.5),         HY - mm(1.6)],
+    [mm(18),           HY - mm(1.6)],
+    [mm(18),           HY],
+    [R_OUT - R_FILLET, HY],
+    [R_OUT - R_FILLET + fMid, HY - R_FILLET + fMid],
+    [R_OUT,            HY - R_FILLET],
+    [R_OUT,            HY - mm(6)],
+  ];
+
+  const botProfile = [
+    [R_OUT,            -HY + mm(6)],
+    [R_OUT,            -HY + R_FILLET],
+    [R_OUT - R_FILLET + fMid, -HY + R_FILLET - fMid],
+    [R_OUT - R_FILLET, -HY],
+    [mm(17),           -HY],
+    [mm(17),           -HY + mm(1.6)],
+    [mm(14),           -HY + mm(1.6)],
+    [mm(14),           -HY],
+    [0,                -HY],
+  ];
+
+  shell.push(lathe(topProfile, SEG_BODY));
+  shell.push(lathe(botProfile, SEG_BODY));
+
+  /* ---- Запал M201A1: корпус Ø22 × 28 + рифление + проушина ---- */
+  const F_R = mm(11), F_H = mm(28);
+  {
+    const t = new THREE.CylinderGeometry(F_R, F_R, F_H, SEG_SMALL, 1, false);
+    t.translate(0, FY + F_H / 2, 0);                 // y 66.5 → 94.5
+    shell.push(t);
+
+    const NR = 20;                                    // рифление под ключ
+    for (let i = 0; i < NR; i++) {
+      const a = (i / NR) * TAU;
+      const r = box(mm(1.5), mm(14), mm(2.2));
+      r.translate(0, 0, F_R - mm(0.4));
+      r.rotateY(a);
+      r.translate(0, FY + mm(11), 0);
+      shell.push(r);
+    }
+
+    // Проушина: ось скобы (y 93) и отверстие под чеку (y 86)
+    shell.push(at(box(mm(4.5), mm(20), mm(18)), mm(12), mm(89.5), 0));
+  }
+
+  const bodyGeo = mergeGeos(shell);
+  bodyGeo.computeBoundingBox();
+  const bodyMesh = new THREE.Mesh(bodyGeo, steelDark);
+  bodyMesh.name = 'body_shell';
+  bodyMesh.castShadow = bodyMesh.receiveShadow = true;
+
+  /* ---- Пиротехнический заряд Ø34 + тёмная полость Ø40.2 ---- */
+  const chargeParts = [new THREE.CylinderGeometry(mm(17), mm(17), mm(112), SEG_BODY, 1, false)];
+  if (HOLES_ON) {
+    const cav = new THREE.CylinderGeometry(R_IN - mm(0.4), R_IN - mm(0.4), mm(119), SEG_BODY, 1, true);
+    chargeParts.push(flipGeo(cav));
+  }
+  const chargeGeo = mergeGeos(chargeParts);
+  const chargeMesh = new THREE.Mesh(chargeGeo, chargeMat);
+  chargeMesh.name = 'charge_core';
+  chargeMesh.castShadow = false;      // не перекрывает свет вспышки изнутри
+  chargeMesh.receiveShadow = true;
+
+  /* ---- Потёртости по кромкам ---- */
+  let wearMesh = null;
+  if (WEAR_ON) {
+    const K = 1.006;
+    const arc = (sign) => {
+      const pts = [];
+      for (let i = 0; i <= 3; i++) {
+        const t = (i / 3) * (Math.PI / 2);
+        pts.push([
+          (R_OUT - R_FILLET) + Math.sin(t) * R_FILLET * K,
+          sign * ((HY - R_FILLET) + Math.cos(t) * R_FILLET * K),
+        ]);
+      }
+      return lathe(pts, SEG_BODY);
+    };
+    const wg = mergeGeos([arc(1), arc(-1)]);
+    wearMesh = new THREE.Mesh(wg, wearMat);
+    wearMesh.name = 'body_wear';
+    wearMesh.castShadow = wearMesh.receiveShadow = true;
+  }
+
+  /* ---- Ударник: отдельная деталь, чтобы срабатывал при сходе скобы ---- */
+  const strikerGroup = new THREE.Group();
+  strikerGroup.name = 'striker_group';
+  strikerGroup.position.set(0, FY + F_H + mm(2), 0);   // y 96.5
+  {
+    const p = [];
+    p.push(new THREE.CylinderGeometry(mm(6.5), mm(6.5), mm(4), SEG_SMALL, 1, false));
+    const stem = new THREE.CylinderGeometry(mm(2.6), mm(2.6), mm(7), SEG_SMALL, 1, false);
+    stem.translate(0, -mm(5), 0);
+    p.push(stem);
+    const sm = new THREE.Mesh(mergeGeos(p), steel);
+    sm.name = 'striker';
+    sm.castShadow = sm.receiveShadow = true;
+    strikerGroup.add(sm);
+  }
+
+  /* ---- Скоба (spoon): ось в (12, 93) ---- */
+  const spoonPivot = new THREE.Group();
+  spoonPivot.name = 'spoon_pivot';
+  spoonPivot.position.set(mm(12), mm(93), 0);
+  {
+    const p = [];
+    p.push(box(mm(7), mm(7), mm(18)));                                    // бобышка шарнира
+    p.push(at(box(mm(22), mm(2.2), mm(16)), mm(-10), mm(7.5), 0));        // крюк над ударником
+    p.push(at(box(mm(5), mm(9), mm(16)), mm(0.5), mm(4), 0));             // стойка к крюку
+    p.push(at(box(mm(13), mm(2.4), mm(16)), mm(6), mm(2.5), 0));          // плечо к полотну
+    p.push(at(box(mm(2.4), mm(80), mm(16)), mm(11.5), mm(-37), 0));       // полотно 80 мм
+    p.push(at(box(mm(5), mm(70), mm(2.4)), mm(14.3), mm(-37), 0));        // ребро жёсткости
+    p.push(at(box(mm(4), mm(74), mm(1.6)), mm(13.6), mm(-37), mm(7.2)));  // отбортовка +Z
+    p.push(at(box(mm(4), mm(74), mm(1.6)), mm(13.6), mm(-37), mm(-7.2))); // отбортовка −Z
+    p.push(at(box(mm(7), mm(2.4), mm(16)), mm(9.6), mm(-78.5), 0, -0.5)); // отогнутый носок
+    const sm = new THREE.Mesh(mergeGeos(p), steel);
+    sm.name = 'spoon_lever';
+    sm.castShadow = sm.receiveShadow = true;
+    spoonPivot.add(sm);
+  }
+
+  /* ---- Чека (pin): пруток Ø3 вдоль Z + два отогнутых усика ---- */
+  const pinGroup = new THREE.Group();
+  pinGroup.name = 'pin_group';
+  pinGroup.position.set(0, mm(86), 0);
+  {
+    const p = [];
+    const sh = new THREE.CylinderGeometry(mm(1.5), mm(1.5), mm(34), SEG_TUBE, 1, false);
+    sh.rotateX(Math.PI / 2);
+    sh.translate(mm(12), 0, mm(2));
+    p.push(sh);
+    const t1 = new THREE.CylinderGeometry(mm(1.3), mm(1.3), mm(11), SEG_TUBE, 1, false);
+    t1.rotateZ(Math.PI / 2);
+    t1.translate(mm(16.5), mm(1.6), mm(-14));
+    p.push(t1);
+    const t2 = new THREE.CylinderGeometry(mm(1.3), mm(1.3), mm(11), SEG_TUBE, 1, false);
+    t2.rotateZ(Math.PI / 2);
+    t2.translate(mm(16.5), mm(-1.6), mm(-14));
+    p.push(t2);
+    const pm = new THREE.Mesh(mergeGeos(p), steel);
+    pm.name = 'pin_shaft';
+    pm.castShadow = pm.receiveShadow = true;
+    pinGroup.add(pm);
+  }
+
+  /* ---- Кольцо (ring) Ø25 на торце чеки ---- */
+  const ringGroup = new THREE.Group();
+  ringGroup.name = 'ring_group';
+  ringGroup.position.set(mm(12), 0, mm(19));
+  {
+    const tg = new THREE.TorusGeometry(mm(12.5), mm(1.3), SEG_TUBE, SEG_RING);
+    tg.rotateY(Math.PI / 2);
+    tg.translate(0, 0, mm(12.5));
+    const rm = new THREE.Mesh(tg, steel);
+    rm.name = 'pull_ring';
+    rm.castShadow = rm.receiveShadow = true;
+    ringGroup.add(rm);
+  }
+  pinGroup.add(ringGroup);
+
+  /* ============ СБОРКА ============ */
+  const bodyGroup = new THREE.Group();
+  bodyGroup.name = 'body_group';
+  bodyGroup.add(bodyMesh, chargeMesh);
+  if (wearMesh) bodyGroup.add(wearMesh);
+  bodyGroup.add(strikerGroup, spoonPivot, pinGroup);
+  group.add(bodyGroup);
+
+  /* ============ ТОЧКИ ВЫХОДА СВЕТА И ГАЗОВ ============ */
+  // Окна центрированы по углам i·60° (x = R·sin a, z = R·cos a).
+  const ports = [];
+  for (const beltY of [BELT_LO, BELT_HI]) {
+    for (let i = 0; i < N_HOLES; i++) {
+      const a = (i / N_HOLES) * TAU;
+      ports.push({
+        pos: new THREE.Vector3(R_OUT * Math.sin(a), beltY, R_OUT * Math.cos(a)),
+        dir: new THREE.Vector3(Math.sin(a), 0, Math.cos(a)),
+      });
+    }
+  }
+
+  group.ports = ports;
+  group.parts = { body: bodyGroup, spoon: spoonPivot, pin: pinGroup, ring: ringGroup, striker: strikerGroup };
+  group.mats = { steelDark, chargeMat, steel, wearMat };
+  group.userData.units = 'meters';
+  group.userData.dims = { R: R_OUT, H: HY, fuseTop: mm(98.5), beltHi: BELT_HI, beltLo: BELT_LO };
+
+  // Свечение снаряжения: видно сквозь окна корпуса.
+  group.setGlow = (t) => {
+    const k = Math.max(0, t);
+    chargeMat.emissive.setRGB(1, 0.96 - 0.25 * Math.min(1, k * 0.35), 0.86 - 0.5 * Math.min(1, k * 0.5));
+    chargeMat.emissiveIntensity = k;
+  };
+  group.setGlow(0);
+
+  group.dispose = () => {
+    group.traverse((c) => { if (c.isMesh && c.geometry) c.geometry.dispose(); });
+    materials.forEach((m) => m.dispose());
+  };
+
+  return group;
+}
+
+/* ============================================================================
+   СЦЕНА
+============================================================================ */
+const $ = (id) => document.getElementById(id);
+const MM = (x) => x / 1000;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const EXPO_BASE = 1.08;
+renderer.toneMappingExposure = EXPO_BASE;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+/* Фон — вертикальный градиент на canvas, без внешних ассетов */
+{
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 256;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#1a1e24');
+  gr.addColorStop(0.55, '#121519');
+  gr.addColorStop(1, '#0a0b0d');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  scene.background = tex;
+}
+scene.fog = new THREE.Fog(0x0e1013, 0.55, 1.9);
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.002, 40);
+camera.position.set(0.26, 0.17, 0.30);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+/* ---- Свет ---- */
+const key = new THREE.DirectionalLight(0xfff2e2, 2.6);
+key.position.set(0.42, 0.62, 0.46);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0008;
+{
+  const c = key.shadow.camera;
+  c.left = -0.3; c.right = 0.3; c.top = 0.3; c.bottom = -0.3;
+  c.near = 0.05; c.far = 3; c.updateProjectionMatrix();
+}
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0x9fc4ff, 0.5);
+fill.position.set(-0.55, 0.18, 0.30);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xcfe2ff, 1.4);
+rim.position.set(-0.18, 0.32, -0.62);
+scene.add(rim);
+
+const hemi = new THREE.HemisphereLight(0x9fb4c8, 0x0d0f12, 0.5);
+scene.add(hemi);
+
+/* Отражения в металле */
+if (RoomEnvironment) {
+  try {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+  } catch (e) { /* без окружения тоже нормально */ }
+}
+
+/* ---- Пол: только тень + мягкое световое пятно ---- */
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), new THREE.ShadowMaterial({ opacity: 0.44 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+function radialTex(size, stops) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (const [p, col] of stops) gr.addColorStop(p, col);
+  g.fillStyle = gr;
+  g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Световое пятно под гранатой — чтобы модель не висела в пустоте
+{
+  const tex = radialTex(256, [[0, 'rgba(120,138,164,0.30)'], [0.45, 'rgba(90,104,124,0.13)'], [1, 'rgba(0,0,0,0)']]);
+  const pool = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.9, 0.9),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: true })
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.0004;
+  pool.renderOrder = -1;
+  scene.add(pool);
+}
+
+/* Копоть после подрыва */
+const scorchTex = (() => {
+  const s = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  gr.addColorStop(0, 'rgba(12,12,13,0.95)');
+  gr.addColorStop(0.35, 'rgba(16,16,18,0.72)');
+  gr.addColorStop(0.72, 'rgba(20,20,22,0.26)');
+  gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, s, s);
+  // рваные края
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 130; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = (0.30 + Math.random() * 0.24) * s;
+    const rr = (0.03 + Math.random() * 0.09) * s;
+    g.beginPath();
+    g.arc(s / 2 + Math.cos(a) * r, s / 2 + Math.sin(a) * r, rr, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(0,0,0,' + (0.25 + Math.random() * 0.5) + ')';
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+const scorch = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.42, 0.42),
+  new THREE.MeshBasicMaterial({ map: scorchTex, transparent: true, opacity: 0, depthWrite: false, fog: true })
+);
+scorch.rotation.x = -Math.PI / 2;
+scorch.position.y = 0.0008;
+scorch.visible = false;
+scene.add(scorch);
+
+/* ============================================================================
+   ГРАНАТА В СЦЕНЕ: yaw → rig (физика) → model
+============================================================================ */
+const yaw = new THREE.Group();
+scene.add(yaw);
+const rig = new THREE.Group();
+yaw.add(rig);
+
+const model = buildFlashbang(THREE);
+rig.add(model);
+
+const DIM = model.userData.dims;
+const REST_UP = DIM.H;      // центр корпуса, когда граната стоит
+rig.position.set(0, REST_UP, 0);
+
+const P = model.parts;
+const BASE = {
+  pin:     { pos: P.pin.position.clone(),     rot: P.pin.rotation.clone() },
+  spoon:   { pos: P.spoon.position.clone(),   rot: P.spoon.rotation.clone() },
+  ring:    { pos: P.ring.position.clone(),    rot: P.ring.rotation.clone() },
+  striker: { pos: P.striker.position.clone(), rot: P.striker.rotation.clone() },
+};
+
+/* ---- Свет подрыва: точечный источник внутри корпуса, с тенями,
+       поэтому лучи реально бьют сквозь окна перфорации ---- */
+const blast = new THREE.PointLight(0xffffff, 0, 9, 2);
+blast.castShadow = true;
+blast.shadow.mapSize.set(512, 512);
+blast.shadow.camera.near = 0.004;
+blast.shadow.camera.far = 4;
+blast.shadow.bias = -0.002;
+blast.shadow.normalBias = 0.0015;
+blast.visible = false;
+P.body.add(blast);
+
+// Догорание состава — тёплый свет после вспышки
+const afterLight = new THREE.PointLight(0xffb267, 0, 1.6, 2);
+afterLight.visible = false;
+P.body.add(afterLight);
+
+/* ============================================================================
+   ЭФФЕКТЫ
+============================================================================ */
+const glowTex = radialTex(128, [
+  [0, 'rgba(255,255,255,1)'], [0.18, 'rgba(255,252,240,0.92)'],
+  [0.45, 'rgba(255,214,150,0.32)'], [1, 'rgba(255,170,90,0)'],
+]);
+const sparkTex = radialTex(64, [
+  [0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,236,190,0.75)'], [1, 'rgba(255,150,60,0)'],
+]);
+
+function smokeTex(seed) {
+  const s = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  let r = seed * 9301 + 49297;
+  const rr = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+  for (let i = 0; i < 26; i++) {
+    const a = rr() * Math.PI * 2;
+    const d = Math.pow(rr(), 0.7) * 0.30 * s;
+    const x = s / 2 + Math.cos(a) * d, y = s / 2 + Math.sin(a) * d;
+    const rad = (0.12 + rr() * 0.24) * s;
+    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+    const al = 0.10 + rr() * 0.16;
+    gr.addColorStop(0, 'rgba(255,255,255,' + al + ')');
+    gr.addColorStop(0.55, 'rgba(255,255,255,' + al * 0.42 + ')');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(x, y, rad, 0, Math.PI * 2); g.fill();
+  }
+  // мягкая маска, чтобы не было квадратных краёв
+  g.globalCompositeOperation = 'destination-in';
+  const m = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  m.addColorStop(0, 'rgba(0,0,0,1)');
+  m.addColorStop(0.62, 'rgba(0,0,0,0.9)');
+  m.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = m;
+  g.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const smokeTexs = [smokeTex(3), smokeTex(17), smokeTex(41)];
+
+/* ---- Искры и угольки: один Points со своим шейдером ---- */
+const SPARK_MAX = 1500;
+const sparkGeo = new THREE.BufferGeometry();
+const sPos = new Float32Array(SPARK_MAX * 3);
+const sSize = new Float32Array(SPARK_MAX);
+const sCol = new Float32Array(SPARK_MAX * 4);
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3).setUsage(THREE.DynamicDrawUsage));
+sparkGeo.setAttribute('aSize', new THREE.BufferAttribute(sSize, 1).setUsage(THREE.DynamicDrawUsage));
+sparkGeo.setAttribute('aCol', new THREE.BufferAttribute(sCol, 4).setUsage(THREE.DynamicDrawUsage));
+sparkGeo.setDrawRange(0, 0);
+
+const sparkMat = new THREE.ShaderMaterial({
+  uniforms: { uTex: { value: sparkTex }, uPix: { value: 800 } },
+  vertexShader: [
+    'attribute float aSize;',
+    'attribute vec4 aCol;',
+    'varying vec4 vCol;',
+    'uniform float uPix;',
+    'void main(){',
+    '  vCol = aCol;',
+    '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+    '  gl_PointSize = clamp(aSize * uPix / max(0.001, -mv.z), 1.0, 220.0);',
+    '  gl_Position = projectionMatrix * mv;',
+    '}',
+  ].join('\n'),
+  fragmentShader: [
+    'uniform sampler2D uTex;',
+    'varying vec4 vCol;',
+    'void main(){',
+    '  vec4 t = texture2D(uTex, gl_PointCoord);',
+    '  float a = t.a * vCol.a;',
+    '  if (a < 0.004) discard;',
+    '  gl_FragColor = vec4(vCol.rgb * t.rgb, a);',
+    '}',
+  ].join('\n'),
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
+const sparks = new THREE.Points(sparkGeo, sparkMat);
+sparks.frustumCulled = false;
+scene.add(sparks);
+
+const sparkList = [];
+function spawnSpark(o) {
+  if (sparkList.length >= SPARK_MAX) return;
+  sparkList.push(o);
+}
+function updateSparks(dt, time) {
+  let n = 0;
+  for (let i = sparkList.length - 1; i >= 0; i--) {
+    const p = sparkList[i];
+    p.t += dt;
+    if (p.t >= p.life) { sparkList.splice(i, 1); continue; }
+    p.vy -= 9.81 * p.grav * dt;
+    const dr = Math.max(0, 1 - p.drag * dt);
+    p.vx *= dr; p.vy *= dr; p.vz *= dr;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    if (p.y < 0.0015) {                      // отскок от пола
+      p.y = 0.0015;
+      if (p.vy < 0) { p.vy = -p.vy * 0.30; p.vx *= 0.55; p.vz *= 0.55; }
+    }
+    const k = p.t / p.life;
+    // остывание: белое → жёлтое → оранжевое → тёмно-красное
+    const h1 = clamp(k / 0.18, 0, 1), h2 = clamp((k - 0.15) / 0.55, 0, 1);
+    const r = 1;
+    const g = (0.99 - 0.35 * h1) * (1 - 0.45 * h2);
+    const b = (0.92 - 0.80 * h1) * (1 - 0.85 * h2);
+    const flick = 0.72 + 0.28 * Math.sin(p.seed + time * 47);
+    const a = Math.pow(1 - k, 1.4) * p.alpha * flick;
+    const j = n * 3, jc = n * 4;
+    sPos[j] = p.x; sPos[j + 1] = p.y; sPos[j + 2] = p.z;
+    sSize[n] = p.size * (1 - 0.35 * k);
+    sCol[jc] = r * p.tint[0]; sCol[jc + 1] = g * p.tint[1]; sCol[jc + 2] = b * p.tint[2]; sCol[jc + 3] = a;
+    n++;
+  }
+  sparkGeo.setDrawRange(0, n);
+  if (n > 0) {
+    sparkGeo.attributes.position.needsUpdate = true;
+    sparkGeo.attributes.aSize.needsUpdate = true;
+    sparkGeo.attributes.aCol.needsUpdate = true;
+  }
+}
+
+/* ---- Дым: пул спрайтов (корректная перспектива и сортировка) ---- */
+const SMOKE_MAX = 74;
+const smokePool = [];
+for (let i = 0; i < SMOKE_MAX; i++) {
+  const m = new THREE.SpriteMaterial({
+    map: smokeTexs[i % smokeTexs.length],
+    transparent: true, depthWrite: false, opacity: 0, color: 0xffffff, fog: true,
+  });
+  const s = new THREE.Sprite(m);
+  s.visible = false;
+  s.frustumCulled = false;
+  scene.add(s);
+  smokePool.push({ s, m, on: false });
+}
+let smokeCursor = 0;
+function spawnSmoke(o) {
+  let slot = null;
+  for (let i = 0; i < SMOKE_MAX; i++) {
+    const c = smokePool[(smokeCursor + i) % SMOKE_MAX];
+    if (!c.on) { slot = c; smokeCursor = (smokeCursor + i + 1) % SMOKE_MAX; break; }
+  }
+  if (!slot) { slot = smokePool[smokeCursor]; smokeCursor = (smokeCursor + 1) % SMOKE_MAX; }
+  slot.on = true;
+  slot.s.visible = true;
+  slot.t = 0;
+  slot.life = o.life;
+  slot.x = o.x; slot.y = o.y; slot.z = o.z;
+  slot.vx = o.vx; slot.vy = o.vy; slot.vz = o.vz;
+  slot.s0 = o.s0; slot.s1 = o.s1;
+  slot.alpha = o.alpha;
+  slot.buoy = o.buoy !== undefined ? o.buoy : 0.30;
+  slot.drag = o.drag !== undefined ? o.drag : 1.5;
+  slot.rot = o.rot !== undefined ? o.rot : rnd(-0.7, 0.7);
+  slot.lit = o.lit !== undefined ? o.lit : 0;      // насколько подсвечен вспышкой
+  slot.dark = o.dark !== undefined ? o.dark : 0.55; // конечная серость
+  slot.m.rotation = Math.random() * Math.PI * 2;
+}
+function updateSmoke(dt) {
+  for (const p of smokePool) {
+    if (!p.on) continue;
+    p.t += dt;
+    if (p.t >= p.life) { p.on = false; p.s.visible = false; p.m.opacity = 0; continue; }
+    p.vy += p.buoy * dt;
+    const dr = Math.max(0, 1 - p.drag * dt);
+    p.vx *= dr; p.vy *= dr; p.vz *= dr;
+    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    if (p.y < 0.006) { p.y = 0.006; p.vx *= 1.015; p.vz *= 1.015; }  // стелется по полу
+    const k = p.t / p.life;
+    const grow = 1 - Math.pow(1 - k, 2.1);
+    const sz = p.s0 + (p.s1 - p.s0) * grow;
+    p.s.position.set(p.x, p.y, p.z);
+    p.s.scale.set(sz, sz, 1);
+    p.m.rotation += p.rot * dt;
+    const fadeIn = clamp(k / 0.10, 0, 1);
+    p.m.opacity = fadeIn * Math.pow(1 - k, 1.5) * p.alpha;
+    // подсветка вспышкой гаснет, дым сереет
+    const lit = p.lit * Math.max(0, 1 - k * 5);
+    const base = p.dark + (0.42 * (1 - k));
+    const v = clamp(base + lit, 0, 1);
+    p.m.color.setRGB(v, v * 0.985, v * 0.97);
+  }
+}
+function clearParticles() {
+  sparkList.length = 0;
+  sparkGeo.setDrawRange(0, 0);
+  for (const p of smokePool) { p.on = false; p.s.visible = false; p.m.opacity = 0; }
+}
+
+/* ---- Ударная волна: тонкая светящаяся сфера ---- */
+const shockMat = new THREE.ShaderMaterial({
+  uniforms: { uOp: { value: 0 } },
+  vertexShader: [
+    'varying vec3 vN; varying vec3 vV;',
+    'void main(){',
+    '  vec4 mv = modelViewMatrix * vec4(position,1.0);',
+    '  vN = normalize(normalMatrix * normal);',
+    '  vV = normalize(-mv.xyz);',
+    '  gl_Position = projectionMatrix * mv;',
+    '}',
+  ].join('\n'),
+  fragmentShader: [
+    'uniform float uOp; varying vec3 vN; varying vec3 vV;',
+    'void main(){',
+    '  float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));',
+    '  float a = pow(f, 3.2) * uOp;',
+    '  if (a < 0.003) discard;',
+    '  gl_FragColor = vec4(vec3(1.0, 0.97, 0.92), a);',
+    '}',
+  ].join('\n'),
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+});
+const shock = new THREE.Mesh(new THREE.SphereGeometry(1, 44, 30), shockMat);
+shock.visible = false;
+shock.frustumCulled = false;
+scene.add(shock);
+
+/* ---- Пылевое кольцо по полу ---- */
+const ringMat = new THREE.ShaderMaterial({
+  uniforms: { uR: { value: 0 }, uW: { value: 0.06 }, uOp: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: [
+    'uniform float uR; uniform float uW; uniform float uOp; varying vec2 vUv;',
+    'void main(){',
+    '  float d = distance(vUv, vec2(0.5)) * 2.0;',
+    '  float band = exp(-pow((d - uR) / max(0.001, uW), 2.0));',
+    '  float a = band * uOp * smoothstep(1.0, 0.75, d);',
+    '  if (a < 0.003) discard;',
+    '  gl_FragColor = vec4(vec3(1.0, 0.95, 0.88), a);',
+    '}',
+  ].join('\n'),
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+});
+const shockRing = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), ringMat);
+shockRing.rotation.x = -Math.PI / 2;
+shockRing.position.y = 0.0016;
+shockRing.visible = false;
+scene.add(shockRing);
+
+/* ---- Блик-ореол вспышки ---- */
+const glare = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, transparent: true, depthWrite: false, opacity: 0,
+  blending: THREE.AdditiveBlending, fog: false, color: 0xffffff,
+}));
+glare.scale.set(0.01, 0.01, 1);
+glare.visible = false;
+scene.add(glare);
+
+/* ---- Свечение и факелы из окон корпуса ---- */
+const jets = new THREE.Group();
+P.body.add(jets);
+const portFx = [];
+const UPV = new THREE.Vector3(0, 1, 0);
+for (const port of model.ports) {
+  const gm = new THREE.SpriteMaterial({
+    map: glowTex, transparent: true, depthWrite: false, opacity: 0,
+    blending: THREE.AdditiveBlending, fog: false,
+  });
+  const gs = new THREE.Sprite(gm);
+  gs.position.copy(port.pos).addScaledVector(port.dir, 0.004);
+  gs.scale.set(0.02, 0.02, 1);
+  gs.visible = false;
+  jets.add(gs);
+
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(0.011, 0.075, 14, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff1d0, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    })
+  );
+  cone.geometry.translate(0, 0.0375, 0);                 // вершина в окне
+  cone.quaternion.setFromUnitVectors(UPV, port.dir);
+  cone.position.copy(port.pos);
+  cone.visible = false;
+  jets.add(cone);
+
+  portFx.push({ gs, gm, cone, port });
+}
+
+/* Факел из запала (верх) */
+const fuseJet = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, transparent: true, depthWrite: false, opacity: 0,
+  blending: THREE.AdditiveBlending, fog: false,
+}));
+fuseJet.position.set(0, DIM.fuseTop + 0.004, 0);
+fuseJet.scale.set(0.02, 0.02, 1);
+fuseJet.visible = false;
+P.body.add(fuseJet);
+
+/* ============================================================================
+   ЗВУК — процедурный синтез на WebAudio. Внешних файлов нет.
+
+   Мастер-цепь:
+     источники ─┬─→ bus ─────────────────────────────┐
+                ├─→ revIn → convolver → revGain ─────┤
+                └─→ echoIn → 5 тапов ранних отражений┴→ earGain → earLP
+                                                          → hpMaster → limiter → master → out
+     тиннитус ──────────────────────────────────────────────────────→ limiter
+       (звон в ушах рождается внутри головы, поэтому не глушится ушным фильтром)
+
+   earGain + earLP имитируют временный порог слуха (TTS): после хлопка
+   уши «закладывает» — громкость падает, верх срезается, потом слух
+   возвращается за 8-14 с.
+============================================================================ */
+function createSoundEngine(makeCtx) {
+  const cl = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const rr = (a, b) => a + Math.random() * (b - a);
+  const SOUND_SPEED = 343;
+
+  let ac = null, enabled = true, dead = false;
+  let master, limiter, hpMaster, earLP, earGain, bus, revIn, revGain, echoIn, blastIn, tinBus;
+  let noiseBuf = null, clickBuf = null;
+  let grind = null, fuseV = null, tin = null, amb = null;
+  let grainAcc = 0, crackAcc = 0, tickBudget = 10, tickClock = 0;
+
+  /* ---------- буферы ---------- */
+  function makeNoise(sec) {
+    const n = Math.floor(ac.sampleRate * sec);
+    const b = ac.createBuffer(1, n, ac.sampleRate);
+    const d = b.getChannelData(0);
+    // белый шум + лёгкая «розовая» окраска (три полюса) — так он живее
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.0990460;
+      b1 = 0.96300 * b1 + w * 0.2965164;
+      b2 = 0.57000 * b2 + w * 1.0526913;
+      const pink = (b0 + b1 + b2 + w * 0.1848) * 0.22;
+      d[i] = w * 0.72 + pink * 0.55;
+    }
+    return b;
+  }
+
+  function makeClick() {
+    const n = 24;
+    const b = ac.createBuffer(1, n, ac.sampleRate);
+    const d = b.getChannelData(0);
+    d[0] = 1; d[1] = -0.82; d[2] = 0.54; d[3] = -0.3; d[4] = 0.16;
+    for (let i = 5; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3) * 0.25;
+    return b;
+  }
+
+  // Импульсный отклик: бетонная коробка с ранними отражениями и тёмным хвостом
+  function makeIR(sec, decay) {
+    const n = Math.floor(ac.sampleRate * sec);
+    const b = ac.createBuffer(2, n, ac.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = b.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / n;
+        const w = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
+        lp += (w - lp) * (0.42 - 0.3 * t);   // хвост темнеет со временем
+        d[i] = lp * 1.9;
+      }
+      // ранние отражения от стен
+      const taps = [0.011, 0.019, 0.027, 0.041, 0.058, 0.077, 0.102, 0.131];
+      for (let k = 0; k < taps.length; k++) {
+        const idx = Math.floor((taps[k] + (ch ? 0.0021 : 0)) * ac.sampleRate);
+        if (idx < n) d[idx] += (k % 2 ? -1 : 1) * (0.62 - k * 0.06);
+      }
+    }
+    return b;
+  }
+
+  function satCurve(k) {
+    const n = 2048, c = new Float32Array(n);
+    const d = Math.tanh(k);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      c[i] = Math.tanh(k * x) / d;
+    }
+    return c;
+  }
+
+  /* ---------- сборка мастер-цепи ---------- */
+  function build() {
+    master = ac.createGain(); master.gain.value = 0.92;
+    master.connect(ac.destination);
+
+    // Лимитер с медленной атакой: ударный фронт проходит целиком,
+    // а хвост уже прижимается — именно так ведёт себя живая запись взрыва.
+    limiter = ac.createDynamicsCompressor();
+    limiter.threshold.value = -2;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.22;
+    limiter.connect(master);
+
+    hpMaster = ac.createBiquadFilter();
+    hpMaster.type = 'highpass';
+    hpMaster.frequency.value = 24;      // подвал не тратит запас громкости
+    hpMaster.Q.value = 0.6;
+    hpMaster.connect(limiter);
+
+    earLP = ac.createBiquadFilter();
+    earLP.type = 'lowpass';
+    earLP.frequency.value = 21000;
+    earLP.Q.value = 0.5;
+    earLP.connect(hpMaster);
+
+    earGain = ac.createGain(); earGain.gain.value = 1;
+    earGain.connect(earLP);
+
+    bus = ac.createGain(); bus.gain.value = 1;
+    bus.connect(earGain);
+
+    // реверберация
+    revIn = ac.createGain(); revIn.gain.value = 1;
+    try {
+      const conv = ac.createConvolver();
+      conv.buffer = makeIR(2.4, 3.4);
+      revGain = ac.createGain(); revGain.gain.value = 0.55;
+      revIn.connect(conv); conv.connect(revGain); revGain.connect(earGain);
+    } catch (e) { revIn.connect(earGain); }
+
+    // ранние отражения от стен/земли — то, что делает хлопок «уличным»
+    echoIn = ac.createGain(); echoIn.gain.value = 1;
+    const taps = [
+      [0.034, 2600, 0.50, -0.55],
+      [0.062, 1750, 0.40, 0.62],
+      [0.101, 1150, 0.32, -0.40],
+      [0.163, 780, 0.24, 0.35],
+      [0.247, 520, 0.17, -0.22],
+      [0.372, 360, 0.12, 0.15],
+    ];
+    for (const [dt, f, g, p] of taps) {
+      const dl = ac.createDelay(1.0); dl.delayTime.value = dt;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = f; lp.Q.value = 0.5;
+      const gn = ac.createGain(); gn.gain.value = g;
+      echoIn.connect(dl); dl.connect(lp); lp.connect(gn);
+      if (ac.createStereoPanner) {
+        const pn = ac.createStereoPanner(); pn.pan.value = p;
+        gn.connect(pn); pn.connect(earGain);
+      } else gn.connect(earGain);
+    }
+
+    // шина взрыва: перегруз даёт «жёсткость», без него получается писк
+    blastIn = ac.createGain(); blastIn.gain.value = 1;
+    const sh = ac.createWaveShaper();
+    sh.curve = satCurve(2.1);
+    sh.oversample = '4x';
+    const post = ac.createGain(); post.gain.value = 0.78;
+    blastIn.connect(sh); sh.connect(post); post.connect(bus);
+
+    tinBus = ac.createGain(); tinBus.gain.value = 1;
+    tinBus.connect(hpMaster);
+
+    noiseBuf = makeNoise(4);
+    clickBuf = makeClick();
+  }
+
+  function ctx() {
+    if (!enabled || dead) return null;
+    if (!ac) {
+      try {
+        ac = makeCtx ? makeCtx() : new (window.AudioContext || window.webkitAudioContext)();
+        build();
+      } catch (e) { dead = true; ac = null; return null; }
+    }
+    if (ac.state === 'suspended' && ac.resume) {
+      try { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    }
+    return ac;
+  }
+
+  // simOffset используется только офлайн-тестами рендера; в браузере всегда 0
+  let simOffset = 0;
+  const now = () => (ac ? ac.currentTime : 0) + simOffset;
+
+  /* ---------- элементарные голоса ---------- */
+  function out(o) {
+    const g = ac.createGain();
+    let tail = g;
+    if (o.pan !== undefined && o.pan !== null && ac.createStereoPanner) {
+      const p = ac.createStereoPanner();
+      p.pan.value = cl(o.pan, -1, 1);
+      g.connect(p); tail = p;
+    }
+    tail.connect(o.dest || bus);
+    if (o.rev) { const s = ac.createGain(); s.gain.value = o.rev; tail.connect(s); s.connect(revIn); }
+    if (o.echo) { const s = ac.createGain(); s.gain.value = o.echo; tail.connect(s); s.connect(echoIn); }
+    return g;
+  }
+
+  function env(g, t0, peak, atk, dur, hold) {
+    const p = Math.max(0.00012, peak);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(p, t0 + atk);
+    if (hold) g.gain.setValueAtTime(p, t0 + atk + hold);
+    g.gain.exponentialRampToValueAtTime(p * 0.0012, t0 + dur);
+    g.gain.setValueAtTime(0, t0 + dur + 0.004);
+  }
+
+  // шумовой слой
+  function nz(o) {
+    const t0 = o.t0;
+    const dur = o.dur;
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    if (o.rate) src.playbackRate.value = o.rate;
+    let node = src;
+    if (o.type) {
+      const f = ac.createBiquadFilter();
+      f.type = o.type;
+      f.Q.value = o.q === undefined ? 0.8 : o.q;
+      f.frequency.setValueAtTime(Math.max(24, o.f0), t0);
+      if (o.f1) f.frequency.exponentialRampToValueAtTime(Math.max(24, o.f1), t0 + (o.sweep || dur));
+      node.connect(f); node = f;
+    }
+    if (o.hp) {
+      const h = ac.createBiquadFilter();
+      h.type = 'highpass'; h.frequency.value = o.hp; h.Q.value = 0.6;
+      node.connect(h); node = h;
+    }
+    const g = ac.createGain();
+    env(g, t0, o.peak, Math.max(0.0002, o.atk === undefined ? 0.002 : o.atk), dur, o.hold);
+    node.connect(g);
+    g.connect(out(o));
+    src.start(t0, rr(0, 3));
+    src.stop(t0 + dur + 0.05);
+    return g;
+  }
+
+  // тональный слой
+  function tn(o) {
+    const t0 = o.t0, dur = o.dur;
+    const osc = ac.createOscillator();
+    osc.type = o.wave || 'sine';
+    osc.frequency.setValueAtTime(Math.max(10, o.f0), t0);
+    if (o.f1) osc.frequency.exponentialRampToValueAtTime(Math.max(10, o.f1), t0 + (o.sweep || dur));
+    const g = ac.createGain();
+    env(g, t0, o.peak, Math.max(0.0004, o.atk === undefined ? 0.003 : o.atk), dur, o.hold);
+    osc.connect(g);
+    g.connect(out(o));
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+    return g;
+  }
+
+  // одиночный щелчок (единичный импульс) — самый резкий фронт, который можно синтезировать
+  function clk(o) {
+    const t0 = o.t0;
+    const src = ac.createBufferSource();
+    src.buffer = clickBuf;
+    let node = src;
+    if (o.hp) {
+      const h = ac.createBiquadFilter(); h.type = 'highpass';
+      h.frequency.value = o.hp; h.Q.value = o.q || 0.7;
+      node.connect(h); node = h;
+    }
+    const g = ac.createGain();
+    g.gain.setValueAtTime(Math.max(0.0002, o.peak), t0);
+    g.gain.setValueAtTime(0, t0 + 0.02);
+    node.connect(g);
+    g.connect(out(o));
+    src.start(t0);
+    src.stop(t0 + 0.03);
+  }
+
+  // модальный синтез удара по металлу: набор негармоничных обертонов
+  function modal(o) {
+    const t0 = o.t0;
+    const dest = out(o);
+    for (const p of o.partials) {
+      const osc = ac.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(p[0] * (o.detune || 1), t0);
+      if (p[3]) osc.frequency.exponentialRampToValueAtTime(p[0] * (o.detune || 1) * p[3], t0 + p[2]);
+      const g = ac.createGain();
+      const peak = Math.max(0.00012, p[1] * o.peak);
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(peak, t0 + 0.0012);
+      g.gain.exponentialRampToValueAtTime(peak * 0.0012, t0 + p[2]);
+      g.gain.setValueAtTime(0, t0 + p[2] + 0.004);
+      osc.connect(g); g.connect(dest);
+      osc.start(t0); osc.stop(t0 + p[2] + 0.05);
+    }
+    if (o.chiff !== 0) {
+      nz({
+        t0, dur: o.chiffDur || 0.02, type: 'highpass', f0: o.chiffF || 3200,
+        q: 0.7, peak: (o.chiff || 0.35) * o.peak, atk: 0.0004, pan: o.pan, rev: (o.rev || 0) * 0.5,
+      });
+    }
+  }
+
+  /* ---------- фоновая комната ---------- */
+  function startAmbience() {
+    if (amb || !ac) return;
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 620; lp.Q.value = 0.4;
+    const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 55; hp.Q.value = 0.5;
+    const g = ac.createGain(); g.gain.value = 0;
+    src.connect(lp); lp.connect(hp); hp.connect(g); g.connect(earGain);
+    src.start(0);
+    g.gain.setTargetAtTime(0.014, now(), 1.2);
+    amb = { src, g };
+  }
+
+  /* ---------- слух: временная глухота ---------- */
+  function deafen(amount, at) {
+    if (!ac) return;
+    const a = cl(amount, 0, 1);
+    const t0 = at === undefined ? now() : at;
+    const fMin = 1200 - 900 * a;                 // до 300 Гц при полной дозе
+    const gMin = 1 - 0.72 * a;
+    const rec = 2.0 + 2.8 * a;
+    earLP.frequency.cancelScheduledValues(t0);
+    earLP.frequency.setValueAtTime(earLP.frequency.value, t0);
+    earLP.frequency.exponentialRampToValueAtTime(fMin, t0 + 0.045);
+    earLP.frequency.setTargetAtTime(21000, t0 + 0.06, rec);
+    earGain.gain.cancelScheduledValues(t0);
+    earGain.gain.setValueAtTime(earGain.gain.value, t0);
+    earGain.gain.linearRampToValueAtTime(gMin, t0 + 0.04);
+    earGain.gain.setTargetAtTime(1, t0 + 0.07, rec * 0.85);
+  }
+
+  function healEars(fast) {
+    if (!ac) return;
+    const t0 = now();
+    earLP.frequency.cancelScheduledValues(t0);
+    earLP.frequency.setValueAtTime(earLP.frequency.value, t0);
+    earLP.frequency.exponentialRampToValueAtTime(21000, t0 + (fast ? 0.12 : 0.6));
+    earGain.gain.cancelScheduledValues(t0);
+    earGain.gain.setValueAtTime(earGain.gain.value, t0);
+    earGain.gain.linearRampToValueAtTime(1, t0 + (fast ? 0.12 : 0.6));
+  }
+
+  function stopTin(fade) {
+    if (!tin) return;
+    const t0 = now();
+    try {
+      tin.g.gain.cancelScheduledValues(t0);
+      tin.g.gain.setValueAtTime(Math.max(0.00012, tin.g.gain.value), t0);
+      tin.g.gain.exponentialRampToValueAtTime(0.00012, t0 + (fade || 0.25));
+      for (const o of tin.osc) o.stop(t0 + (fade || 0.25) + 0.05);
+    } catch (e) {}
+    tin = null;
+  }
+
+  /* ========================================================================
+     ГОЛОСА ВЗАИМОДЕЙСТВИЯ
+  ======================================================================== */
+
+  // Скрежет чеки: непрерывный слой + зерно микрощелчков (сталь по стали)
+  function grindOn() {
+    if (!ctx() || grind) return;
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true; src.playbackRate.value = 0.85;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 3.4;
+    const bp2 = ac.createBiquadFilter(); bp2.type = 'peaking'; bp2.frequency.value = 3400; bp2.Q.value = 2.2; bp2.gain.value = 8;
+    const g = ac.createGain(); g.gain.value = 0;
+    src.connect(bp); bp.connect(bp2); bp2.connect(g);
+    g.connect(out({ rev: 0.14 }));
+    src.start(0, rr(0, 3));
+    grind = { src, bp, g, on: true };
+  }
+
+  function grindSet(level, tension) {
+    if (!grind || !ac) return;
+    const t = now();
+    grind.g.gain.setTargetAtTime(cl(level, 0, 1) * 0.16, t, 0.03);
+    grind.bp.frequency.setTargetAtTime(1300 + 2200 * cl(tension, 0, 1), t, 0.05);
+  }
+
+  function grindOff() {
+    if (!grind || !ac) return;
+    const t = now();
+    grind.g.gain.setTargetAtTime(0, t, 0.04);
+    const s = grind.src, g = grind.g;
+    try { s.stop(t + 0.5); } catch (e) {}
+    setTimeout(() => { try { g.disconnect(); } catch (e) {} }, 900);
+    grind = null;
+  }
+
+  /* ========================================================================
+     ПУБЛИЧНОЕ API
+  ======================================================================== */
+  const api = {
+    get enabled() { return enabled; },
+    set enabled(v) {
+      enabled = !!v;
+      if (!enabled) {
+        grindOff(); api.fuseStop(); stopTin(0.15);
+        if (ac && ac.suspend) { try { ac.suspend(); } catch (e) {} }
+      } else if (ac && ac.resume) {
+        try { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      }
+    },
+
+    warm() { if (ctx()) startAmbience(); },
+
+    set sim(v) { simOffset = v || 0; },
+    get sim() { return simOffset; },
+
+    // покад��овое обслуживание: зерно скрежета, треск замедлителя, лимит на тики осколков
+    update(dt, tAbs) {
+      if (!ac || !enabled) return;
+      const t = tAbs === undefined ? now() : tAbs;
+      tickClock += dt;
+      if (tickClock > 0.1) { tickClock = 0; tickBudget = Math.min(10, tickBudget + 2); }
+      if (fuseV) {
+        crackAcc -= dt;
+        if (crackAcc <= 0) {
+          crackAcc = rr(0.012, 0.05);
+          const f = rr(1800, 7200);
+          nz({
+            t0: t + 0.004, dur: rr(0.006, 0.022), type: 'bandpass', f0: f, q: rr(2, 6),
+            peak: rr(0.02, 0.075), atk: 0.0006, pan: fuseV.pan + rr(-0.1, 0.1), rev: 0.12,
+          });
+        }
+      }
+    },
+
+    /* --- ЧЕКА --- */
+    pinDragStart() { if (ctx()) { grindOn(); grainAcc = 0; } },
+
+    // speed — м/с движения кольца, tension — 0..1 натяг
+    pinDrag(speed, tension, pan) {
+      if (!ctx()) return;
+      if (!grind) grindOn();
+      const sp = cl(speed * 7, 0, 1);
+      grindSet(0.22 + 0.78 * sp, tension);
+      grainAcc += speed * (0.9 + tension * 2.6);
+      while (grainAcc > 0.006) {
+        grainAcc -= rr(0.004, 0.011);
+        const t0 = now() + rr(0.001, 0.02);
+        modal({
+          t0, peak: rr(0.03, 0.1) * (0.4 + 0.6 * tension), pan: pan,
+          partials: [[rr(2200, 5200), 1, rr(0.008, 0.03)], [rr(6000, 9000), 0.4, 0.012]],
+          chiff: 0.5, chiffF: 4200, chiffDur: 0.008, rev: 0.1,
+        });
+      }
+      // «стон» металла перед срывом
+      if (tension > 0.72 && Math.random() < 0.08) {
+        tn({
+          t0: now() + 0.002, f0: rr(320, 520), f1: rr(600, 980), dur: rr(0.06, 0.14),
+          peak: 0.035 * tension, wave: 'sawtooth', pan, rev: 0.2,
+        });
+      }
+    },
+
+    pinDragEnd() { grindOff(); },
+
+    // усики разогнулись, чека пошла свободно
+    pinBreak(pan) {
+      if (!ctx()) return;
+      grindOff();
+      const t0 = now() + 0.001;
+      clk({ t0, peak: 0.22, hp: 1400, pan, rev: 0.25 });
+      modal({
+        t0, peak: 0.17, pan, rev: 0.35, chiff: 0.6, chiffF: 3600, chiffDur: 0.03,
+        partials: [[1980, 1, 0.22, 0.985], [3120, 0.55, 0.14], [4870, 0.3, 0.09], [7250, 0.16, 0.05]],
+      });
+      // пруток выходит из гнезда
+      nz({ t0: t0 + 0.004, dur: 0.11, type: 'bandpass', f0: 2600, f1: 1100, q: 1.6, peak: 0.13, atk: 0.004, pan, rev: 0.2 });
+    },
+
+    pinReturn(pan) {
+      if (!ctx()) return;
+      grindOff();
+      const t0 = now() + 0.001;
+      nz({ t0, dur: 0.07, type: 'bandpass', f0: 1400, f1: 2600, q: 1.2, peak: 0.1, atk: 0.006, pan });
+      modal({ t0: t0 + 0.05, peak: 0.1, pan, partials: [[1450, 1, 0.06], [2600, 0.4, 0.03]], chiff: 0.4 });
+    },
+
+    /* --- СКОБА --- */
+    // пружина ударника выщёлкивает скобу: «пщёлк» + фирменное «цинь»
+    spoonRelease(pan) {
+      if (!ctx()) return;
+      const t0 = now() + 0.001;
+      clk({ t0, peak: 0.34, hp: 900, pan, rev: 0.2 });
+      nz({ t0, dur: 0.05, type: 'bandpass', f0: 3400, f1: 1200, q: 1.1, peak: 0.26, atk: 0.0006, pan, rev: 0.25 });
+      modal({
+        t0: t0 + 0.002, peak: 0.34, pan, rev: 0.55, echo: 0.15, chiff: 0.5, chiffF: 5200, chiffDur: 0.02,
+        partials: [
+          [2140, 1.00, 1.05, 0.997],
+          [3310, 0.62, 0.72],
+          [4790, 0.40, 0.46],
+          [6620, 0.24, 0.28],
+          [9180, 0.13, 0.16],
+          [12400, 0.07, 0.09],
+        ],
+      });
+      // короткий «дзынь» пружины
+      tn({ t0: t0 + 0.004, f0: 780, f1: 460, dur: 0.09, peak: 0.05, wave: 'triangle', pan });
+    },
+
+    /* --- УДАРНИК И КАПСЮЛЬ --- */
+    striker(pan) {
+      if (!ctx()) return;
+      const t0 = now() + 0.001;
+      clk({ t0, peak: 0.30, hp: 2200, pan });
+      modal({
+        t0, peak: 0.16, pan, rev: 0.2, chiff: 0.4, chiffF: 5000, chiffDur: 0.012,
+        partials: [[1620, 1, 0.05], [2850, 0.5, 0.03], [5200, 0.25, 0.018]],
+      });
+      // накол капсюля-воспламенителя: короткий «пух»
+      nz({ t0: t0 + 0.006, dur: 0.07, type: 'bandpass', f0: 900, f1: 380, q: 1.0, peak: 0.30, atk: 0.0008, pan, rev: 0.3, echo: 0.1 });
+      tn({ t0: t0 + 0.006, f0: 260, f1: 90, dur: 0.09, peak: 0.22, wave: 'sine', pan });
+    },
+
+    /* --- ЗАМЕДЛИТЕЛЬ --- */
+    fuseStart(pan) {
+      if (!ctx()) return;
+      api.fuseStop();
+      const src = ac.createBufferSource();
+      src.buffer = noiseBuf; src.loop = true; src.playbackRate.value = 1.15;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3800; bp.Q.value = 0.9;
+      const pk = ac.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 6400; pk.Q.value = 1.4; pk.gain.value = 7;
+      const g = ac.createGain(); g.gain.value = 0;
+      // медленное «дыхание» шипения
+      const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 7.3;
+      const lg = ac.createGain(); lg.gain.value = 900;
+      lfo.connect(lg); lg.connect(bp.frequency);
+      src.connect(bp); bp.connect(pk); pk.connect(g);
+      g.connect(out({ pan, rev: 0.25 }));
+      const t0 = now();
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.085, t0 + 0.05);
+      g.gain.setTargetAtTime(0.13, t0 + 0.05, 0.9);   // к концу горит злее
+      src.start(0, rr(0, 3)); lfo.start(t0);
+      fuseV = { src, g, lfo, pan: pan || 0 };
+      crackAcc = 0;
+    },
+
+    fusePan(pan) {
+      if (fuseV) fuseV.pan = pan;
+    },
+
+    fuseStop() {
+      if (!fuseV || !ac) return;
+      const t = now();
+      try {
+        fuseV.g.gain.cancelScheduledValues(t);
+        fuseV.g.gain.setValueAtTime(fuseV.g.gain.value, t);
+        fuseV.g.gain.linearRampToValueAtTime(0, t + 0.02);
+        fuseV.src.stop(t + 0.06);
+        fuseV.lfo.stop(t + 0.06);
+      } catch (e) {}
+      fuseV = null;
+    },
+
+    /* --- ПОЛЁТ --- */
+    throwSwish(power, pan) {
+      if (!ctx()) return;
+      const t0 = now() + 0.001;
+      nz({
+        t0, dur: 0.26, type: 'bandpass', f0: 380, f1: 1500, q: 0.9,
+        peak: 0.1 * cl(power, 0.3, 1.4), atk: 0.06, pan, rev: 0.2,
+      });
+    },
+
+    /* ========================================================================
+       ВЗРЫВ. Раскладка настоящего М84 на слух:
+         0-2 мс   — ударный фронт, «Б» (широкополосный щелчок 2-10 кГц)
+         2-40 мс  — тело хлопка, «Д» (провал частоты 900→90 Гц, удар в грудь)
+         0-1.3 с  — низ 60→26 Гц, тот самый подпор
+         30 мс-2 с— рёв-шипение «ЩЩЩ» (резонансный спад 9 кГц → 350 Гц)
+         35-400 мс— ранние отражения от стен, потом хвост реверберации
+         после    — уши заложило: срез верха + провал громкости + звон
+    ======================================================================== */
+    bang(opts) {
+      if (!ctx()) return;
+      const o = opts || {};
+      const pan = o.pan || 0;
+      const dist = Math.max(0.25, o.dist || 1.2);
+      const near = cl(1.35 / dist, 0.28, 1.25);       // близко — бьёт сильнее
+      const t0 = now() + 0.012 + dist / SOUND_SPEED;  // звук приходит позже вспышки
+      const B = { dest: blastIn };
+
+      /* 1. Ударный фронт «Б» */
+      clk({ t0, peak: 1.15 * near, hp: 260, pan: pan * 0.25, dest: blastIn, echo: 0.5, rev: 0.4 });
+      nz({
+        t0, dur: 0.05, type: 'bandpass', f0: 5400, f1: 900, q: 0.75, sweep: 0.045,
+        peak: 1.35 * near, atk: 0.0004, pan: pan * 0.3, dest: blastIn, echo: 0.6, rev: 0.45,
+      });
+      nz({
+        t0, dur: 0.018, type: 'highpass', f0: 7000, q: 0.7,
+        peak: 0.95 * near, atk: 0.0003, pan: pan * 0.5, dest: blastIn, echo: 0.35,
+      });
+
+      /* 2. Тело «Д»: обвал частоты и удар по грудной клетке */
+      tn({
+        t0, f0: 980, f1: 84, dur: 0.10, sweep: 0.04, peak: 1.25 * near,
+        wave: 'triangle', atk: 0.0006, pan: pan * 0.2, dest: blastIn, echo: 0.35, rev: 0.3,
+      });
+      tn({
+        t0: t0 + 0.002, f0: 430, f1: 58, dur: 0.16, sweep: 0.08, peak: 0.7 * near,
+        wave: 'sine', atk: 0.0012, pan: 0, dest: blastIn,
+      });
+      nz({
+        t0: t0 + 0.001, dur: 0.2, type: 'lowpass', f0: 440, f1: 150, q: 1.5,
+        peak: 1.15 * near, atk: 0.0014, pan: pan * 0.15, dest: blastIn, echo: 0.5, rev: 0.45,
+      });
+
+      /* 3. Низ: то, что чувствуется животом */
+      tn({
+        t0, f0: 64, f1: 26, dur: 0.85, sweep: 0.55, peak: 1.0 * near,
+        wave: 'sine', atk: 0.004, pan: 0, dest: blastIn, rev: 0.25,
+      });
+      tn({
+        t0: t0 + 0.004, f0: 132, f1: 52, dur: 0.34, sweep: 0.25, peak: 0.5 * near,
+        wave: 'sine', atk: 0.003, pan: 0, dest: blastIn,
+      });
+
+      /* 4. Рёв «ЩЩЩ»: два расстроенных слоя по краям стерео + центр */
+      for (const [p, rate, dur] of [[-0.75, 1.0, 0.95], [0.78, 0.92, 1.05], [0, 1.07, 0.8]]) {
+        nz({
+          t0: t0 + 0.002, dur, type: 'lowpass', f0: 9500, f1: 330, q: 1.5, sweep: dur * 0.55,
+          peak: (p === 0 ? 0.52 : 0.44) * near, atk: 0.003, rate,
+          pan: p, dest: blastIn, echo: p === 0 ? 0.55 : 0.3, rev: 0.7,
+        });
+      }
+      // «песок» в рёве — сгорающий состав
+      nz({
+        t0: t0 + 0.004, dur: 0.45, type: 'bandpass', f0: 2600, f1: 700, q: 0.8,
+        peak: 0.36 * near, atk: 0.0018, pan: pan * 0.4, dest: blastIn, rev: 0.45, echo: 0.3,
+      });
+
+      /* 5. Отзвук помещения: длинный низкий гул */
+      nz({
+        t0: t0 + 0.06, dur: 1.7, type: 'lowpass', f0: 620, f1: 130, q: 0.7,
+        peak: 0.14 * near, atk: 0.06, pan: 0, rev: 0.9, echo: 0.2,
+      });
+
+      /* 6. Дребезг: стёкла, железо, мелочь вокруг */
+      for (let i = 0; i < 7; i++) {
+        nz({
+          t0: t0 + rr(0.05, 0.55), dur: rr(0.02, 0.07), type: 'bandpass',
+          f0: rr(1400, 5200), q: rr(3, 8), peak: rr(0.02, 0.06) * near,
+          atk: 0.001, pan: rr(-0.9, 0.9), rev: 0.4,
+        });
+      }
+
+      /* 7. Слух: контузия и звон */
+      const dose = cl(1.35 / dist, 0.35, 1);
+      deafen(dose, t0 + 0.05);   // сначала слышим чистый фронт, потом уши закрываются
+      stopTin(0.05);
+      try {
+        const tt = t0 + 0.03;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, tt);
+        g.gain.exponentialRampToValueAtTime(0.075 * dose, tt + 0.09);
+        g.gain.exponentialRampToValueAtTime(0.02 * dose, tt + 4);
+        g.gain.exponentialRampToValueAtTime(0.0001, tt + 15);
+        g.connect(tinBus);
+        const osc = [];
+        for (const [f, a, det] of [[4180, 1, 0], [6260, 0.55, 0], [3140, 0.32, 0.7]]) {
+          const oo = ac.createOscillator();
+          oo.type = 'sine';
+          oo.frequency.setValueAtTime(f, tt);
+          const gg = ac.createGain(); gg.gain.value = a;
+          oo.connect(gg); gg.connect(g);
+          if (det) {   // лёгкое биение — звон «плывёт»
+            const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = det;
+            const lg = ac.createGain(); lg.gain.value = 9;
+            lfo.connect(lg); lg.connect(oo.frequency);
+            lfo.start(tt); lfo.stop(tt + 16);
+          }
+          oo.start(tt); oo.stop(tt + 16);
+          osc.push(oo);
+        }
+        tin = { osc, g };
+      } catch (e) {}
+    },
+
+    /* --- УДАРЫ ЖЕЛЕЗА --- */
+    // kind: 'pin' | 'spoon' | 'body' | 'shard'
+    clank(v, pan, kind) {
+      if (!ctx()) return;
+      const a = cl(v, 0.04, 1);
+      const t0 = now() + 0.001;
+      if (kind === 'body') {
+        modal({
+          t0, peak: 0.34 * a, pan, rev: 0.4, echo: 0.15, chiff: 0.5, chiffF: 1800, chiffDur: 0.03,
+          partials: [[286, 1, 0.30 + 0.2 * a], [438, 0.6, 0.22], [742, 0.34, 0.14], [1180, 0.2, 0.08], [1930, 0.1, 0.05]],
+          detune: rr(0.96, 1.05),
+        });
+        nz({ t0, dur: 0.09, type: 'lowpass', f0: 320, f1: 120, q: 1.1, peak: 0.3 * a, atk: 0.001, pan, rev: 0.3 });
+        tn({ t0, f0: 88, f1: 42, dur: 0.16, peak: 0.34 * a, wave: 'sine', pan });
+      } else if (kind === 'shard') {
+        modal({
+          t0, peak: 0.09 * a, pan, rev: 0.25, chiff: 0.6, chiffF: 6000, chiffDur: 0.008,
+          partials: [[rr(3600, 8200), 1, rr(0.02, 0.07)], [rr(9000, 13000), 0.35, 0.02]],
+        });
+      } else if (kind === 'spoon') {
+        modal({
+          t0, peak: 0.17 * a, pan, rev: 0.45, echo: 0.1, chiff: 0.5, chiffF: 4800, chiffDur: 0.014,
+          partials: [[2140 * rr(0.97, 1.03), 1, 0.5 * a + 0.12, 0.997], [3310, 0.5, 0.3], [4790, 0.3, 0.18], [6620, 0.16, 0.1]],
+        });
+      } else {
+        modal({
+          t0, peak: 0.16 * a, pan, rev: 0.35, chiff: 0.5, chiffF: 4200, chiffDur: 0.012,
+          partials: [[rr(1750, 2450), 1, 0.16 * a + 0.05], [rr(3300, 4400), 0.45, 0.09], [rr(6200, 7800), 0.22, 0.05]],
+        });
+      }
+    },
+
+    // тики осколков по бетону — с лимитом, чтобы не превратилось в кашу
+    shardTick(v, pan) {
+      if (!ctx() || tickBudget <= 0) return;
+      tickBudget--;
+      const a = cl(v, 0.05, 1);
+      const t0 = now() + rr(0, 0.012);
+      modal({
+        t0, peak: 0.075 * a, pan, rev: 0.3, chiff: 0.7, chiffF: 5200, chiffDur: 0.006,
+        partials: [[rr(2600, 7400), 1, rr(0.012, 0.05)], [rr(8000, 12500), 0.3, 0.015]],
+      });
+    },
+
+    /* --- сервис --- */
+    reset() {
+      grindOff();
+      api.fuseStop();
+      stopTin(0.2);
+      healEars(false);
+      tickBudget = 10;
+    },
+
+    stopTin() { stopTin(0.2); },
+  };
+
+  return api;
+}
+
+try {
+  if (typeof window !== 'undefined' && !window.createSoundEngine) window.createSoundEngine = createSoundEngine;
+} catch (e) {}
+
+const SND = createSoundEngine();
+
+/* ============================================================================
+   ЛОГИКА БОЕВОГО ПРИМЕНЕНИЯ
+
+   Состояния:
+     ready  — чека на месте, кольцо можно тянуть мышью/пальцем
+     pull   — идёт вытягивание (ручное или автоматическое)
+     armed  — чеки нет, скоба удерживается пальцами (времени нет)
+     fuse   — скоба сошла, ударник наколол капсюль, горит замедлитель 1,5 с
+     blast  — подрыв
+     after  — последствия, доступен сброс
+
+   Гранату можно бросить во время горения замедлителя — тогда она рвётся там,
+   где лежит, а вспышка, тряска и звук масштабируются по дистанции.
+============================================================================ */
+const SEQ = { PULL0: 0.06, PULL1: 0.46, SPRING: 0.055, DELAY: 1.50 };
+const PULL_LEN = MM(52);          // полный ход чеки
+const PULL_AXIS = new THREE.Vector3(5, 2.5, 52).normalize();
+
+let phase = 'ready';
+let seqT = 0, blastT = 0, fuseT = 0;
+let pinFree = false, spoonFree = false, strikerFired = false, thrown = false;
+let canReset = false;
+let shake = 0, shakeT = 0;
+let wob = null;
+let smokeTimer = 0, fuseTimer = 0;
+let idleSpin = true;
+let distF = 1, blastDist = 1;
+let autoPull = null;              // скриптовое выдергивание с кнопки
+let springBack = null;            // чека возвращается, если отпустить раньше срыва
+
+const flying = [];
+const phys = {
+  on: false, topple: false, free: false,
+  y: REST_UP, vy: 0, tilt: 0, w: 0, drift: 0, vd: 0,
+  axis: new THREE.Vector3(1, 0, 0), perp: new THREE.Vector3(0, 0, 1),
+  p: new THREE.Vector3(0, REST_UP, 0), v: new THREE.Vector3(),
+  q: new THREE.Quaternion(), av: new THREE.Vector3(), settle: 0,
+};
+
+/* Огонẽк горящего замедлителя */
+const fuseLight = new THREE.PointLight(0xffa042, 0, 0.30, 2);
+fuseLight.position.set(0, DIM.fuseTop + 0.006, 0);
+P.body.add(fuseLight);
+
+/* Ядро вспышки — раскалённый шар внутри корпуса */
+const core = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, transparent: true, depthWrite: false, opacity: 0,
+  blending: THREE.AdditiveBlending, fog: false, color: 0xffffff,
+}));
+core.scale.set(0.01, 0.01, 1);
+core.visible = false;
+scene.add(core);
+
+/* Подсказка — мягкий ореол у кольца, пока игрок не взялся за него */
+const ringHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, transparent: true, depthWrite: false, opacity: 0,
+  blending: THREE.AdditiveBlending, fog: false, color: 0x9fd0ff,
+}));
+ringHalo.scale.set(0.038, 0.038, 1);
+ringHalo.renderOrder = 3;
+scene.add(ringHalo);
+let haloOn = true;
+
+/* ============================================================================
+   ВЫБРОС ИЗ ОКОН: горящий состав, окалина, мелкие частицы.
+
+   У боевого M84 корпус не дробится — в этом весь смысл конструкции.
+   Наружу через 12 окон и верх запала вылетают раскалённые частицы
+   состава и окалина. Именно они здесь и моделируются твёрдыми телами:
+   собственная баллистика, вращение, отскоки, остывание и звук касаний.
+============================================================================ */
+const SHARD_MAX = 110;
+
+const shardGeo = (() => {
+  const g = new THREE.TetrahedronGeometry(1, 0);
+  const pos = g.attributes.position;
+  const jit = new Map();
+  const k = (x, y, z) => x.toFixed(3) + '|' + y.toFixed(3) + '|' + z.toFixed(3);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const key = k(x, y, z);
+    let o = jit.get(key);
+    if (!o) {
+      o = [rnd(-0.34, 0.34), rnd(-0.34, 0.34), rnd(-0.34, 0.34)];
+      jit.set(key, o);
+    }
+    pos.setXYZ(i, (x + o[0]) * 0.85, (y + o[1]) * 0.5, (z + o[2]) * 0.85);
+  }
+  g.computeVertexNormals();
+  return g;
+})();
+
+const shardMat = new THREE.MeshStandardMaterial({
+  color: 0x22262b, metalness: 0.95, roughness: 0.46, envMapIntensity: 0.8,
+});
+const shardMesh = new THREE.InstancedMesh(shardGeo, shardMat, SHARD_MAX);
+shardMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+shardMesh.castShadow = true;
+shardMesh.frustumCulled = false;
+shardMesh.count = 0;
+scene.add(shardMesh);
+
+// Раскалённая оболочка того же осколка: аддитивная, цвет — температура
+const shardHot = new THREE.InstancedMesh(
+  shardGeo,
+  new THREE.MeshBasicMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  }),
+  SHARD_MAX
+);
+shardHot.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+shardHot.frustumCulled = false;
+shardHot.count = 0;
+scene.add(shardHot);
+
+const shards = [];
+const _sm = new THREE.Matrix4();
+const _sq = new THREE.Quaternion();
+const _sv = new THREE.Vector3();
+const _ss = new THREE.Vector3();
+const _sc = new THREE.Color();
+const _dq = new THREE.Quaternion();
+let shardTickBudget = 0;
+
+function spawnShard(x, y, z, vx, vy, vz, heat) {
+  if (shards.length >= SHARD_MAX) return;
+  const s = rnd(0.0011, 0.0034);
+  shards.push({
+    p: new THREE.Vector3(x, y, z),
+    v: new THREE.Vector3(vx, vy, vz),
+    q: new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(0, 6.28), rnd(0, 6.28), rnd(0, 6.28))),
+    av: new THREE.Vector3(rnd(-40, 40), rnd(-40, 40), rnd(-40, 40)),
+    s: new THREE.Vector3(s * rnd(0.7, 1.5), s * rnd(0.5, 1.1), s * rnd(0.7, 1.5)),
+    r: s * 0.8,
+    heat: heat,
+    cool: rnd(0.22, 0.55),        // скорость остывания
+    drag: rnd(1.1, 2.4),
+    trail: rnd(0, 1),
+    rest: false,
+    t: 0,
+  });
+}
+
+function updateShards(dt, time) {
+  const n = shards.length;
+  if (!n) return;
+  let moving = false;
+  shardTickBudget += dt * 26;
+
+  for (let i = 0; i < n; i++) {
+    const s = shards[i];
+    s.t += dt;
+    s.heat = Math.max(0, s.heat - dt / s.cool);
+
+    if (!s.rest) {
+      moving = true;
+      s.v.y -= 9.81 * dt;
+      const dr = Math.max(0, 1 - s.drag * dt);
+      s.v.x *= dr; s.v.z *= dr; s.v.y *= dr;
+      s.p.addScaledVector(s.v, dt);
+
+      const wl = s.av.length();
+      if (wl > 0.0001) {
+        _sv.copy(s.av).multiplyScalar(1 / wl);
+        _dq.setFromAxisAngle(_sv, wl * dt);
+        s.q.premultiply(_dq).normalize();
+      }
+
+      if (s.p.y <= s.r) {
+        s.p.y = s.r;
+        const imp = -s.v.y;
+        if (imp > 0) {
+          s.v.y = imp * 0.26;
+          s.v.x *= 0.62; s.v.z *= 0.62;
+          s.av.multiplyScalar(0.45);
+          if (imp > 0.55 && shardTickBudget >= 1) {
+            shardTickBudget -= 1;
+            SND.shardTick(clamp(imp * 0.35, 0.08, 0.8), audioPan(s.p));
+            if (s.heat > 0.25) {
+              for (let j = 0; j < 3; j++) {
+                spawnSpark({
+                  x: s.p.x, y: s.p.y, z: s.p.z,
+                  vx: rnd(-0.5, 0.5), vy: rnd(0.15, 0.9), vz: rnd(-0.5, 0.5),
+                  life: rnd(0.12, 0.34), size: rnd(0.0012, 0.003), grav: 1, drag: 3.4,
+                  alpha: 0.9, seed: rnd(0, 10), tint: [1, 0.9, 0.7], t: 0,
+                });
+              }
+            }
+          }
+          if (imp < 0.16 && s.v.lengthSq() < 0.02) {
+            s.rest = true;
+            s.v.set(0, 0, 0);
+            s.av.set(0, 0, 0);
+          }
+        }
+      }
+
+      // горячие частицы тянут за собой искры
+      if (s.heat > 0.35 && s.trail > 0.55 && Math.random() < 12 * dt) {
+        spawnSpark({
+          x: s.p.x, y: s.p.y, z: s.p.z,
+          vx: -s.v.x * 0.12 + rnd(-0.1, 0.1),
+          vy: -s.v.y * 0.12 + rnd(0, 0.2),
+          vz: -s.v.z * 0.12 + rnd(-0.1, 0.1),
+          life: rnd(0.1, 0.28), size: rnd(0.001, 0.0026), grav: 0.6, drag: 3.0,
+          alpha: 0.75 * s.heat, seed: rnd(0, 10), tint: [1, 0.88, 0.62], t: 0,
+        });
+      }
+    }
+
+    _sm.compose(s.p, s.q, s.s);
+    shardMesh.setMatrixAt(i, _sm);
+
+    const h = s.heat;
+    if (h > 0.02) {
+      _ss.copy(s.s).multiplyScalar(1.55);
+      _sm.compose(s.p, s.q, _ss);
+      shardHot.setMatrixAt(i, _sm);
+      const fl = 0.75 + 0.25 * Math.sin(s.t * 34 + i);
+      _sc.setRGB(
+        Math.min(1.6, 0.55 + 1.5 * h) * fl,
+        Math.pow(h, 1.55) * 1.25 * fl,
+        Math.pow(h, 3.6) * 1.1 * fl
+      );
+    } else {
+      _ss.set(0, 0, 0);
+      _sm.compose(s.p, s.q, _ss);
+      shardHot.setMatrixAt(i, _sm);
+      _sc.setRGB(0, 0, 0);
+    }
+    shardHot.setColorAt(i, _sc);
+  }
+
+  shardMesh.count = n;
+  shardHot.count = n;
+  shardMesh.instanceMatrix.needsUpdate = true;
+  shardHot.instanceMatrix.needsUpdate = true;
+  if (shardHot.instanceColor) shardHot.instanceColor.needsUpdate = true;
+  if (shardTickBudget > 4) shardTickBudget = 4;
+  return moving;
+}
+
+function clearShards() {
+  shards.length = 0;
+  shardMesh.count = 0;
+  shardHot.count = 0;
+}
+
+/* ============================================================================
+   ЗВУКОВАЯ ГЕОМЕТРИЯ: панорама и дистанция от камеры
+============================================================================ */
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _rel = new THREE.Vector3();
+function audioPan(pos) {
+  camera.getWorldDirection(_fwd);
+  _right.crossVectors(_fwd, camera.up).normalize();
+  _rel.copy(pos).sub(camera.position);
+  const d = _rel.length() || 1;
+  return clamp((_rel.dot(_right) / d) * 1.7, -1, 1);
+}
+function audioDist(pos) {
+  return camera.position.distanceTo(pos);
+}
+
+/* ---- Чека: туго идёт, потом срывается ---- */
+function pullCurve(a) {
+  a = clamp(a, 0, 1);
+  return a < 0.35
+    ? 0.13 * Math.pow(a / 0.35, 2)
+    : 0.13 + 0.87 * (1 - Math.pow(1 - (a - 0.35) / 0.65, 2.3));
+}
+function applyPin(t) {
+  P.pin.position.set(
+    BASE.pin.pos.x + MM(5) * t,
+    BASE.pin.pos.y + MM(2.5) * t,
+    BASE.pin.pos.z + MM(52) * t
+  );
+  P.pin.rotation.set(BASE.pin.rot.x, BASE.pin.rot.y, BASE.pin.rot.z + 0.12 * t);
+  P.ring.rotation.set(BASE.ring.rot.x - 0.55 * clamp(t * 2.4, 0, 1), BASE.ring.rot.y, BASE.ring.rot.z);
+}
+
+function toWorldVec(local) {
+  return local.clone().transformDirection(P.body.matrixWorld);
+}
+
+/* ============================================================================
+   РУЧНОЕ ВЫДЕРГИВАНИЕ ЧЕКИ
+   Кольцо тянется указателем вдоль оси чеки. Сопротивление нелинейное:
+   сначала усики разгибаются почти без хода, потом чека идёт рывком.
+============================================================================ */
+const raycaster = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+const dragPlane = new THREE.Plane();
+const _hit = new THREE.Vector3();
+const _p0 = new THREE.Vector3();
+const _axisW = new THREE.Vector3();
+const _ringW = new THREE.Vector3();
+let drag = null;
+let hoverRing = false;
+
+function pointerNDC(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+}
+
+function ringHitTest(e) {
+  pointerNDC(e);
+  raycaster.setFromCamera(ptr, camera);
+  raycaster.params.Line = raycaster.params.Line || {};
+  const hits = raycaster.intersectObject(P.pin, true);
+  return hits.length ? hits[0] : null;
+}
+
+function beginDrag(e, hit) {
+  P.body.updateWorldMatrix(true, false);
+  _axisW.copy(PULL_AXIS).transformDirection(P.body.matrixWorld).normalize();
+  P.ring.getWorldPosition(_ringW);
+
+  camera.getWorldDirection(_fwd);
+  dragPlane.setFromNormalAndCoplanarPoint(_fwd, hit.point);
+
+  drag = { start: hit.point.clone(), t: 0, prev: 0, speed: 0, id: e.pointerId };
+  phase = 'pull';
+  idleSpin = false;
+  haloOn = false;
+  controls.enabled = false;
+  renderer.domElement.style.cursor = 'grabbing';
+  try { renderer.domElement.setPointerCapture(e.pointerId); } catch (err) {}
+  SND.warm();
+  SND.pinDragStart();
+  setStatus('Чека идёт туго…', 'warn');
+  setHint('Тяни дальше, пока усики не разогнутся');
+  syncButton();
+}
+
+function moveDrag(e) {
+  pointerNDC(e);
+  raycaster.setFromCamera(ptr, camera);
+  if (!raycaster.ray.intersectPlane(dragPlane, _hit)) return;
+  _p0.copy(_hit).sub(drag.start);
+  const along = Math.max(0, _p0.dot(_axisW));
+  const t = clamp(along / PULL_LEN, 0, 1);
+  const d = t - drag.t;
+  drag.t = t;
+  applyPin(pullCurve(t));
+  drag.speed = Math.abs(d);
+  SND.pinDrag(Math.abs(d) * 1.6 + 0.004, t, audioPan(_ringW));
+  if (t >= 0.995) endDrag(e, true);
+}
+
+function endDrag(e, broke) {
+  if (!drag) return;
+  const id = drag.id;
+  drag = null;
+  controls.enabled = true;
+  renderer.domElement.style.cursor = '';
+  try { renderer.domElement.releasePointerCapture(id); } catch (err) {}
+  SND.pinDragEnd();
+  if (broke) {
+    releasePin();
+  } else {
+    // не дотянул — пружинящие усики вернут чеку назад
+    P.ring.getWorldPosition(_ringW);
+    SND.pinReturn(audioPan(_ringW));
+    springBack = { from: pullCurve(clamp(lastPinT(), 0, 1)), t: 0 };
+    phase = 'ready';
+    setStatus('Готова · чека на месте', '');
+    setHint('Чека вернулась · тяни кольцо до упора');
+    syncButton();
+  }
+}
+
+function lastPinT() {
+  return (P.pin.position.z - BASE.pin.pos.z) / MM(52);
+}
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  SND.warm();
+  if (phase !== 'ready' || springBack || autoPull) return;
+  const hit = ringHitTest(e);
+  if (hit) { e.preventDefault(); beginDrag(e, hit); }
+});
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (drag) { e.preventDefault(); moveDrag(e); return; }
+  if (phase === 'ready' && !springBack && !autoPull) {
+    const over = !!ringHitTest(e);
+    if (over !== hoverRing) {
+      hoverRing = over;
+      renderer.domElement.style.cursor = over ? 'grab' : '';
+    }
+  } else if (hoverRing) {
+    hoverRing = false;
+    renderer.domElement.style.cursor = '';
+  }
+});
+
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+  renderer.domElement.addEventListener(ev, (e) => { if (drag) endDrag(e, false); });
+}
+
+/* ============================================================================
+   СОБЫТИЯ МЕХАНИЗМА
+============================================================================ */
+function releasePin() {
+  if (pinFree) return;
+  pinFree = true;
+  phase = 'armed';
+  applyPin(1);
+  P.body.updateWorldMatrix(true, false);
+  P.ring.getWorldPosition(_ringW);
+  SND.pinBreak(audioPan(_ringW));
+
+  scene.attach(P.pin);
+  const v = toWorldVec(new THREE.Vector3(0.35, 0.55, 1.9));
+  flying.push({
+    obj: P.pin, v, r: 0.006, rest: 0.38, sleep: false, kind: 'pin',
+    w: new THREE.Vector3(rnd(-14, 14), rnd(-10, 10), rnd(-16, 16)),
+  });
+
+  setStatus('Чека снята · скоба удерживается', 'warn');
+  setHint('Пока скоба прижата, времени нет. Отпустишь — пойдёт замедлитель');
+  syncButton();
+}
+
+function releaseSpoon() {
+  if (spoonFree || !pinFree) return;
+  spoonFree = true;
+  phase = 'fuse';
+  seqT = 0;
+  fuseT = 0;
+  P.body.updateWorldMatrix(true, false);
+  P.spoon.getWorldPosition(_ringW);
+  SND.spoonRelease(audioPan(_ringW));
+
+  scene.attach(P.spoon);
+  const v = toWorldVec(new THREE.Vector3(2.6, 1.55, 0.25));
+  flying.push({
+    obj: P.spoon, v, r: 0.010, rest: 0.34, sleep: false, kind: 'spoon',
+    w: new THREE.Vector3(rnd(-6, 6), rnd(-8, 8), rnd(15, 26)),
+  });
+  wob = { t: 0 };
+  fireStriker();
+  setHint('Замедлитель горит · можно бросать');
+  syncButton();
+}
+
+function fireStriker() {
+  strikerFired = true;
+  P.body.updateWorldMatrix(true, false);
+  const wp = new THREE.Vector3(0, DIM.fuseTop, 0).applyMatrix4(P.body.matrixWorld);
+  SND.striker(audioPan(wp));
+  SND.fuseStart(audioPan(wp));
+  for (let i = 0; i < 30; i++) {
+    const a = rnd(0, Math.PI * 2), s = rnd(0.25, 1.2);
+    spawnSpark({
+      x: wp.x, y: wp.y, z: wp.z,
+      vx: Math.cos(a) * s, vy: rnd(0.3, 1.6), vz: Math.sin(a) * s,
+      life: rnd(0.18, 0.5), size: rnd(0.002, 0.005), grav: 1, drag: 3.2,
+      alpha: 0.9, seed: rnd(0, 10), tint: [1, 0.92, 0.72], t: 0,
+    });
+  }
+}
+
+/* ---- Бросок: граната уходит от камеры и кувыркается ---- */
+const _yawInv = new THREE.Quaternion();
+function throwGrenade() {
+  if (thrown || phase !== 'fuse') return;
+  thrown = true;
+
+  camera.getWorldDirection(_fwd);
+  _fwd.y = 0;
+  if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1);
+  _fwd.normalize();
+
+  _yawInv.copy(yaw.quaternion).invert();
+  const dir = _fwd.clone().applyQuaternion(_yawInv);
+
+  phys.free = true;
+  phys.on = true;
+  phys.topple = false;
+  phys.settle = 0;
+  phys.p.copy(rig.position);
+  phys.q.copy(rig.quaternion);
+  phys.v.set(
+    dir.x * rnd(2.6, 3.4) + rnd(-0.15, 0.15),
+    rnd(1.5, 2.1),
+    dir.z * rnd(2.6, 3.4) + rnd(-0.15, 0.15)
+  );
+  phys.av.set(rnd(-6, 6), rnd(-8, 8), rnd(9, 17));
+  wob = null;
+
+  P.body.getWorldPosition(_ringW);
+  SND.throwSwish(1, audioPan(_ringW));
+  setHint('Граната в полёте · рвётся там, где ляжет');
+  syncButton();
+}
+
+/* ============================================================================
+   ПОДРЫВ
+============================================================================ */
+const _bp = new THREE.Vector3();
+function detonate() {
+  phase = 'blast';
+  blastT = 0;
+  canReset = false;
+
+  P.body.updateWorldMatrix(true, false);
+  P.body.getWorldPosition(_bp);
+  blastDist = Math.max(0.22, audioDist(_bp));
+  distF = clamp(1.15 / blastDist, 0.12, 1.1);
+
+  SND.fuseStop();
+  SND.bang({ dist: blastDist, pan: audioPan(_bp) });
+
+  // Корпус: если стоял — подбрасывает и валит набок; если летел — получает импульс
+  if (phys.free) {
+    phys.v.y += rnd(0.9, 1.5);
+    phys.v.x += rnd(-0.5, 0.5);
+    phys.v.z += rnd(-0.5, 0.5);
+    phys.av.set(rnd(-16, 16), rnd(-16, 16), rnd(-16, 16));
+    phys.settle = 0;
+  } else {
+    const f = rnd(0, Math.PI * 2);
+    phys.axis.set(Math.cos(f), 0, Math.sin(f));
+    phys.perp.set(-Math.sin(f), 0, Math.cos(f));
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    phys.on = true; phys.topple = true;
+    phys.y = rig.position.y; phys.vy = rnd(0.62, 1.0);
+    phys.tilt = 0; phys.w = dir * rnd(2.6, 4.4);
+    phys.drift = 0; phys.vd = dir * rnd(0.10, 0.22);
+  }
+  wob = null;
+
+  // Объекты вспышки
+  blast.visible = true;
+  afterLight.visible = true;
+  glare.visible = true;
+  core.visible = true;
+  shock.visible = true;
+  shockRing.visible = true;
+  scorch.visible = true;
+  scorch.position.set(_bp.x, 0.0008, _bp.z);
+  fuseJet.visible = false;
+  fuseLight.intensity = 0;
+  for (const p of portFx) { p.gs.visible = true; p.cone.visible = true; }
+  shake = REDUCED ? 0 : 0.024 * distF;
+  shakeT = 0;
+  smokeTimer = 0;
+
+  // Выброс через окна: искры, факелы, дым и твёрдые частицы
+  const wp = new THREE.Vector3(), wd = new THREE.Vector3();
+  const perPort = Math.floor((SHARD_MAX - 14) / model.ports.length);
+  for (const port of model.ports) {
+    wp.copy(port.pos).applyMatrix4(P.body.matrixWorld);
+    wd.copy(port.dir).transformDirection(P.body.matrixWorld);
+    for (let i = 0; i < 44; i++) {
+      const s = rnd(2.2, 8.5);
+      spawnSpark({
+        x: wp.x, y: wp.y, z: wp.z,
+        vx: wd.x * s + rnd(-1.1, 1.1),
+        vy: wd.y * s + rnd(-0.7, 1.5),
+        vz: wd.z * s + rnd(-1.1, 1.1),
+        life: rnd(0.22, 1.15), size: rnd(0.0035, 0.013), grav: 1, drag: 2.6,
+        alpha: 1, seed: rnd(0, 10), tint: [1, 1, 1], t: 0,
+      });
+    }
+    for (let i = 0; i < perPort; i++) {
+      const s = rnd(3.5, 11);
+      spawnShard(
+        wp.x + wd.x * 0.004, wp.y + wd.y * 0.004, wp.z + wd.z * 0.004,
+        wd.x * s + rnd(-1.4, 1.4),
+        wd.y * s + rnd(0.2, 2.6),
+        wd.z * s + rnd(-1.4, 1.4),
+        rnd(0.85, 1)
+      );
+    }
+    for (let i = 0; i < 2; i++) {
+      const s = rnd(0.8, 2.0);
+      spawnSmoke({
+        x: wp.x, y: wp.y, z: wp.z,
+        vx: wd.x * s + rnd(-0.25, 0.25), vy: rnd(0.1, 0.6), vz: wd.z * s + rnd(-0.25, 0.25),
+        s0: 0.03, s1: rnd(0.24, 0.42), life: rnd(2.6, 4.4), alpha: rnd(0.30, 0.50),
+        buoy: 0.34, drag: 1.7, lit: 0.55, dark: 0.50,
+      });
+    }
+  }
+
+  // Выхлоп вверх через запал
+  const fp = new THREE.Vector3(0, DIM.fuseTop, 0).applyMatrix4(P.body.matrixWorld);
+  for (let i = 0; i < 90; i++) {
+    const a = rnd(0, Math.PI * 2), r = rnd(0.2, 2.2);
+    spawnSpark({
+      x: fp.x, y: fp.y, z: fp.z,
+      vx: Math.cos(a) * r, vy: rnd(1.6, 6.5), vz: Math.sin(a) * r,
+      life: rnd(0.3, 1.2), size: rnd(0.003, 0.010), grav: 1, drag: 2.2,
+      alpha: 1, seed: rnd(0, 10), tint: [1, 1, 1], t: 0,
+    });
+  }
+  for (let i = 0; i < 14; i++) {
+    const a = rnd(0, Math.PI * 2), r = rnd(0.4, 2.6);
+    spawnShard(fp.x, fp.y, fp.z, Math.cos(a) * r, rnd(3.5, 8.5), Math.sin(a) * r, rnd(0.8, 1));
+  }
+
+  // Пыль, сорванная ударной волной с пола
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2 + rnd(-0.12, 0.12);
+    const s = rnd(1.1, 2.4);
+    spawnSmoke({
+      x: _bp.x + Math.cos(a) * 0.05, y: 0.012, z: _bp.z + Math.sin(a) * 0.05,
+      vx: Math.cos(a) * s, vy: rnd(0.05, 0.3), vz: Math.sin(a) * s,
+      s0: 0.05, s1: rnd(0.30, 0.50), life: rnd(2.2, 3.6), alpha: rnd(0.18, 0.30),
+      buoy: 0.10, drag: 2.6, lit: 0.35, dark: 0.40,
+    });
+  }
+
+  // Ударная волна расшвыривает уже лежащие чеку и скобу
+  for (const f of flying) {
+    const d = f.obj.position.distanceTo(_bp);
+    if (d < 0.5) {
+      const k = (0.5 - d) / 0.5;
+      f.sleep = false;
+      f.rest = Math.max(f.rest, 0.3);
+      f.v.set(
+        (f.obj.position.x - _bp.x) * 6 * k + rnd(-0.3, 0.3),
+        1.6 * k + rnd(0.2, 0.9),
+        (f.obj.position.z - _bp.z) * 6 * k + rnd(-0.3, 0.3)
+      );
+      f.w.set(rnd(-18, 18), rnd(-18, 18), rnd(-18, 18));
+    }
+  }
+}
+
+/* ---- Физика отлетевших деталей (чека с кольцом, скоба) ---- */
+function updateFlying(dt) {
+  for (const f of flying) {
+    if (f.sleep) continue;
+    f.v.y -= 9.81 * dt;
+    f.v.multiplyScalar(Math.max(0, 1 - 0.35 * dt));
+    f.obj.position.addScaledVector(f.v, dt);
+    f.obj.rotation.x += f.w.x * dt;
+    f.obj.rotation.y += f.w.y * dt;
+    f.obj.rotation.z += f.w.z * dt;
+    if (f.obj.position.y <= f.r) {
+      f.obj.position.y = f.r;
+      if (f.v.y < 0) {
+        const imp = -f.v.y;
+        f.v.y = imp * f.rest;
+        f.v.x *= 0.66; f.v.z *= 0.66;
+        f.w.multiplyScalar(0.5);
+        f.rest *= 0.62;
+        if (imp > 0.2) SND.clank(clamp(imp * 0.55, 0.08, 0.9), audioPan(f.obj.position), f.kind);
+        if (imp < 0.12) { f.sleep = true; f.v.set(0, 0, 0); f.w.set(0, 0, 0); }
+      }
+    }
+  }
+}
+
+/* ---- Физика корпуса ---- */
+const _upL = new THREE.Vector3();
+const _upT = new THREE.Vector3();
+const _qFix = new THREE.Quaternion();
+const _qTarget = new THREE.Quaternion();
+
+function updateBody(dt) {
+  if (wob && !phys.on) {
+    wob.t += dt;
+    const amp = 0.028 * Math.exp(-wob.t * 4.2);
+    rig.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), amp * Math.sin(wob.t * 34));
+    if (wob.t > 1.8) { wob = null; rig.quaternion.identity(); }
+  }
+  if (!phys.on) return;
+
+  /* --- Свободный полёт после броска --- */
+  if (phys.free) {
+    phys.v.y -= 9.81 * dt;
+    phys.v.multiplyScalar(Math.max(0, 1 - 0.12 * dt));
+    phys.p.addScaledVector(phys.v, dt);
+
+    const wl = phys.av.length();
+    if (wl > 0.0001) {
+      _sv.copy(phys.av).multiplyScalar(1 / wl);
+      _dq.setFromAxisAngle(_sv, wl * dt);
+      phys.q.premultiply(_dq).normalize();
+    }
+
+    if (phys.p.y <= DIM.R) {
+      phys.p.y = DIM.R;
+      const imp = -phys.v.y;
+      if (imp > 0) {
+        phys.v.y = imp * 0.3;
+        phys.v.x *= 0.7; phys.v.z *= 0.7;
+        phys.av.multiplyScalar(0.55);
+        if (imp > 0.25) SND.clank(clamp(imp * 0.45, 0.1, 1), audioPan(rig.position), 'body');
+        if (imp < 0.35 && phys.v.lengthSq() < 0.35) phys.settle += 1;
+      }
+    }
+
+    // успокоение: цилиндр ложится на бок
+    if (phys.settle > 0 && phys.p.y <= DIM.R + 1e-4) {
+      phys.v.multiplyScalar(Math.max(0, 1 - 3.2 * dt));
+      phys.av.multiplyScalar(Math.max(0, 1 - 3.6 * dt));
+      _upL.set(0, 1, 0).applyQuaternion(phys.q);
+      _upT.set(_upL.x, 0, _upL.z);
+      if (_upT.lengthSq() < 1e-6) _upT.set(1, 0, 0);
+      _upT.normalize();
+      _qFix.setFromUnitVectors(_upL.normalize(), _upT);
+      _qTarget.copy(_qFix).multiply(phys.q);
+      phys.q.slerp(_qTarget, Math.min(1, 4.5 * dt));
+      if (phys.v.lengthSq() < 0.0004 && phys.av.lengthSq() < 0.02) {
+        phys.q.copy(_qTarget);
+        phys.v.set(0, 0, 0);
+        phys.av.set(0, 0, 0);
+        phys.on = false;
+      }
+    }
+
+    rig.position.copy(phys.p);
+    rig.quaternion.copy(phys.q);
+    return;
+  }
+
+  /* --- Подрыв на месте: подскок и завал набок --- */
+  phys.vy -= 9.81 * dt;
+  phys.y += phys.vy * dt;
+  phys.tilt += phys.w * dt;
+  phys.drift += phys.vd * dt;
+
+  const ct = Math.abs(Math.cos(phys.tilt)), st = Math.abs(Math.sin(phys.tilt));
+  const hmin = DIM.H * ct + DIM.R * st;
+
+  if (phys.y <= hmin) {
+    phys.y = hmin;
+    if (phys.vy < 0) {
+      const imp = -phys.vy;
+      phys.vy = imp * 0.26;
+      phys.w *= 0.62;
+      phys.vd *= 0.72;
+      if (imp > 0.18) SND.clank(clamp(imp * 0.5, 0.1, 1), audioPan(rig.position), 'body');
+      if (imp < 0.07) phys.vy = 0;
+    }
+    if (phys.topple) {
+      const target = Math.round((phys.tilt - Math.PI / 2) / Math.PI) * Math.PI + Math.PI / 2;
+      phys.w += (target - phys.tilt) * 24 * dt;
+      phys.w *= Math.max(0, 1 - 3.4 * dt);
+      phys.vd *= Math.max(0, 1 - 2.6 * dt);
+      if (Math.abs(phys.vy) < 0.02 && Math.abs(phys.w) < 0.06 && Math.abs(target - phys.tilt) < 0.02) {
+        phys.tilt = target; phys.w = 0; phys.vy = 0; phys.vd = 0; phys.on = false;
+      }
+    }
+  }
+
+  rig.position.set(phys.perp.x * phys.drift, phys.y, phys.perp.z * phys.drift);
+  rig.quaternion.setFromAxisAngle(phys.axis, phys.tilt);
+}
+
+/* ---- Горение замедлителя ---- */
+const _fp = new THREE.Vector3();
+let fusePanTick = 0;
+function updateFuse(dt, time) {
+  const k = clamp(fuseT / SEQ.DELAY, 0, 1);
+  const flick = 0.55 + 0.45 * Math.sin(time * 41) * Math.sin(time * 17.3);
+  fuseLight.intensity = (0.9 + 1.5 * flick) * (1 + 0.5 * k);
+  fuseJet.visible = true;
+  fuseJet.material.opacity = 0.35 + 0.35 * flick;
+  const s = (0.016 + 0.012 * flick) * (1 + 0.35 * k);
+  fuseJet.scale.set(s, s, 1);
+
+  fusePanTick -= dt;
+  if (fusePanTick <= 0) {
+    fusePanTick = 0.1;
+    _fp.set(0, DIM.fuseTop, 0).applyMatrix4(P.body.matrixWorld);
+    SND.fusePan(audioPan(_fp));
+  }
+
+  fuseTimer -= dt;
+  if (fuseTimer <= 0) {
+    fuseTimer = 0.03 + Math.random() * 0.04;
+    _fp.set(0, DIM.fuseTop, 0).applyMatrix4(P.body.matrixWorld);
+    const n = 1 + (Math.random() * 2 | 0);
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, Math.PI * 2), r = rnd(0.05, 0.5);
+      spawnSpark({
+        x: _fp.x, y: _fp.y, z: _fp.z,
+        vx: Math.cos(a) * r, vy: rnd(0.35, 1.5), vz: Math.sin(a) * r,
+        life: rnd(0.25, 0.7), size: rnd(0.0015, 0.004), grav: 1, drag: 2.8,
+        alpha: 0.85, seed: rnd(0, 10), tint: [1, 0.95, 0.8], t: 0,
+      });
+    }
+    if (Math.random() < 0.45) {
+      spawnSmoke({
+        x: _fp.x, y: _fp.y + 0.004, z: _fp.z,
+        vx: rnd(-0.05, 0.05), vy: rnd(0.10, 0.22), vz: rnd(-0.05, 0.05),
+        s0: 0.012, s1: rnd(0.07, 0.13), life: rnd(1.4, 2.3), alpha: rnd(0.10, 0.20),
+        buoy: 0.22, drag: 1.9, lit: 0.12, dark: 0.46,
+      });
+    }
+  }
+}
+
+/* ============================================================================
+   КАДР ВСПЫШКИ И ПОСЛЕДСТВИЙ
+============================================================================ */
+const veilEl = $('veil');
+const ghostEl = $('ghost');
+const _wc = new THREE.Vector3();
+
+function updateBlast(dt) {
+  const t = blastT;
+  P.body.getWorldPosition(_wc);
+
+  /* Свет вспышки: фронт 3 мс → полка → спад + догорание */
+  if (t < 0.9) {
+    const rise = clamp(t / 0.0025, 0, 1);
+    const hold = t < 0.012 ? 1 : Math.exp(-(t - 0.012) / 0.05);
+    const second = 0.42 * Math.exp(-Math.pow((t - 0.028) / 0.017, 2));
+    blast.intensity = 1380 * rise * (hold + second) + 95 * Math.exp(-t / 0.22);
+  } else if (blast.visible) {
+    blast.intensity = 0;
+    blast.visible = false;
+  }
+
+  afterLight.intensity = 18 * Math.exp(-t / 0.5) + 3.8 * Math.exp(-t / 2.4);
+  if (t > 7 && afterLight.visible) { afterLight.intensity = 0; afterLight.visible = false; }
+
+  model.setGlow(30 * Math.exp(-t / 0.085) + 3.6 * Math.exp(-t / 0.9) + 0.4 * Math.exp(-t / 4));
+
+  /* Раскалённое ядро: распухает за 60 мс и гаснет */
+  if (t < 0.4) {
+    const cs = 0.02 + 0.36 * (1 - Math.exp(-t / 0.028));
+    core.position.copy(_wc);
+    core.scale.set(cs, cs, 1);
+    core.material.opacity = clamp(1.25 * Math.exp(-t / 0.055), 0, 1);
+    const warm = clamp(t / 0.12, 0, 1);
+    core.material.color.setRGB(1, 1 - 0.30 * warm, 1 - 0.72 * warm);
+  } else if (core.visible) { core.visible = false; }
+
+  /* Ореол */
+  if (t < 1.2) {
+    const gs = 0.04 + 1.25 * (1 - Math.exp(-t / 0.04));
+    glare.position.copy(_wc);
+    glare.scale.set(gs, gs, 1);
+    glare.material.opacity = clamp(1.2 * Math.exp(-t / 0.095) + 0.22 * Math.exp(-t / 0.5), 0, 1);
+  } else if (glare.visible) { glare.visible = false; }
+
+  /* Факелы из окон: основной выброс + дожиг */
+  if (t < 0.9) {
+    const pulse1 = Math.exp(-t / 0.045);
+    const pulse2 = 0.45 * Math.exp(-Math.pow((t - 0.055) / 0.03, 2));
+    const jl = 0.35 + 2.8 * (1 - Math.exp(-t / 0.012)) * (pulse1 + pulse2);
+    const jo = clamp(1.15 * (pulse1 + pulse2), 0, 1);
+    const gsz = 0.018 + 0.22 * (1 - Math.exp(-t / 0.03));
+    const go = clamp(1.2 * Math.exp(-t / 0.11) + 0.25 * Math.exp(-t / 0.45), 0, 1);
+    for (const p of portFx) {
+      p.cone.scale.set(0.6 + 0.9 * jo, Math.max(0.2, jl), 0.6 + 0.9 * jo);
+      p.cone.material.opacity = jo;
+      p.cone.visible = jo > 0.01;
+      p.gs.scale.set(gsz, gsz, 1);
+      p.gm.opacity = go;
+    }
+  } else {
+    for (const p of portFx) { p.cone.visible = false; p.gm.opacity = 0; p.gs.visible = false; }
+  }
+
+  /* Фронт ударной волны в воздухе — быстрый и тонкий */
+  if (t < 0.7) {
+    const r = 0.025 + 3.4 * (1 - Math.exp(-t / 0.13));
+    shock.position.copy(_wc);
+    shock.scale.setScalar(r);
+    shockMat.uniforms.uOp.value = 0.95 * Math.exp(-t / 0.12);
+  } else if (shock.visible) { shock.visible = false; }
+
+  /* Кольцо по полу */
+  if (t < 1.3) {
+    ringMat.uniforms.uR.value = clamp(1.05 * (1 - Math.exp(-t / 0.26)), 0, 1);
+    ringMat.uniforms.uW.value = 0.03 + 0.17 * t;
+    ringMat.uniforms.uOp.value = 0.65 * Math.exp(-t / 0.36);
+    shockRing.position.set(_wc.x, 0.0016, _wc.z);
+  } else if (shockRing.visible) { shockRing.visible = false; }
+
+  /* Копоть */
+  scorch.material.opacity = clamp(0.72 * (1 - Math.exp(-t / 0.18)), 0, 0.72);
+
+  /* Экспозиция: пересвет → провал → адаптация */
+  const eBoost = 1.6 * distF;
+  renderer.toneMappingExposure = t < 0.05
+    ? EXPO_BASE + eBoost * (t / 0.05)
+    : 0.62 + (EXPO_BASE - 0.62) * (1 - Math.exp(-(t - 0.05) / 1.7)) + eBoost * Math.exp(-(t - 0.05) / 0.13);
+
+  /* Засвет экрана */
+  let op;
+  if (REDUCED) {
+    op = 0.5 * Math.exp(-t / 0.45) * distF;
+  } else {
+    const a = t < 0.012 ? t / 0.012 : Math.exp(-(t - 0.012) / 0.105);
+    const b = 0.32 * Math.exp(-t / 1.25);
+    op = Math.max(a, b) * clamp(distF * 1.05, 0.15, 1);
+  }
+  op = clamp(op, 0, 1);
+  veilEl.style.opacity = op.toFixed(3);
+  if (op > 0.002) {
+    const w = clamp((t - 0.12) / 0.7, 0, 1);
+    veilEl.style.background = 'rgb(255,' + Math.round(255 - 8 * w) + ',' + Math.round(255 - 3 * w) + ')';
+  }
+
+  /* Остаточный образ на сетчатке — холодное пятно, дополнительное к вспышке */
+  if (ghostEl && !REDUCED) {
+    const g = 0.55 * distF * (1 - Math.exp(-t / 0.16)) * Math.exp(-t / 2.6);
+    ghostEl.style.opacity = clamp(g, 0, 1).toFixed(3);
+  }
+
+  /* Дым из окон после хлопка */
+  if (t < 5.5) {
+    smokeTimer -= dt;
+    if (smokeTimer <= 0) {
+      smokeTimer = t < 0.5 ? 0.022 : 0.055 + t * 0.05;
+      const port = model.ports[(Math.random() * model.ports.length) | 0];
+      const wp = port.pos.clone().applyMatrix4(P.body.matrixWorld);
+      const wd = port.dir.clone().transformDirection(P.body.matrixWorld);
+      const sp = rnd(0.12, 0.55) * (t < 0.5 ? 2.2 : 1);
+      spawnSmoke({
+        x: wp.x, y: wp.y, z: wp.z,
+        vx: wd.x * sp + rnd(-0.06, 0.06), vy: rnd(0.10, 0.3), vz: wd.z * sp + rnd(-0.06, 0.06),
+        s0: 0.02, s1: rnd(0.16, 0.34), life: rnd(2.4, 4.2),
+        alpha: clamp(0.34 - t * 0.045, 0.05, 0.34),
+        buoy: 0.30, drag: 1.6, lit: t < 0.4 ? 0.4 : 0, dark: 0.46,
+      });
+    }
+  }
+}
+
+/* ============================================================================
+   ИНТЕРФЕЙС
+============================================================================ */
+const goBtn = $('go'), sttEl = $('stt'), dotEl = $('dot'), sndBtn = $('snd'), hintEl = $('hint');
+
+function setStatus(text, cls) {
+  sttEl.textContent = text;
+  dotEl.className = cls || '';
+}
+function setHint(text) {
+  if (hintEl) hintEl.textContent = text;
+}
+
+function syncButton() {
+  goBtn.classList.toggle('reset', phase === 'after');
+  if (phase === 'ready') {
+    goBtn.disabled = false;
+    goBtn.textContent = 'Выдернуть чеку';
+  } else if (phase === 'pull') {
+    goBtn.disabled = true;
+    goBtn.textContent = 'Тяни…';
+  } else if (phase === 'armed') {
+    goBtn.disabled = false;
+    goBtn.textContent = 'Отпустить скобу';
+  } else if (phase === 'fuse') {
+    goBtn.disabled = thrown;
+    goBtn.textContent = thrown ? 'Летит…' : 'Бросок';
+  } else if (phase === 'blast') {
+    goBtn.disabled = true;
+    goBtn.textContent = 'Подрыв';
+  } else {
+    goBtn.disabled = !canReset;
+    goBtn.textContent = 'Сброс';
+  }
+}
+
+/* Автоматическое выдергивание — для клавиатуры и тех, кто не хочет тянуть вручную */
+function startAutoPull() {
+  if (phase !== 'ready' || autoPull || springBack) return;
+  phase = 'pull';
+  idleSpin = false;
+  haloOn = false;
+  autoPull = { t: 0, from: clamp(lastPinT(), 0, 1) };
+  SND.warm();
+  SND.pinDragStart();
+  setStatus('Срыв чеки…', 'warn');
+  setHint('В следующий раз можно потянуть кольцо мышью');
+  syncButton();
+}
+
+function primaryAction() {
+  if (phase === 'ready') startAutoPull();
+  else if (phase === 'armed') releaseSpoon();
+  else if (phase === 'fuse' && !thrown) throwGrenade();
+  else if (phase === 'after' && canReset) reset();
+}
+
+function reset() {
+  phase = 'ready';
+  seqT = 0; blastT = 0; fuseT = 0;
+  pinFree = spoonFree = strikerFired = thrown = false;
+  canReset = false;
+  wob = null;
+  shake = 0;
+  drag = null;
+  autoPull = null;
+  springBack = null;
+  haloOn = true;
+  controls.enabled = true;
+  distF = 1;
+
+  // Детали — на место
+  P.body.add(P.pin);
+  P.pin.position.copy(BASE.pin.pos);
+  P.pin.rotation.copy(BASE.pin.rot);
+  P.pin.quaternion.setFromEuler(P.pin.rotation);
+  P.ring.position.copy(BASE.ring.pos);
+  P.ring.rotation.copy(BASE.ring.rot);
+  P.body.add(P.spoon);
+  P.spoon.position.copy(BASE.spoon.pos);
+  P.spoon.rotation.copy(BASE.spoon.rot);
+  P.spoon.quaternion.setFromEuler(P.spoon.rotation);
+  P.striker.position.copy(BASE.striker.pos);
+  P.striker.rotation.copy(BASE.striker.rot);
+  flying.length = 0;
+
+  // Корпус — стоя
+  phys.on = false; phys.topple = false; phys.free = false; phys.settle = 0;
+  phys.y = REST_UP; phys.vy = 0; phys.tilt = 0; phys.w = 0; phys.drift = 0; phys.vd = 0;
+  phys.p.set(0, REST_UP, 0); phys.v.set(0, 0, 0); phys.av.set(0, 0, 0);
+  phys.q.identity();
+  rig.position.set(0, REST_UP, 0);
+  rig.quaternion.identity();
+  controls.target.set(0, REST_UP, 0);
+
+  // Эффекты
+  clearParticles();
+  clearShards();
+  model.setGlow(0);
+  blast.intensity = 0; blast.visible = false;
+  afterLight.intensity = 0; afterLight.visible = false;
+  fuseLight.intensity = 0;
+  fuseJet.visible = false; fuseJet.material.opacity = 0;
+  glare.visible = false; glare.material.opacity = 0;
+  core.visible = false; core.material.opacity = 0;
+  shock.visible = false; shockMat.uniforms.uOp.value = 0;
+  shockRing.visible = false; ringMat.uniforms.uOp.value = 0;
+  scorch.visible = false; scorch.material.opacity = 0;
+  scorch.position.set(0, 0.0008, 0);
+  for (const p of portFx) {
+    p.cone.visible = false; p.cone.material.opacity = 0;
+    p.gs.visible = false; p.gm.opacity = 0;
+  }
+  renderer.toneMappingExposure = EXPO_BASE;
+  veilEl.style.opacity = '0';
+  veilEl.style.background = '#fff';
+  if (ghostEl) ghostEl.style.opacity = '0';
+  SND.reset();
+
+  setStatus('Готова · чека на месте', '');
+  setHint('Потяни кольцо мышью · Space — действие · R — сброс');
+  syncButton();
+}
+
+goBtn.addEventListener('click', () => { SND.warm(); primaryAction(); });
+
+sndBtn.addEventListener('click', () => {
+  SND.enabled = !SND.enabled;
+  const on = SND.enabled;
+  sndBtn.classList.toggle('off', !on);
+  sndBtn.setAttribute('aria-label', on ? 'Звук: включён' : 'Звук: выключен');
+  $('w1').hidden = !on;
+  $('w2').hidden = !on;
+  $('wx').hidden = on;
+  if (on) SND.warm();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (e.code === 'Space' || e.code === 'Enter') {
+    if (document.activeElement === goBtn || document.activeElement === sndBtn) return;
+    e.preventDefault();
+    SND.warm();
+    primaryAction();
+  } else if (e.code === 'KeyR') {
+    if (tag === 'BUTTON') return;
+    e.preventDefault();
+    if (phase !== 'ready') reset();
+  } else if (e.code === 'KeyM') {
+    if (tag === 'BUTTON') return;
+    e.preventDefault();
+    sndBtn.click();
+  }
+});
+
+controls.addEventListener('start', () => { idleSpin = false; });
+
+/* ============================================================================
+   КАМЕРА И ЦИКЛ
+============================================================================ */
+function fitCamera() {
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = new THREE.Vector3(0, REST_UP, 0);
+  const radius = Math.max(size.x, size.y, size.z) * 0.5;
+  const dist = (radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.28;
+  const dir = new THREE.Vector3(0.62, 0.42, 0.78).normalize();
+  camera.position.copy(center).addScaledVector(dir, dist);
+  controls.target.copy(center);
+  controls.minDistance = radius * 1.25;
+  controls.maxDistance = radius * 22;
+  controls.update();
+}
+fitCamera();
+
+function onResize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  sparkMat.uniforms.uPix.value =
+    renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+}
+window.addEventListener('resize', onResize);
+onResize();
+
+const clock = new THREE.Clock();
+const shakeOff = new THREE.Vector3();
+const _camT = new THREE.Vector3();
+let statusTick = 0;
+
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 1 / 24);
+  const time = clock.elapsedTime;
+
+  /* ---- Подсказка у кольца ---- */
+  if (haloOn && phase === 'ready' && !REDUCED) {
+    P.ring.getWorldPosition(_ringW);
+    ringHalo.position.copy(_ringW);
+    ringHalo.visible = true;
+    const pu = 0.5 + 0.5 * Math.sin(time * 2.3);
+    ringHalo.material.opacity = hoverRing ? 0.30 : 0.10 + 0.10 * pu;
+    const hs = 0.030 + 0.006 * pu + (hoverRing ? 0.010 : 0);
+    ringHalo.scale.set(hs, hs, 1);
+  } else if (ringHalo.visible) {
+    ringHalo.visible = false;
+  }
+
+  /* ---- Автоматическое выдергивание с кнопки ---- */
+  if (autoPull) {
+    autoPull.t += dt;
+    const k = clamp((autoPull.t - SEQ.PULL0) / (SEQ.PULL1 - SEQ.PULL0), 0, 1);
+    const t = autoPull.from + (1 - autoPull.from) * k;
+    applyPin(pullCurve(t));
+    P.ring.getWorldPosition(_ringW);
+    SND.pinDrag(dt * 1.25, t, audioPan(_ringW));
+    if (k >= 1) {
+      autoPull = null;
+      SND.pinDragEnd();
+      releasePin();
+    }
+  }
+
+  /* ---- Чека возвращается, если не дотянули ---- */
+  if (springBack) {
+    springBack.t += dt;
+    const k = clamp(springBack.t / 0.26, 0, 1);
+    const e = 1 - Math.pow(1 - k, 3);
+    applyPin(springBack.from * (1 - e));
+    if (k >= 1) { applyPin(0); springBack = null; }
+  }
+
+  /* ---- Замедлитель ---- */
+  if (phase === 'fuse') {
+    seqT += dt;
+    fuseT += dt;
+    const k = clamp(seqT / 0.03, 0, 1);
+    P.striker.position.y = BASE.striker.pos.y - MM(4) * k;
+    updateFuse(dt, time);
+
+    statusTick -= dt;
+    if (statusTick <= 0) {
+      statusTick = 0.06;
+      const left = Math.max(0, SEQ.DELAY - fuseT);
+      setStatus('Замедлитель · ' + left.toFixed(1).replace('.', ',') + ' с', 'hot');
+    }
+    if (fuseT >= SEQ.DELAY) {
+      detonate();
+      setStatus('Подрыв', 'hot');
+      syncButton();
+    }
+  }
+
+  /* ---- Вспышка и последствия ---- */
+  if (phase === 'blast' || phase === 'after') {
+    blastT += dt;
+    updateBlast(dt);
+    if (phase === 'blast' && blastT > 0.5) {
+      phase = 'after';
+      setStatus('Корпус цел · дым из окон', 'cold');
+      setHint('Корпус M84 не дробится: наружу летят газ и горящий состав');
+      syncButton();
+    }
+    if (phase === 'after' && !canReset && blastT > 1.6) {
+      canReset = true;
+      syncButton();
+    }
+  }
+
+  /* ---- Камера ведẽт брошенную гранату ---- */
+  if (thrown && phase !== 'ready') {
+    P.body.getWorldPosition(_camT);
+    controls.target.lerp(_camT, Math.min(1, 2.4 * dt));
+  }
+
+  /* ---- Физика и частицы ---- */
+  updateBody(dt);
+  updateFlying(dt);
+  updateShards(dt, time);
+  updateSparks(dt, time);
+  updateSmoke(dt);
+  SND.update(dt, time);
+
+  /* ---- Медленный показ в покое ---- */
+  if (idleSpin && phase === 'ready' && !REDUCED) yaw.rotation.y += dt * 0.13;
+
+  controls.update();
+
+  /* ---- Тряска от ударной волны: несколько частот + крен ---- */
+  if (shake > 0.00002) {
+    shakeT += dt;
+    shake *= Math.max(0, 1 - dt / 0.30);
+    const s = shake;
+    const st = shakeT;
+    shakeOff.set(
+      s * (0.62 * Math.sin(st * 61.7 + 0.3) + 0.38 * Math.sin(st * 23.3 + 1.7)),
+      s * (0.62 * Math.sin(st * 53.1 + 2.1) + 0.38 * Math.sin(st * 19.7 + 0.5)),
+      s * 0.5 * Math.sin(st * 37.9 + 4.2)
+    );
+    const roll = s * 2.4 * Math.sin(st * 27.3 + 1.1);
+    camera.position.add(shakeOff);
+    camera.rotateZ(roll);
+    renderer.render(scene, camera);
+    camera.rotateZ(-roll);
+    camera.position.sub(shakeOff);
+  } else {
+    renderer.render(scene, camera);
+  }
+}
+
+/* ============================================================================
+   СТАРТ
+============================================================================ */
+renderer.compile(scene, camera);
+$('loader').hidden = true;
+$('hud').hidden = false;
+$('tag').hidden = false;
+$('snd').hidden = false;
+$('hint').hidden = false;
+setStatus('Готова · чека на месте', '');
+setHint('Потяни кольцо мышью · Space — действие · R — сброс');
+syncButton();
+tick();
+</script>
+</body>
+</html>
