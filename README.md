@@ -82,14 +82,6 @@ python3 -m http.server 8000
 
 Двойной клик по `.html` в большинстве браузеров тоже сработает. Если сцена не поднимается — браузер заблокировал ES-модули с `file://`, используйте вариант 1.
 
-### Вариант 3 — GitHub Pages
-
-`Settings → Pages → Source: Deploy from a branch → main / (root)`.
-
-После деплоя модели доступны напрямую, например:
-`https://badvino-ctrl.github.io/Web-shooter-weaponry/m416.html`
-
-> ⚠️ **Нужен интернет:** three.js подтягивается с CDN unpkg. Для полного офлайна см. раздел ниже.
 
 ---
 
@@ -101,30 +93,6 @@ python3 -m http.server 8000
 | Зум | Колесо | Щипок |
 | Панорама | ПКМ или Shift + ЛКМ | Два пальца |
 | Выстрел / перезарядка / режимы | Кнопки на панели | Тап |
-
----
-
-## Офлайн-режим
-
-Положите three.js рядом с файлами:
-
-```bash
-npm i three@0.166.1
-mkdir -p vendor && cp -r node_modules/three vendor/three
-```
-
-И замените `importmap` в `<head>` нужного файла:
-
-```html
-<script type="importmap">
-{"imports":{
-  "three": "./vendor/three/build/three.module.js",
-  "three/addons/": "./vendor/three/examples/jsm/"
-}}
-</script>
-```
-
-После этого файл работает без сети.
 
 ---
 
