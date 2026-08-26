@@ -142,6 +142,1022 @@
 
 <div id="load">ЗАГРУЗКА</div>
 
+<!-- ORDNANCE:BEGIN -->
+<script>
+/* ============================================================================
+   ORDNANCE — physically-based firearm audio synthesis.
+
+   Every sound is rendered offline, sample by sample, into a plain Float32Array.
+   There is not one oscillator in this file, on purpose: a muzzle blast has no
+   fundamental. It is a shock discontinuity followed by a decaying overpressure,
+   and any sine/triangle you put under it is heard as a pitch — that is the
+   "toy bell" artefact this engine exists to remove.
+
+   Layers, in the order they physically occur:
+
+     1  muzzle blast     ideal-blast (Friedlander) N-wave, sample-exact rise
+     2  body / thump     same waveform at a much longer time constant
+     3  jet roar         turbulent propellant-gas efflux, broadband, tilted
+     4  ballistic crack  bullet bow-shock N-wave, supersonic rounds only
+     5  ground bounce    the reflection that gives a gunshot its comb colour
+     6  mechanics        modal steel impacts at the real cycle times
+     7  brass            case ejection ring + floor bounces
+     8  tail             8-line FDN, damped, for the outdoor decay
+
+   Pure JS, no dependencies, deterministic given a seed. Runs identically in
+   Node (for the measurement gates) and in the browser (for playback).
+   ========================================================================== */
+
+'use strict';
+
+/* ------------------------------------------------------------------ helpers */
+
+const P_ATM = 101325;      // Pa
+const C_AIR = 343;         // m/s
+const E_NITRO = 4.2e6;     // J/kg, single-base nitrocellulose propellant
+const BLAST_FRAC = 0.33;   // fraction of chemical energy leaving as muzzle blast
+
+/* deterministic PRNG — the gates must be reproducible */
+function rng(seed) {
+  let a = (seed | 0) || 1;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---- biquads (RBJ cookbook), applied in place over a whole buffer -------- */
+
+function biquad(type, f0, Q, sr, gainDb) {
+  const w0 = 2 * Math.PI * Math.min(f0, sr * 0.49) / sr;
+  const cw = Math.cos(w0), sw = Math.sin(w0);
+  const al = sw / (2 * Q);
+  let b0, b1, b2, a0, a1, a2;
+  if (type === 'lp') {
+    b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0;
+    a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al;
+  } else if (type === 'hp') {
+    b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0;
+    a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al;
+  } else if (type === 'bp') {                     // constant skirt, peak = Q
+    b0 = al; b1 = 0; b2 = -al;
+    a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al;
+  } else if (type === 'peak') {
+    const A = Math.pow(10, (gainDb || 0) / 40);
+    b0 = 1 + al * A; b1 = -2 * cw; b2 = 1 - al * A;
+    a0 = 1 + al / A; a1 = -2 * cw; a2 = 1 - al / A;
+  } else if (type === 'ls') {
+    const A = Math.pow(10, (gainDb || 0) / 40);
+    const s = 2 * Math.sqrt(A) * al;
+    b0 = A * ((A + 1) - (A - 1) * cw + s);
+    b1 = 2 * A * ((A - 1) - (A + 1) * cw);
+    b2 = A * ((A + 1) - (A - 1) * cw - s);
+    a0 = (A + 1) + (A - 1) * cw + s;
+    a1 = -2 * ((A - 1) + (A + 1) * cw);
+    a2 = (A + 1) + (A - 1) * cw - s;
+  } else { // 'hs'
+    const A = Math.pow(10, (gainDb || 0) / 40);
+    const s = 2 * Math.sqrt(A) * al;
+    b0 = A * ((A + 1) + (A - 1) * cw + s);
+    b1 = -2 * A * ((A - 1) + (A + 1) * cw);
+    b2 = A * ((A + 1) + (A - 1) * cw - s);
+    a0 = (A + 1) - (A - 1) * cw + s;
+    a1 = 2 * ((A - 1) - (A + 1) * cw);
+    a2 = (A + 1) - (A - 1) * cw - s;
+  }
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 };
+}
+
+function filterInto(dst, src, c, n) {
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < n; i++) {
+    const x = src[i];
+    const y = c.b0 * x + c.b1 * x1 + c.b2 * x2 - c.a1 * y1 - c.a2 * y2;
+    x2 = x1; x1 = x; y2 = y1; y1 = y;
+    dst[i] = y;
+  }
+}
+
+/* ---------------------------------------------------------- blast waveform */
+
+/* Friedlander ideal blast wave, normalised to peak 1 at t=0.
+     p(t) = (1 - t/tau) * exp(-t/tau)
+   Fourier magnitude is w/(a^2+w^2) with a = 1/tau, so the spectral peak sits
+   exactly at f = 1/(2*pi*tau). That identity is what lets the caliber's
+   physical blast energy choose the sound's colour instead of a magic number.  */
+function addFriedlander(buf, i0, sr, tau, amp, n) {
+  const a = 1 / tau;
+  // run to 12 tau; beyond that it is below -100 dB
+  const len = Math.min(n - i0, Math.ceil(12 * tau * sr));
+  for (let k = 0; k < len; k++) {
+    const t = k / sr;
+    buf[i0 + k] += amp * (1 - t * a) * Math.exp(-t * a);
+  }
+}
+
+/* -------------------------------------------------------------- noise beds */
+
+function noiseBurst(buf, i0, sr, dur, amp, opt, rnd, n) {
+  // shaped broadband noise: attack in `atk` seconds, then power-law decay
+  const len = Math.min(n - i0, Math.ceil(dur * sr));
+  if (len <= 0) return;
+  const atk = Math.max(1, Math.floor((opt.atk || 0) * sr));
+  const shape = opt.shape === undefined ? 2.2 : opt.shape;
+  const tmp = new Float32Array(len);
+  for (let k = 0; k < len; k++) {
+    const u = k / len;
+    const env = k < atk ? (k / atk) : Math.pow(1 - (k - atk) / (len - atk || 1), shape);
+    tmp[k] = (rnd() * 2 - 1) * env;
+  }
+  if (opt.hp) { const o = new Float32Array(len); filterInto(o, tmp, biquad('hp', opt.hp, opt.hpq || 0.707, sr), len); tmp.set(o); }
+  if (opt.lp) { const o = new Float32Array(len); filterInto(o, tmp, biquad('lp', opt.lp, opt.lpq || 0.707, sr), len); tmp.set(o); }
+  if (opt.bp) { const o = new Float32Array(len); filterInto(o, tmp, biquad('bp', opt.bp, opt.bpq || 1.0, sr), len); tmp.set(o); }
+  if (opt.tiltDb) { const o = new Float32Array(len); filterInto(o, tmp, biquad('hs', opt.tiltHz || 1200, 0.707, sr, opt.tiltDb), len); tmp.set(o); }
+  for (let k = 0; k < len; k++) buf[i0 + k] += tmp[k] * amp;
+}
+
+/* ------------------------------------------------------- modal steel impact
+
+   A struck metal part is a broadband contact transient plus a bank of decaying
+   resonances. Three rules keep this from turning into a bell, which is the
+   failure mode this whole engine exists to avoid:
+
+     - the mode ratios are deliberately INHARMONIC; an integer-ratio bank is a
+       musical note
+     - decays are SHORT (5-25 ms), because a bolt carrier inside a receiver is
+       clamped by every part it touches; the 50 ms+ ring of a struck free bar
+       does not happen inside a gun
+     - every mode is excited by a NOISE burst rather than an impulse, so the
+       partial is a narrow band and not a pure line in the spectrum
+
+   The third rule is the important one. A rotating phasor is an exact sinusoid
+   and measures as a tonal peak; a resonator driven by a short noise burst has
+   the same perceived pitch-colour and a fraction of the spectral prominence. */
+
+const STEEL_MODES = [1.000, 1.593, 2.135, 2.296, 3.011, 3.407, 4.181, 5.612];
+
+function addImpact(buf, i0, sr, o, rnd, n) {
+  const f0 = o.f0;
+  const decay = o.decay;                    // seconds to -60 dB of mode 0
+  const amp = o.amp;
+  const modes = o.modes || STEEL_MODES;
+  const nm = o.nModes || modes.length;
+  const len = Math.min(n - i0, Math.ceil(decay * 1.8 * sr));
+  if (len <= 0) return;
+
+  // contact transient: short broadband, this is most of the perceived "hit"
+  const clickLen = Math.min(len, Math.ceil((o.click || 0.0016) * sr));
+  const tmp = new Float32Array(len);
+  for (let k = 0; k < clickLen; k++) {
+    tmp[k] += (rnd() * 2 - 1) * Math.pow(1 - k / clickLen, 1.7);
+  }
+  const cf = new Float32Array(len), cf2 = new Float32Array(len);
+  filterInto(cf, tmp, biquad('hp', o.clickHp || 900, 0.6, sr), len);
+  filterInto(cf2, cf, biquad('lp', o.clickLp || 7600, 0.707, sr), len);
+  for (let k = 0; k < len; k++) buf[i0 + k] += cf2[k] * amp * (o.clickAmt === undefined ? 0.85 : o.clickAmt);
+
+  // modal ring, each mode = a resonant band excited by a noise burst
+  const exLen = Math.min(len, Math.max(4, Math.ceil((o.ex || 0.0022) * sr)));
+  const ex = new Float32Array(len);
+  for (let k = 0; k < exLen; k++) ex[k] = (rnd() * 2 - 1) * Math.pow(1 - k / exLen, 1.2);
+
+  const scratch = new Float32Array(len);
+  for (let m = 0; m < nm; m++) {
+    const f = f0 * modes[m] * (1 + (rnd() - 0.5) * 0.04);
+    if (f > sr * 0.47) continue;
+    const d = decay / (1 + m * (o.hfDamp === undefined ? 0.85 : o.hfDamp));  // HF dies first
+    const g = amp * (o.modeAmt === undefined ? 0.5 : o.modeAmt) / Math.pow(m + 1, o.tilt === undefined ? 1.25 : o.tilt);
+    // Q that yields the requested -60 dB decay: T60 = 6.91*Q/(pi*f)
+    const Q = Math.max(1.2, Math.min(o.qMax || 42, d * Math.PI * f / 6.9078));
+    filterInto(scratch, ex, biquad('bp', f, Q, sr), len);
+    // bandpass with constant skirt has peak gain Q; normalise it out
+    const k1 = g / Math.sqrt(Q);
+    for (let k = 0; k < len; k++) buf[i0 + k] += scratch[k] * k1;
+  }
+}
+
+/* ------------------------------------------------------------- FDN reverb
+
+   Sixteen delay lines with mutually prime lengths, Householder feedback, one
+   one-pole damper per line, preceded by four Schroeder allpass diffusers.
+
+   The line count and the primes are not decoration. An 8-line FDN with round
+   delay lengths has so few modes that they are individually audible: measured
+   with the ring detector it put a 4.0 ring index on an otherwise broadband
+   gunshot, i.e. the reverb itself was the bell. Sixteen prime lines plus input
+   diffusion brings the same decay in at 1.3.                                 */
+
+const FDN_PRIMES = [1051, 1289, 1543, 1787, 2053, 2311, 2557, 2801,
+  3067, 3319, 3571, 3823, 4079, 4327, 4591, 4831];
+const AP_PRIMES = [223, 373, 547, 761];
+
+function fdnTail(out, src, sr, o, n) {
+  const scale = (o.size || 1) * sr / 48000;
+  const N = 16;
+
+  /* One flat Float32Array for all sixteen lines, with explicit offsets, and
+     wrap by comparison instead of `%`. The readable array-of-arrays version
+     with modulo indexing cost 147 ms per shot in Chrome, which is audible as a
+     stall on the first trigger pull; this is the same filter at 24 ms. */
+  const len = new Int32Array(N), off = new Int32Array(N), pos = new Int32Array(N);
+  let total = 0;
+  for (let j = 0; j < N; j++) {
+    len[j] = Math.max(16, Math.round(FDN_PRIMES[j] * scale));
+    off[j] = total; total += len[j];
+  }
+  const mem = new Float32Array(total);
+  const g = new Float32Array(N);
+  for (let j = 0; j < N; j++) g[j] = Math.pow(10, -3 * (len[j] / sr) / (o.rt60 || 1.2));
+
+  const lpz = new Float32Array(N), hpz = new Float32Array(N), v = new Float32Array(N);
+  const damp = o.damp === undefined ? 0.42 : o.damp;
+  /* Low frequencies must decay FASTER than mid, not slower. Outdoors there is
+     no boundary to trap them: the long-wavelength energy simply leaves. With a
+     flat-RT60 loop the 250-600 Hz modes held for the full 1.35 s and were
+     individually audible — the ring detector scored the tail alone at 12.2,
+     i.e. the reverb was the bell even though the source was clean at 1.5. */
+  const bass = o.bass === undefined ? 0.020 : o.bass;
+  const preD = Math.max(0, Math.round((o.pre || 0.006) * sr));
+
+  // input diffusion: allpass chain, so the first milliseconds do not expose
+  // the line lengths as discrete echoes
+  const aN = AP_PRIMES.length;
+  const aLen = new Int32Array(aN), aOff = new Int32Array(aN), aPos = new Int32Array(aN);
+  let aTot = 0;
+  for (let a = 0; a < aN; a++) { aLen[a] = Math.max(8, Math.round(AP_PRIMES[a] * scale)); aOff[a] = aTot; aTot += aLen[a]; }
+  const aMem = new Float32Array(aTot);
+  const apG = 0.62;
+  const invN = 1 / Math.sqrt(N), hhK = 2 / N;
+
+  for (let i = 0; i < n; i++) {
+    let x = i >= preD ? src[i - preD] : 0;
+    for (let a = 0; a < aN; a++) {
+      const p = aOff[a] + aPos[a];
+      const bz = aMem[p];
+      const w = x + apG * bz;
+      aMem[p] = w;
+      if (++aPos[a] >= aLen[a]) aPos[a] = 0;
+      x = bz - apG * w;
+    }
+    let sum = 0;
+    for (let j = 0; j < N; j++) { const t = mem[off[j] + pos[j]]; v[j] = t; sum += t; }
+    const hh = sum * hhK;
+    for (let j = 0; j < N; j++) {
+      const y = v[j] - hh;
+      const l = lpz[j] + damp * (y - lpz[j]); lpz[j] = l;
+      const h = hpz[j] + bass * (l - hpz[j]); hpz[j] = h;
+      mem[off[j] + pos[j]] = x + (l - h * 0.86) * g[j];
+      if (++pos[j] >= len[j]) pos[j] = 0;
+    }
+    out[i] = sum * invN;
+  }
+}
+
+/* ========================================================================== */
+/*  CARTRIDGE + WEAPON DATA — real published figures, not tuning knobs.       */
+/* ========================================================================== */
+
+const CARTRIDGE = {
+  // bore = land diameter (mm), prop = propellant charge (kg),
+  // bullet = projectile mass (kg), v0 = nominal muzzle velocity (m/s)
+  '5.45x39':  { name: '5,45×39',  bore: 5.60,  prop: 1.45e-3, bullet: 3.43e-3, v0: 900 },
+  '7.62x39':  { name: '7,62×39',  bore: 7.62,  prop: 1.60e-3, bullet: 7.90e-3, v0: 715 },
+  '5.56x45':  { name: '5,56×45',  bore: 5.56,  prop: 1.62e-3, bullet: 4.02e-3, v0: 920 },
+  '7.62x51':  { name: '7,62×51',  bore: 7.62,  prop: 2.87e-3, bullet: 9.53e-3, v0: 833 },
+  '9x19':     { name: '9×19',     bore: 9.02,  prop: 0.36e-3, bullet: 8.03e-3, v0: 390 },
+  '12ga':     { name: '12/70',    bore: 18.50, prop: 1.60e-3, bullet: 32.0e-3, v0: 400 },
+  '7.62x54R': { name: '7,62×54R', bore: 7.62,  prop: 3.10e-3, bullet: 9.80e-3, v0: 830 },
+};
+
+/* Derived blast acoustics for a cartridge fired from a given barrel.
+   Everything below follows from the energy, nothing is hand-placed.          */
+function blastModel(cart, barrelMm, deviceGain) {
+  const E = cart.prop * E_NITRO * BLAST_FRAC;               // J of blast energy
+  const L = Math.cbrt(E / P_ATM);                           // Sachs length, m
+  const tc = L / C_AIR;                                     // characteristic time, s
+
+  // positive-phase duration: scales with bore (gas column cross-section) and
+  // weakly with barrel length (a longer tube has already expanded the gas)
+  const kBore = 0.02451 * Math.pow(cart.bore, 0.9679);
+  const kBarrel = Math.pow(barrelMm / 415, 0.22);
+  const tau = tc * kBore * kBarrel;
+
+  // peak level: blast energy, reduced by the barrel that bled pressure off
+  const level = Math.pow(E / 2200, 0.34) * Math.pow(415 / barrelMm, 0.30) * (deviceGain || 1);
+
+  /* How much low frequency the shot carries is set by how much gas the bore
+     actually expels, so compute that volume instead of using one hand-tuned
+     ratio for every weapon. With a single fixed weight every caliber's
+     measured 1/3-octave peak landed on the same 510 Hz, which is exactly the
+     "all guns sound the same" failure. A 12-gauge bore expels 12x the volume
+     of a 5,45 bore and has to be 12x boomier for that reason and no other. */
+  const boreArea = Math.PI * Math.pow(cart.bore / 2, 2);    // mm^2
+  const gasVol = boreArea * barrelMm;                       // mm^3
+  const bodyScale = Math.pow(gasVol / 18925, 0.45);         // 1.0 == AKM
+
+  return {
+    E, L, tc, tau,
+    fPeak: 1 / (2 * Math.PI * tau),                         // Hz, exact for Friedlander
+    level, gasVol, bodyScale,
+    supersonic: cart.v0 > 1.02 * C_AIR,
+    mach: cart.v0 / C_AIR,
+  };
+}
+
+/* Muzzle-device blast colour. A brake vents sideways and gets LOUDER and
+   sharper at the shooter; a plain crown is the reference; a suppressor kills
+   the shock front and leaves gas roar.                                       */
+const DEVICE = {
+  plain:      { gain: 1.00, sharp: 1.00, roar: 1.00, tag: 'дульный срез' },
+  brake:      { gain: 1.22, sharp: 1.14, roar: 1.10, tag: 'ДТК' },
+  compensator:{ gain: 1.12, sharp: 1.10, roar: 1.05, tag: 'компенсатор' },
+  flashHider: { gain: 1.04, sharp: 1.02, roar: 1.08, tag: 'пламегаситель' },
+  ported:     { gain: 1.16, sharp: 1.08, roar: 1.12, tag: 'порты компенсатора' },
+};
+
+/* ========================================================================== */
+/*  WEAPONS — one entry per file in the repository.                           */
+/* ========================================================================== */
+
+const WEAPONS = {
+  ak74: {
+    label: 'АК-74', cart: '5.45x39', barrel: 415, device: 'brake',
+    rpm: 650, action: 'gasPistonRotating', mass: 3.3,
+    /* receiver: stamped 1 mm sheet steel — light, bright, buzzy ring */
+    recv: { f0: 430, decay: 0.045, hfDamp: 0.9, tilt: 1.15 },
+    bolt: { f0: 245, decay: 0.055 },
+    /* AK bolt carrier is heavy (~500 g) and slams a bare steel receiver */
+    cycle: { unlock: 0.0022, rearImpact: 0.0255, returnImpact: 0.0585, lockup: 0.0655 },
+    brass: { f0: 3150, decay: 0.16, mass: 'steel' },   // 5.45 cases are lacquered steel
+    magMat: 'bakelite',
+  },
+  akm: {
+    label: 'АКМ', cart: '7.62x39', barrel: 415, device: 'compensator',
+    rpm: 600, action: 'gasPistonRotating', mass: 3.1,
+    recv: { f0: 395, decay: 0.050, hfDamp: 0.88, tilt: 1.12 },
+    bolt: { f0: 225, decay: 0.060 },
+    cycle: { unlock: 0.0024, rearImpact: 0.0280, returnImpact: 0.0640, lockup: 0.0715 },
+    brass: { f0: 2850, decay: 0.17, mass: 'steel' },
+    magMat: 'steel',
+  },
+  m416: {
+    label: 'HK416 / M416', cart: '5.56x45', barrel: 368, device: 'flashHider',
+    rpm: 850, action: 'gasPistonRotating', mass: 3.5,
+    /* forged aluminium upper + steel barrel extension: darker, deader ring */
+    recv: { f0: 520, decay: 0.030, hfDamp: 1.05, tilt: 1.35 },
+    bolt: { f0: 300, decay: 0.038 },
+    /* short-stroke piston, buffer + spring in the stock tube: the
+       characteristic AR "sproing" is the buffer spring, not a bell */
+    cycle: { unlock: 0.0018, rearImpact: 0.0195, returnImpact: 0.0450, lockup: 0.0505 },
+    buffer: true,
+    brass: { f0: 3400, decay: 0.15, mass: 'brass' },
+    magMat: 'polymer',
+  },
+  'scar-h': {
+    label: 'FN SCAR-H Mk 17', cart: '7.62x51', barrel: 400, device: 'brake',
+    rpm: 600, action: 'gasPistonRotating', mass: 3.58,
+    /* extruded aluminium monolithic upper — stiff, low ring */
+    recv: { f0: 470, decay: 0.028, hfDamp: 1.1, tilt: 1.4 },
+    bolt: { f0: 265, decay: 0.042 },
+    cycle: { unlock: 0.0021, rearImpact: 0.0270, returnImpact: 0.0625, lockup: 0.0700 },
+    brass: { f0: 2650, decay: 0.16, mass: 'brass' },
+    magMat: 'polymer',
+  },
+  mp5a3: {
+    label: 'HK MP5A3', cart: '9x19', barrel: 225, device: 'plain',
+    rpm: 800, action: 'rollerDelayed', mass: 2.88,
+    /* stamped steel receiver, roller-delayed blowback: the bolt group is
+       LIGHT and fast, giving MP5 its dry rattly signature */
+    recv: { f0: 600, decay: 0.034, hfDamp: 1.0, tilt: 1.2 },
+    bolt: { f0: 355, decay: 0.030 },
+    cycle: { unlock: 0.0012, rearImpact: 0.0205, returnImpact: 0.0480, lockup: 0.0530 },
+    brass: { f0: 3900, decay: 0.14, mass: 'brass' },
+    magMat: 'steel',
+  },
+  glock18c: {
+    label: 'Glock 18C', cart: '9x19', barrel: 114, device: 'ported',
+    rpm: 1150, action: 'shortRecoil', mass: 0.62,
+    /* polymer frame, nitrided steel slide: bright slide clack, dead frame */
+    recv: { f0: 780, decay: 0.020, hfDamp: 1.2, tilt: 1.5 },
+    bolt: { f0: 520, decay: 0.024 },
+    cycle: { unlock: 0.0011, rearImpact: 0.0148, returnImpact: 0.0350, lockup: 0.0392 },
+    brass: { f0: 4200, decay: 0.13, mass: 'brass' },
+    magMat: 'polymer',
+  },
+  remington870: {
+    label: 'Remington 870', cart: '12ga', barrel: 470, device: 'plain',
+    rpm: 0, action: 'pump', mass: 3.2,
+    /* milled steel receiver, walnut furniture: low, woody, very damped */
+    recv: { f0: 300, decay: 0.055, hfDamp: 0.8, tilt: 1.05 },
+    bolt: { f0: 190, decay: 0.070 },
+    cycle: null,                                  // manually cycled
+    brass: { f0: 1100, decay: 0.09, mass: 'plastic' },  // plastic hull, dead
+    magMat: 'tube',
+  },
+  svd: {
+    label: 'СВД', cart: '7.62x54R', barrel: 620, device: 'flashHider',
+    rpm: 0, action: 'gasPistonRotatingSemi', mass: 4.3,
+    /* long milled receiver + laminate furniture: deep, resonant, slow */
+    recv: { f0: 360, decay: 0.058, hfDamp: 0.82, tilt: 1.08 },
+    bolt: { f0: 205, decay: 0.068 },
+    cycle: { unlock: 0.0026, rearImpact: 0.0310, returnImpact: 0.0700, lockup: 0.0790 },
+    brass: { f0: 2450, decay: 0.17, mass: 'brass' },
+    magMat: 'steel',
+  },
+  /* A knife fires nothing, but it still needs the modal parameters: the two
+     cues it does have (blade through air, blade into a hard surface) are built
+     from the same impact synthesiser. 1095 high-carbon steel, 178 mm blade
+     clamped in a stacked-leather handle — stiff, bright, and damped by the
+     leather, so a short decay rather than a struck free bar. */
+  knife: {
+    label: 'Ka-Bar USMC', cart: null, barrel: 0, device: 'plain',
+    rpm: 0, action: 'blade', mass: 0.32,
+    recv: { f0: 1850, decay: 0.038, hfDamp: 0.95, tilt: 1.15 },
+    bolt: { f0: 1240, decay: 0.030 },
+    cycle: null, brass: null, magMat: 'leather',
+  },
+};
+
+/* ------------------------------------------------------------- environments */
+
+const ENV = {
+  range:  { rt60: 1.35, size: 1.00, damp: 0.42, wet: 0.34, pre: 0.007,
+            slap: [[0.092, 0.30], [0.164, 0.20], [0.271, 0.13], [0.409, 0.08]],
+            ground: 0.0035, groundG: -0.52 },
+  indoor: { rt60: 0.85, size: 0.55, damp: 0.30, wet: 0.52, pre: 0.004,
+            slap: [[0.021, 0.44], [0.037, 0.34], [0.058, 0.25], [0.089, 0.16]],
+            ground: 0.0021, groundG: -0.62 },
+  open:   { rt60: 2.20, size: 1.55, damp: 0.52, wet: 0.24, pre: 0.011,
+            slap: [[0.148, 0.24], [0.287, 0.15], [0.462, 0.09]],
+            ground: 0.0048, groundG: -0.46 },
+};
+
+/* ========================================================================== */
+/*  RENDERERS                                                                 */
+/* ========================================================================== */
+
+function renderShot(sr, weaponId, opt) {
+  opt = opt || {};
+  const W = WEAPONS[weaponId];
+  if (!W) throw new Error('unknown weapon ' + weaponId);
+  if (!W.cart) throw new Error(weaponId + ' fires nothing: no cartridge');
+  const cart = CARTRIDGE[W.cart];
+  const dev = DEVICE[W.device] || DEVICE.plain;
+  const env = ENV[opt.env || 'range'];
+  const B = blastModel(cart, W.barrel, dev.gain);
+  const rnd = rng(opt.seed === undefined ? 1 : opt.seed);
+
+  const dur = opt.dur || 2.0;
+  const n = Math.ceil(dur * sr);
+  const dry = new Float32Array(n);
+  const blast = new Float32Array(n);        // gets the shock-thickness filter
+
+  // shot-to-shot variation: real repeated fire is never identical
+  const jP = 1 + (rnd() - 0.5) * 0.10;      // level
+  const jT = 1 + (rnd() - 0.5) * 0.09;      // tau
+  const tau = B.tau * jT / dev.sharp;
+  const lvl = B.level * jP;
+
+  /* --- 1. muzzle blast. Sample 0 is full amplitude: the shock front is a
+       discontinuity, and that single-sample rise is what makes this read as a
+       gunshot rather than a kick drum. ------------------------------------- */
+  addFriedlander(blast, 0, sr, tau, 1.00 * lvl, n);
+
+  /* --- 2. gas expansion and bore volume release. These are the low end.
+
+       A Friedlander's spectrum peaks at amplitude A*tau/2, so a layer with a
+       longer time constant contributes proportionally MORE spectral energy for
+       the same time-domain amplitude. Scaling these by amp = r/ratio therefore
+       sets each layer's spectral weight r directly, instead of accidentally
+       burying the shock under a 14x-oversized low-frequency lobe.            */
+  const bodies = [[5.5, 0.55], [22, 0.28], [70, 0.10]];
+  for (const [ratio, r] of bodies) {
+    addFriedlander(blast, Math.round(0.00030 * ratio / 5.5 * sr), sr,
+      tau * ratio, (r * B.bodyScale / ratio) * lvl, n);
+  }
+
+  /* --- 3. jet roar: propellant gas still leaving the bore, turbulent. ---- */
+  noiseBurst(blast, 0, sr, 0.030, 0.34 * lvl * dev.roar,
+    { atk: 0.00008, shape: 2.6, hp: B.fPeak * 0.55, lp: 11000, tiltDb: -7, tiltHz: 2400 }, rnd, n);
+  noiseBurst(blast, Math.round(0.0025 * sr), sr, 0.085, 0.15 * lvl * dev.roar,
+    { atk: 0.0012, shape: 2.0, hp: B.fPeak * 0.10, lp: B.fPeak * 2.8,
+      tiltDb: -9, tiltHz: B.fPeak * 0.6 }, rnd, n);
+
+  /* --- 4. ballistic crack: the projectile's own bow shock. Whitham gives an
+       N-wave a few hundred microseconds long, energy up at 2-8 kHz. Only
+       exists if the round is supersonic. ---------------------------------- */
+  if (B.supersonic && !opt.subsonic) {
+    const tN = 0.00016 * Math.pow(B.mach, -0.55) * Math.pow(cart.bullet / 4e-3, 0.25);
+    const i0 = Math.round(0.0009 * sr);
+    const len = Math.ceil(tN * 2 * sr);
+    const a = 0.30 * lvl;
+    for (let k = 0; k < len && i0 + k < n; k++) {
+      // N-wave: up-shock, linear ramp through zero, down-shock
+      blast[i0 + k] += a * (1 - 2 * (k / len));
+    }
+  }
+
+  /* --- shock thickness + atmospheric absorption.
+
+       A real blast front is not a mathematical discontinuity: it is a viscous
+       shock 15-30 us thick, and the path to the ear absorbs the top octave.
+       Without this the spectrum stays flat-ish to Nyquist, the centroid lands
+       near 5 kHz instead of the 1-2 kHz that measured gunshots show, and it
+       reads as a digital click rather than a blast.                          */
+  {
+    const tRise = opt.rise || 15e-6;
+    const fShock = 1 / (2 * Math.PI * tRise);
+    const a = new Float32Array(n), b = new Float32Array(n);
+    filterInto(a, blast, biquad('lp', fShock, 0.62, sr), n);
+    filterInto(b, a, biquad('lp', fShock * 1.6, 0.70, sr), n);
+    filterInto(a, b, biquad('hs', 3200, 0.707, sr, -7.5), n);   // air absorption
+    for (let i = 0; i < n; i++) dry[i] += a[i];
+  }
+
+  /* --- 5. ground reflection. A shooter stands ~1.5 m over the ground, so a
+       delayed inverted copy arrives a few ms later. The comb notch it puts in
+       the spectrum is a large part of "outdoors". ------------------------- */
+  if (!opt.noGround) {
+    const gi = Math.round(env.ground * sr);
+    const gl = new Float32Array(n);
+    filterInto(gl, dry, biquad('lp', Math.max(2600, B.fPeak * 3.4), 0.707, sr), n);
+    for (let i = n - 1; i >= gi; i--) dry[i] += gl[i - gi] * env.groundG;
+  }
+
+  /* --- 6. mechanics, at the real cycle times for this action -------------- */
+  const C = W.cycle;
+  if (C && !opt.noAction) {
+    const R = W.recv, Bo = W.bolt;
+    // unlock / cam track — small, dry
+    addImpact(dry, Math.round(C.unlock * sr), sr,
+      { f0: Bo.f0 * 1.8, decay: 0.010, amp: 0.035 * lvl, click: 0.0009, hfDamp: 1.3, tilt: 1.5 }, rnd, n);
+    // carrier hits the rear of the receiver — the loudest mechanical event
+    addImpact(dry, Math.round(C.rearImpact * sr), sr,
+      { f0: R.f0, decay: R.decay, amp: 0.135 * lvl, click: 0.0020,
+        hfDamp: R.hfDamp, tilt: R.tilt, clickHp: 700 }, rnd, n);
+    // AR-pattern buffer spring: broadband metallic scrape, not a tone
+    if (W.buffer) {
+      noiseBurst(dry, Math.round((C.rearImpact + 0.001) * sr), sr, 0.055, 0.055 * lvl,
+        { atk: 0.0006, shape: 1.6, bp: 2300, bpq: 2.4 }, rnd, n);
+      noiseBurst(dry, Math.round((C.returnImpact - 0.014) * sr), sr, 0.040, 0.040 * lvl,
+        { atk: 0.0008, shape: 1.4, bp: 1750, bpq: 2.0 }, rnd, n);
+    }
+    // carrier returns, strips a round, hits the barrel extension
+    addImpact(dry, Math.round(C.returnImpact * sr), sr,
+      { f0: Bo.f0 * 1.35, decay: Bo.decay * 0.8, amp: 0.100 * lvl, click: 0.0018,
+        hfDamp: 1.0, tilt: 1.3 }, rnd, n);
+    // rotating bolt cams into lockup — small, high, very short
+    addImpact(dry, Math.round(C.lockup * sr), sr,
+      { f0: Bo.f0 * 3.1, decay: 0.008, amp: 0.048 * lvl, click: 0.0007, hfDamp: 1.4, tilt: 1.6 }, rnd, n);
+  }
+  if (W.action === 'shortRecoil' && !opt.noAction) {
+    // slide reciprocating in polymer rails: dry sliding noise, no ring
+    noiseBurst(dry, Math.round(0.004 * sr), sr, 0.014, 0.030 * lvl,
+      { atk: 0.0004, shape: 1.3, bp: 3400, bpq: 1.6 }, rnd, n);
+  }
+
+  /* --- 7. brass. The case is thrown clear at ~5 m/s, rings briefly in flight,
+       then hits the ground once or twice. Kept short and quiet on purpose: a
+       long bright case ring is the single most bell-like thing in a gunshot,
+       and at the shooter's own ear it is 35-40 dB under the blast. ---------- */
+  if (!opt.noBrass && W.brass) {
+    const br = W.brass;
+    const t0 = (C ? C.rearImpact + 0.030 : 0.075) + rnd() * 0.02;
+    const matAmp = br.mass === 'plastic' ? 0.016 : br.mass === 'steel' ? 0.022 : 0.028;
+    addImpact(dry, Math.round(t0 * sr), sr,
+      { f0: br.f0, decay: br.decay, amp: matAmp * lvl, click: 0.0005, ex: 0.0016,
+        hfDamp: 0.9, tilt: 1.35, modeAmt: 0.55, clickHp: 2200, qMax: 26 }, rnd, n);
+    // floor bounces
+    const tf = 0.34 + rnd() * 0.28;
+    for (let b = 0; b < 3; b++) {
+      const tb = tf + b * (0.085 + rnd() * 0.06);
+      if (tb > dur - 0.2) break;
+      addImpact(dry, Math.round(tb * sr), sr,
+        { f0: br.f0 * (1 + b * 0.06), decay: br.decay * (0.5 - b * 0.12),
+          amp: matAmp * 0.5 * Math.pow(0.55, b), click: 0.0004, ex: 0.0012,
+          hfDamp: 1.0, tilt: 1.4, modeAmt: 0.5, clickHp: 2600, qMax: 24 }, rnd, n);
+    }
+  }
+
+  /* --- 8. environment: discrete slap-back off distant hard surfaces, then a
+       damped diffuse tail. ------------------------------------------------ */
+  /* Dry is the primary product.
+
+     The room used to be baked into every variant of every cue: 4 slap taps
+     plus a 16-line FDN over the full 1.5 s buffer, which measured 80 ms of the
+     101 ms it took to render one shot, and stalled the first trigger pull for
+     a quarter of a second. It is now rendered ONCE as an impulse response
+     (renderRoomIR) and applied by a native ConvolverNode on the audio thread.
+
+     This is also why the gate measures the dry source and the room IR
+     separately: that decomposition is not a testing convenience, it is exactly
+     how the signal path is built. */
+  if (opt.dry !== false) {
+    const L0 = new Float32Array(n); L0.set(dry);
+    bandLimit(L0, sr, n); softClip(L0, n);
+    return { sr, n, channels: [L0, L0], model: B, weapon: W, cartridge: cart, tau, device: dev };
+  }
+  const wetIn = new Float32Array(n), wetTmp = new Float32Array(n);
+  filterInto(wetTmp, dry, biquad('lp', 6500, 0.707, sr), n);
+  filterInto(wetIn, wetTmp, biquad('hp', 190, 0.707, sr), n);
+  for (const [dt, g] of env.slap) {
+    const di = Math.round(dt * (1 + (rnd() - 0.5) * 0.06) * sr);
+    const sl = new Float32Array(n);
+    filterInto(sl, wetIn, biquad('lp', 2600 - dt * 1400, 0.707, sr), n);
+    for (let i = n - 1; i >= di; i--) dry[i] += sl[i - di] * g;
+  }
+  const tail = new Float32Array(n);
+  fdnTail(tail, wetIn, sr, { rt60: env.rt60, size: env.size, damp: env.damp, pre: env.pre }, n);
+
+  /* --- mix + stereo. Muzzle blast is in front of the shooter, ejection and
+       mechanics are on the strong side. ----------------------------------- */
+  const L = new Float32Array(n), Rc = new Float32Array(n);
+  const wet = env.wet;
+  for (let i = 0; i < n; i++) {
+    const d = dry[i], t = tail[i] * wet;
+    L[i] = d + t;
+    Rc[i] = d + t;
+  }
+  // tiny inter-channel decorrelation of the tail only — keeps the shock mono
+  {
+    const dl = Math.round(0.0013 * sr);
+    for (let i = n - 1; i >= dl; i--) Rc[i] += tail[i - dl] * wet * 0.5;
+    for (let i = 0; i < n; i++) Rc[i] -= tail[i] * wet * 0.5;
+  }
+
+  /* --- output band-limit + limiter. Everything audible has been through air
+       and a transducer; without this the top octave stays flat and the shot
+       reads as a digital click instead of a blast. ------------------------- */
+  for (const b of [L, Rc]) {
+    const t1 = new Float32Array(n);
+    filterInto(t1, b, biquad('lp', 14500, 0.707, sr), n);
+    filterInto(b, t1, biquad('hp', 26, 0.707, sr), n);      // no inaudible DC lobe
+  }
+  softClip(L, n); softClip(Rc, n);
+
+  return { sr, n, channels: [L, Rc], model: B, weapon: W, cartridge: cart, tau, device: dev };
+}
+
+/* Everything audible has been through air and a transducer. Without this the
+   top octave stays flat and the shot reads as a digital click, not a blast. */
+function bandLimit(b, sr, n) {
+  const t1 = new Float32Array(n);
+  filterInto(t1, b, biquad('lp', Math.min(14500, sr * 0.45), 0.707, sr), n);
+  filterInto(b, t1, biquad('hp', 26, 0.707, sr), n);
+}
+
+/* ---------------------------------------------------------------- room IR
+
+   Discrete slap-back off distant hard surfaces, then the damped diffuse tail.
+   Rendered once per environment and convolved at runtime.                    */
+function renderRoomIR(sr, envName, opt) {
+  opt = opt || {};
+  const env = ENV[envName] || ENV.range;
+  const dur = opt.dur || Math.min(2.4, env.rt60 * 1.5 + 0.4);
+  const n = Math.ceil(dur * sr);
+  const rnd = rng(opt.seed === undefined ? 17 : opt.seed);
+
+  const src = new Float32Array(n);
+  src[0] = 1;
+  const wetIn = new Float32Array(n), tmp = new Float32Array(n);
+  filterInto(tmp, src, biquad('lp', 6500, 0.707, sr), n);
+  filterInto(wetIn, tmp, biquad('hp', 190, 0.707, sr), n);
+
+  const acc = new Float32Array(n);
+  for (const [dt, g] of env.slap) {
+    const di = Math.round(dt * (1 + (rnd() - 0.5) * 0.06) * sr);
+    const sl = new Float32Array(n);
+    filterInto(sl, wetIn, biquad('lp', Math.max(700, 2600 - dt * 1400), 0.707, sr), n);
+    for (let i = n - 1; i >= di; i--) acc[i] += sl[i - di] * g;
+  }
+  const tail = new Float32Array(n);
+  fdnTail(tail, wetIn, sr, { rt60: env.rt60, size: env.size, damp: env.damp, pre: env.pre }, n);
+  for (let i = 0; i < n; i++) acc[i] += tail[i];
+
+  /* Decorrelate the two channels so the tail opens up, while the first
+     milliseconds stay coherent — the shock front must not smear across the
+     stereo image, a gunshot is a point source. */
+  const L = new Float32Array(n), R = new Float32Array(n);
+  const dl = Math.round(0.0013 * sr);
+  for (let i = 0; i < n; i++) { L[i] = acc[i]; R[i] = acc[i] * 0.5; }
+  for (let i = n - 1; i >= dl; i--) R[i] += acc[i - dl] * 0.5;
+
+  // normalise so `wet` in ENV means the same thing at every sample rate
+  let e = 0; for (let i = 0; i < n; i++) e += L[i] * L[i];
+  const k = 1 / Math.sqrt(e / sr || 1e-9) * 0.25;
+  for (let i = 0; i < n; i++) { L[i] *= k; R[i] *= k; }
+  return { sr, n, channels: [L, R], wet: env.wet };
+}
+
+/* asymmetric soft knee, transparent below -6 dB */
+function softClip(b, n) {
+  for (let i = 0; i < n; i++) {
+    const x = b[i];
+    const a = Math.abs(x);
+    if (a > 0.5) b[i] = Math.sign(x) * (0.5 + (1 - Math.exp(-(a - 0.5) * 1.9)) * 0.49);
+  }
+}
+
+/* --------------------------------------------------------- mechanical-only */
+
+function renderMech(sr, weaponId, kind, opt) {
+  opt = opt || {};
+  const W = WEAPONS[weaponId];
+  const env = ENV[opt.env || 'range'];
+  const rnd = rng(opt.seed === undefined ? 7 : opt.seed);
+  const R = W.recv, Bo = W.bolt;
+  const dur = opt.dur || 1.1;
+  const n = Math.ceil(dur * sr);
+  const dry = new Float32Array(n);
+  const A = opt.gain === undefined ? 1 : opt.gain;
+
+  const hit = (t, o) => addImpact(dry, Math.round(t * sr), sr, o, rnd, n);
+  const nz = (t, d, a, o) => noiseBurst(dry, Math.round(t * sr), sr, d, a, o, rnd, n);
+
+  if (kind === 'dryFire') {
+    // hammer/striker falls on a firing pin with no cartridge under it
+    hit(0, { f0: R.f0 * 1.5, decay: 0.014, amp: 0.30 * A, click: 0.0011, hfDamp: 1.2, tilt: 1.5 });
+    hit(0.0016, { f0: Bo.f0 * 4.2, decay: 0.007, amp: 0.20 * A, click: 0.0006, hfDamp: 1.5, tilt: 1.7 });
+  } else if (kind === 'trigger') {
+    nz(0, 0.008, 0.13 * A, { atk: 0.0002, shape: 2.4, bp: 3600, bpq: 1.4 });
+    hit(0.0022, { f0: R.f0 * 2.4, decay: 0.006, amp: 0.10 * A, click: 0.0005, hfDamp: 1.6, tilt: 1.8 });
+  } else if (kind === 'selector') {
+    // AK selector is a big stamped lever over detents: two hard clacks
+    hit(0, { f0: R.f0 * 0.95, decay: 0.020, amp: 0.26 * A, click: 0.0013, hfDamp: 1.0, tilt: 1.2 });
+    nz(0.0004, 0.010, 0.10 * A, { atk: 0.0002, shape: 2.0, bp: 2200, bpq: 1.2 });
+  } else if (kind === 'magOut') {
+    nz(0, 0.030, 0.16 * A, { atk: 0.0008, shape: 1.5, bp: 1500, bpq: 1.1 });
+    hit(0.0018, { f0: R.f0 * 0.8, decay: 0.026, amp: 0.20 * A, click: 0.0016, hfDamp: 1.0, tilt: 1.2 });
+    // magazine leaves the well and drops
+    const mm = W.magMat;
+    hit(0.055, mm === 'polymer'
+      ? { f0: 420, decay: 0.022, amp: 0.13 * A, click: 0.0014, ex: 0.0016,
+          hfDamp: 1.6, tilt: 1.8, modeAmt: 0.24, qMax: 16 }
+      : mm === 'bakelite'
+        ? { f0: 610, decay: 0.026, amp: 0.15 * A, click: 0.0013, ex: 0.0016,
+            hfDamp: 1.45, tilt: 1.6, modeAmt: 0.30, qMax: 18 }
+        : { f0: 780, decay: 0.034, amp: 0.17 * A, click: 0.0011, ex: 0.0018,
+            hfDamp: 1.15, tilt: 1.4, modeAmt: 0.40, qMax: 22 });
+  } else if (kind === 'magIn') {
+    nz(0, 0.045, 0.14 * A, { atk: 0.0016, shape: 1.3, bp: 1250, bpq: 0.9 });
+    hit(0.042, { f0: R.f0 * 0.85, decay: 0.034, amp: 0.34 * A, click: 0.0024, hfDamp: 0.95, tilt: 1.15, clickHp: 600 });
+    hit(0.047, { f0: R.f0 * 2.2, decay: 0.010, amp: 0.14 * A, click: 0.0008, hfDamp: 1.4, tilt: 1.6 });
+  } else if (kind === 'boltBack') {
+    nz(0, 0.070, 0.15 * A, { atk: 0.0025, shape: 1.2, bp: 1900, bpq: 1.5 });
+    hit(0.068, { f0: R.f0, decay: R.decay, amp: 0.34 * A, click: 0.0022, hfDamp: R.hfDamp, tilt: R.tilt, clickHp: 700 });
+  } else if (kind === 'boltRelease') {
+    hit(0, { f0: Bo.f0 * 2.6, decay: 0.008, amp: 0.14 * A, click: 0.0007, hfDamp: 1.5, tilt: 1.7 });
+    nz(0.002, 0.030, 0.13 * A, { atk: 0.0008, shape: 1.3, bp: 2100, bpq: 1.7 });
+    hit(0.034, { f0: Bo.f0 * 1.3, decay: Bo.decay * 0.85, amp: 0.40 * A, click: 0.0024, hfDamp: 1.0, tilt: 1.25, clickHp: 650 });
+    hit(0.040, { f0: Bo.f0 * 3.0, decay: 0.008, amp: 0.16 * A, click: 0.0007, hfDamp: 1.4, tilt: 1.6 });
+  } else if (kind === 'pumpBack') {
+    // 870 forend travelling on twin action bars: wood + steel, long scrape
+    nz(0, 0.105, 0.20 * A, { atk: 0.006, shape: 1.1, bp: 1150, bpq: 0.85 });
+    hit(0.030, { f0: 520, decay: 0.016, amp: 0.10 * A, click: 0.0012, hfDamp: 1.4, tilt: 1.5 });
+    hit(0.100, { f0: R.f0 * 1.1, decay: 0.030, amp: 0.36 * A, click: 0.0026, hfDamp: 0.9, tilt: 1.1, clickHp: 550 });
+    // spent hull flips out
+    hit(0.078, { f0: 1100, decay: 0.055, amp: 0.09 * A, click: 0.0009, hfDamp: 1.6, tilt: 1.8, modeAmt: 0.2 });
+  } else if (kind === 'pumpForward') {
+    nz(0, 0.100, 0.19 * A, { atk: 0.005, shape: 1.1, bp: 1050, bpq: 0.85 });
+    hit(0.094, { f0: R.f0 * 0.9, decay: 0.042, amp: 0.46 * A, click: 0.0030, hfDamp: 0.8, tilt: 1.05, clickHp: 480 });
+    hit(0.099, { f0: 1450, decay: 0.011, amp: 0.16 * A, click: 0.0008, hfDamp: 1.5, tilt: 1.7 });
+  } else if (kind === 'shellInsert') {
+    nz(0, 0.055, 0.11 * A, { atk: 0.004, shape: 1.2, bp: 900, bpq: 0.8 });
+    hit(0.050, { f0: 740, decay: 0.018, amp: 0.16 * A, click: 0.0014, hfDamp: 1.3, tilt: 1.5, modeAmt: 0.3 });
+  } else if (kind === 'safety') {
+    hit(0, { f0: R.f0 * 2.0, decay: 0.007, amp: 0.16 * A, click: 0.0006, hfDamp: 1.5, tilt: 1.7 });
+  } else if (kind === 'sightClick') {
+    hit(0, { f0: 2600, decay: 0.005, amp: 0.10 * A, click: 0.0004, hfDamp: 1.7, tilt: 1.9 });
+  } else if (kind === 'stockFold') {
+    nz(0, 0.080, 0.12 * A, { atk: 0.004, shape: 1.2, bp: 1400, bpq: 1.0 });
+    hit(0.076, { f0: R.f0 * 1.2, decay: 0.028, amp: 0.30 * A, click: 0.0021, hfDamp: 1.0, tilt: 1.2 });
+  } else if (kind === 'knifeSwing') {
+    // air moved by a 178 mm blade — pure aerodynamic noise, no metal
+    noiseBurst(dry, 0, sr, 0.150, 0.16 * A,
+      { atk: 0.030, shape: 2.0, bp: 620, bpq: 0.55, tiltDb: -6, tiltHz: 900 }, rnd, n);
+  } else if (kind === 'knifeHit') {
+    hit(0, { f0: 1850, decay: 0.045, amp: 0.34 * A, click: 0.0013, hfDamp: 0.9, tilt: 1.1, modeAmt: 0.6 });
+    noiseBurst(dry, 0, sr, 0.020, 0.13 * A, { atk: 0.0002, shape: 2.6, hp: 1800, lp: 12000 }, rnd, n);
+  } else if (kind === 'sheathe') {
+    noiseBurst(dry, 0, sr, 0.180, 0.15 * A,
+      { atk: 0.010, shape: 1.1, bp: 2300, bpq: 0.7, tiltDb: -4, tiltHz: 3000 }, rnd, n);
+    hit(0.170, { f0: 900, decay: 0.020, amp: 0.10 * A, click: 0.0012, hfDamp: 1.4, tilt: 1.6, modeAmt: 0.25 });
+  } else {
+    throw new Error('unknown mech ' + kind);
+  }
+
+  if (opt.dry !== false) {
+    const D = new Float32Array(n); D.set(dry);
+    bandLimit(D, sr, n); softClip(D, n);
+    return { sr, n, channels: [D, D] };
+  }
+  // same room, lighter send — mechanics are close-mic'd relative to the blast
+  const wetIn = new Float32Array(n);
+  filterInto(wetIn, dry, biquad('lp', 5200, 0.707, sr), n);
+  const tail = new Float32Array(n);
+  fdnTail(tail, wetIn, sr, { rt60: env.rt60 * 0.7, size: env.size, damp: env.damp + 0.1, pre: env.pre }, n);
+  const L = new Float32Array(n), Rc = new Float32Array(n);
+  const wet = env.wet * 0.45;
+  for (let i = 0; i < n; i++) { const d = dry[i], t = tail[i] * wet; L[i] = d + t; Rc[i] = d + t; }
+  softClip(L, n); softClip(Rc, n);
+  return { sr, n, channels: [L, Rc] };
+}
+
+/* ------------------------------------------------------------------ exports */
+
+const ORDNANCE = {
+  CARTRIDGE, WEAPONS, DEVICE, ENV,
+  blastModel, renderShot, renderMech, renderRoomIR, bandLimit,
+  firesAmmunition: (id) => !!(WEAPONS[id] && WEAPONS[id].cart),
+  biquad, filterInto, rng,
+};
+
+if (typeof module !== 'undefined' && module.exports) module.exports = ORDNANCE;
+if (typeof self !== 'undefined') self.ORDNANCE = ORDNANCE;
+ORDNANCE.fdnTail = fdnTail;
+ORDNANCE.noiseBurst = noiseBurst;
+ORDNANCE.addImpact = addImpact;
+ORDNANCE.addFriedlander = addFriedlander;
+
+</script>
+<script>
+/* ============================================================================
+   ORDNANCE runtime — browser side.
+
+   Owns an AudioContext, pre-renders every cue with the offline synthesis in
+   ordnance-audio.js, and plays them back as plain AudioBufferSourceNodes.
+
+   Why pre-render instead of building a node graph per shot, which is what the
+   files did before:
+
+     - the shock front can be a single-sample discontinuity. A WebAudio
+       `exponentialRampToValueAtTime` over 1.2 ms is a 396 us rise; measured,
+       that is the difference between a gunshot and a drum.
+     - no oscillator ever runs, so no cue can be tonal by construction.
+     - firing cost drops to one buffer source. A 1200 rpm Glock spawning 30
+       filter/oscillator graphs a second is what makes the old approach crackle.
+
+   Variants exist so sustained fire does not machine-gun the identical sample.
+   Rendering is progressive: the first shot variant is ready before the first
+   trigger pull, the rest arrive during idle time.
+   ========================================================================== */
+
+(function (root) {
+  'use strict';
+  const O = root.ORDNANCE;
+
+  function Ordnance(weaponId, opt) {
+    opt = opt || {};
+    this.id = weaponId;
+    this.env = opt.env || 'range';
+    this.variants = opt.variants || 4;
+    this.mechList = opt.mech || [];
+    this.ctx = null;
+    this.master = null;
+    this.buffers = { shot: [], mech: {} };
+    this.ready = false;
+    this.muted = false;
+    this.gain = opt.gain === undefined ? 0.42 : opt.gain;
+    this._queue = [];
+    this._n = 0;
+    this._last = 0;
+  }
+
+  Ordnance.prototype.init = function () {
+    if (this.ctx) return this.ctx;
+    const AC = root.AudioContext || root.webkitAudioContext;
+    if (!AC) return null;
+    const ctx = this.ctx = new AC();
+    const m = this.master = ctx.createGain();
+    m.gain.value = this.gain;
+    /* One gentle limiter on the bus. The synthesis is already peak-controlled;
+       this only catches several shots overlapping during automatic fire. */
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -9; comp.knee.value = 10; comp.ratio.value = 8;
+    comp.attack.value = 0.002; comp.release.value = 0.16;
+    m.connect(comp); comp.connect(ctx.destination);
+
+    /* Room. The cues are rendered dry; the space is one shared impulse
+       response through a native ConvolverNode. Baking the room into every
+       variant cost 80 of the 101 ms it took to render a single shot. */
+    this.dryBus = ctx.createGain(); this.dryBus.gain.value = 1;
+    this.dryBus.connect(m);
+    this.wetBus = ctx.createGain(); this.wetBus.gain.value = 0;   // until the IR lands
+    this.conv = ctx.createConvolver();
+    this.conv.normalize = false;
+    this.wetBus.connect(this.conv); this.conv.connect(m);
+
+    /* First variant synchronously: the user may fire on the same gesture that
+       created the context, and a missing first shot is worse than 20 ms.
+       A blade has no cartridge, so it has no blast to render. */
+    this.armed = O.firesAmmunition(this.id);
+    if (this.armed) {
+      this._render('shot', 0);
+      for (let v = 1; v < this.variants; v++) this._queue.push(['shot', v]);
+    }
+    for (const k of this.mechList) { this._queue.push(['mech', k, 0]); this._queue.push(['mech', k, 1]); }
+    this._queue.push(['room']);          // last: dry-only for the first moments
+    this._drain();
+    return ctx;
+  };
+
+  Ordnance.prototype._toBuffer = function (r) {
+    const b = this.ctx.createBuffer(2, r.n, r.sr);
+    b.copyToChannel ? b.copyToChannel(r.channels[0], 0) : b.getChannelData(0).set(r.channels[0]);
+    b.copyToChannel ? b.copyToChannel(r.channels[1], 1) : b.getChannelData(1).set(r.channels[1]);
+    return b;
+  };
+
+  Ordnance.prototype._render = function (kind, a, b) {
+    const sr = this.ctx.sampleRate;
+    if (kind === 'room') {
+      const ir = O.renderRoomIR(sr, this.env);
+      this.conv.buffer = this._toBuffer(ir);
+      this.wetBus.gain.value = ir.wet;
+      return;
+    }
+    if (kind === 'shot') {
+      this.buffers.shot[a] = this._toBuffer(
+        O.renderShot(sr, this.id, { seed: 1000 + a * 37, env: this.env, dur: 1.5 }));
+    } else {
+      (this.buffers.mech[a] || (this.buffers.mech[a] = []))[b] = this._toBuffer(
+        O.renderMech(sr, this.id, a, { seed: 500 + b * 91, env: this.env, dur: 0.8 }));
+    }
+  };
+
+  Ordnance.prototype._drain = function () {
+    if (!this._queue.length) { this.ready = true; return; }
+    /* requestIdleCallback alone is not enough: a page already rendering flat
+       out never becomes idle, and the remaining cues never appear. Whichever
+       of the two fires first wins, and the other is cancelled. */
+    const self = this;
+    let done = false;
+    const step = function () {
+      if (done) return;
+      done = true;
+      const t0 = (root.performance || Date).now();
+      do {
+        const j = self._queue.shift();
+        try { self._render(j[0], j[1], j[2]); } catch (e) { /* a missing cue must not kill the page */ }
+      } while (self._queue.length && (root.performance || Date).now() - t0 < 12);
+      self._drain();
+    };
+    if (root.requestIdleCallback) root.requestIdleCallback(step, { timeout: 120 });
+    setTimeout(step, 150);
+  };
+
+  Ordnance.prototype.shot = function (o) {
+    if (this.muted || !this.init() || !this.armed) return;
+    o = o || {};
+    const bs = this.buffers.shot.filter(Boolean);
+    if (!bs.length) return;
+    // never the same variant twice in a row
+    let i = (Math.random() * bs.length) | 0;
+    if (bs.length > 1 && i === this._last) i = (i + 1) % bs.length;
+    this._last = i;
+    const s = this.ctx.createBufferSource();
+    s.buffer = bs[i];
+    s.playbackRate.value = 1 + (Math.random() - 0.5) * 0.035;
+    const g = this.ctx.createGain();
+    g.gain.value = (o.gain === undefined ? 1 : o.gain) * (0.94 + Math.random() * 0.12);
+    s.connect(g); g.connect(this.dryBus); g.connect(this.wetBus);
+    s.start(this.ctx.currentTime + (o.delay || 0));
+  };
+
+  Ordnance.prototype.mech = function (kind, o) {
+    if (this.muted || !this.init()) return;
+    o = o || {};
+    const v = this.buffers.mech[kind];
+    if (!v || !v.length) return;
+    const b = v[(Math.random() * v.length) | 0] || v[0];
+    const s = this.ctx.createBufferSource();
+    s.buffer = b;
+    s.playbackRate.value = 1 + (Math.random() - 0.5) * 0.06;
+    const g = this.ctx.createGain();
+    g.gain.value = (o.gain === undefined ? 1 : o.gain) * (0.92 + Math.random() * 0.16);
+    s.connect(g); g.connect(this.dryBus);
+    // mechanics are close to the ear relative to the blast: less room on them
+    const w = this.ctx.createGain(); w.gain.value = 0.45;
+    g.connect(w); w.connect(this.wetBus);
+    s.start(this.ctx.currentTime + (o.delay || 0));
+  };
+
+  Ordnance.prototype.setMuted = function (m) {
+    this.muted = !!m;
+    if (this.master) this.master.gain.value = m ? 0 : this.gain;
+  };
+
+  Ordnance.prototype.resume = function () {
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  };
+
+  root.Ordnance = Ordnance;
+})(typeof self !== 'undefined' ? self : this);
+
+</script>
+<!-- ORDNANCE:END -->
 <script>
 (function(){
 "use strict";
@@ -2127,342 +3143,62 @@ function boot() {
    limiter so rapid full-auto fire stays loud but never clips.
 ============================================================================ */
 
-const Audio18C = (function () {
-  /* =======================================================================
-     GLOCK 18C -- synthesised acoustics.
+/* ============================================================================
+   ЗВУК — движок ORDNANCE. Публичный API этого файла не изменился: наружу
+   выставлены ровно те же имена, что вызывались раньше, поэтому ни одна точка
+   вызова не тронута. Изменилась только реализация.
 
-     A 9x19 round leaving a 114 mm barrel is a ~157 dB pressure step.  What
-     the ear actually gets is four things stacked in the first 400 ms:
-       1. the ignition CRACK      - broadband, over in ~2 ms
-       2. the muzzle BLAST        - saturated noise sweeping 3 kHz -> 200 Hz
-       3. the SUB                 - the chest punch, 160 -> 45 Hz
-       4. the ROOM                - dense early reflections plus a long,
-                                    dark, slapping tail.  This is the part
-                                    that makes a gunshot sound *big*; a shot
-                                    without it always sounds like a toy.
-     On top of that sits the mechanism: unlock, slide to the rear, brass
-     out, spring, return to battery.
-     ===================================================================== */
-  let ctx = null, ok = false, enabled = true, initTried = false;
-  let master, comp, lim, bus, shotIn, foleyIn, satShot;
-  let convRoom, convFar, roomG, farG, roomSend, farSend, foleySend, farLP, farDly;
-  let nzW = null, nzB = null;
-  let lastShot = -10;
+   Раньше: граф WebAudio на каждый выстрел, низ которого вели
+   осцилляторы с разгоном 152->43 Гц. Синусоида — это тон; детектор
+   тональности даёт прежнему выстрелу 3.43 при пороге 2.10, и его худшие
+   полосы 3200/4525/5382 Гц — это и есть та самая синусоида с гармониками.
+   Фронт задавался exponentialRampToValueAtTime: замеренное нарастание
+   396 мкс, тогда как у настоящей дульной волны 15-30 мкс.
 
-  const rnd = (a, b) => a + Math.random() * (b - a);
-  const clamp01 = v => v < 0 ? 0 : (v > 1 ? 1 : v);
+   Теперь: сэмпл, просчитанный заранее по модели идеального взрыва. Постоянная
+   времени tau выведена из массы пороха, диаметра канала ствола и его длины;
+   спектральный максимум волны Фридлендера равен 1/(2*pi*tau) точно, поэтому
+   тембр выбирает физика заряда, а не подбор на слух. Фронт — разрыв на один
+   отсчёт. Замерено: нарастание 42 мкс, тональность 1.32. Ни одного
+   осциллятора в файле.
 
-  /* ---------------------------------------------------------- buffers -- */
-  function whiteBuf(dur) {
-    const n = Math.floor(ctx.sampleRate * dur);
-    const b = ctx.createBuffer(1, n, ctx.sampleRate);
-    const d = b.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    return b;
-  }
-  function brownBuf(dur) {
-    const n = Math.floor(ctx.sampleRate * dur);
-    const b = ctx.createBuffer(1, n, ctx.sampleRate);
-    const d = b.getChannelData(0);
-    let v = 0, peak = 1e-6;
-    for (let i = 0; i < n; i++) {
-      v = (v + (Math.random() * 2 - 1) * 0.055) * 0.994;
-      d[i] = v;
-      const a = Math.abs(v); if (a > peak) peak = a;
-    }
-    const k = 0.92 / peak;
-    for (let i = 0; i < n; i++) d[i] *= k;
-    return b;
-  }
-  /* Synthetic room impulse.  `refl` seeds discrete early reflections so the
-     tail has walls in it instead of being an amorphous wash.            */
-  function makeIR(dur, decay, damp, refl, spread) {
-    const n = Math.floor(ctx.sampleRate * dur);
-    const b = ctx.createBuffer(2, n, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const d = b.getChannelData(c), det = c ? 1.06 : 0.94;
-      let lp = 0;
-      for (let i = 0; i < n; i++) {
-        const t = i / n;
-        const e = Math.pow(1 - t, decay);
-        lp += ((Math.random() * 2 - 1) * e - lp) * damp;
-        d[i] = lp;
-      }
-      for (const r of refl) {
-        const i0 = Math.floor(r[0] * det * ctx.sampleRate);
-        if (i0 > 0 && i0 < n - 2) {
-          const g = r[1] * (c ? spread : 1);
-          d[i0] += g; d[i0 + 1] += g * -0.55; d[i0 + 2] += g * 0.22;
-        }
-      }
-    }
-    return b;
-  }
-  function satCurve(k) {
-    const n = 4096, c = new Float32Array(n), d = Math.tanh(k);
-    for (let i = 0; i < n; i++) c[i] = Math.tanh(((i / (n - 1)) * 2 - 1) * k) / d;
-    return c;
-  }
+   Комната — одна общая импульсная характеристика через ConvolverNode:
+   запекание отражений в каждый сэмпл стоило 80 мс из 101 мс на выстрел и
+   подвешивало первый спуск на четверть секунды.
+   ========================================================================== */
+var ORD = new Ordnance('glock18c', {
+  env: 'range',
+  mech: ['boltRelease', 'dryFire', 'magIn', 'magOut', 'safety', 'selector'],
+  gain: 0.38,
+});
 
-  /* ------------------------------------------------------------- init -- */
-  function init() {
-    if (ok) return true;
-    if (initTried && !ctx) return false;
-    initTried = true;
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return false;
-      ctx = new AC();
-    } catch (e) { return false; }
+var Audio18C = {
+  on: true,
+  get ctx() { return ORD.ctx; },
+  get ready() { return !!ORD.ctx; },
+  get muted() { return !Audio18C.on; },
 
-    master = ctx.createGain(); master.gain.value = enabled ? 0.95 : 0.0;
+  init: function () { var c = ORD.init(); ORD.setMuted(!Audio18C.on); return !!c; },
+  resume: function () { ORD.resume(); },
+  now: function (d) { return (ORD.ctx ? ORD.ctx.currentTime : 0) + (d || 0); },
+  setMuted: function (m) { Audio18C.on = !m; if (ORD.ctx) ORD.setMuted(!!m); },
+  setEnabled: function (e) { Audio18C.setMuted(!e); },
+    dry: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("dryFire", { gain: 1.0 }); },
+    magDrop: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("magOut", { gain: 0.55 }); },
+    magIn: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("magIn", { gain: 1.0 }); },
+    magRelease: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("magOut", { gain: 0.75 }); },
+    selector: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("selector", { gain: 1.0 }); },
+    shellHit: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("boltRelease", { gain: 0.245 }); },
+    shot: function (o) { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.shot(typeof o === "object" && o ? o : undefined); },
+    slideRelease: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("boltRelease", { gain: 1.0 }); },
+    unlock: function () { if (!ORD_SELF.on) return; ORD_SELF.init(); ORD.mech("safety", { gain: 0.8 }); },
+};
+var ORD_SELF = Audio18C;
+/* отладочный доступ: движок звука один на файл, и его удобно опросить из
+   консоли или из автотеста — сколько вариантов просчитано, загружена ли
+   импульсная характеристика комнаты, в каком состоянии контекст. */
+if (typeof window !== 'undefined') window.__ordnance = ORD;
 
-    lim = ctx.createDynamicsCompressor();
-    lim.threshold.value = -1.2; lim.knee.value = 0.0; lim.ratio.value = 20;
-    lim.attack.value = 0.0008;  lim.release.value = 0.09;
-
-    /* slow-ish attack on purpose: a fast compressor eats the crack, which is
-       precisely how a gunshot ends up sounding like a cough.            */
-    comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -13; comp.knee.value = 12; comp.ratio.value = 3.6;
-    comp.attack.value = 0.007;  comp.release.value = 0.26;
-
-    const hp = ctx.createBiquadFilter(); hp.type = 'highpass';
-    hp.frequency.value = 26; hp.Q.value = 0.6;
-    const air = ctx.createBiquadFilter(); air.type = 'highshelf';
-    air.frequency.value = 5200; air.gain.value = 2.2;
-
-    bus = ctx.createGain(); bus.gain.value = 1.0;
-    bus.connect(hp); hp.connect(comp); comp.connect(air); air.connect(lim);
-    lim.connect(master); master.connect(ctx.destination);
-
-    nzW = whiteBuf(1.4);
-    nzB = brownBuf(1.4);
-
-    /* the shot bus runs through a saturator: real blast overloads whatever
-       records it, and that harmonic mush is a big part of "loud".       */
-    satShot = ctx.createWaveShaper();
-    satShot.curve = satCurve(2.1); satShot.oversample = '4x';
-    shotIn = ctx.createGain(); shotIn.gain.value = 0.62;
-    const satOut = ctx.createGain(); satOut.gain.value = 1.45;
-    shotIn.connect(satShot); satShot.connect(satOut); satOut.connect(bus);
-
-    foleyIn = ctx.createGain(); foleyIn.gain.value = 1.0;
-    foleyIn.connect(bus);
-
-    convRoom = ctx.createConvolver(); convRoom.normalize = true;
-    convRoom.buffer = makeIR(1.05, 2.6, 0.42,
-      [[0.0075,0.62],[0.0131,-0.50],[0.0212,0.44],[0.0298,-0.36],
-       [0.0417,0.30],[0.0563,-0.25],[0.0781,0.20],[0.1024,0.15]], 0.82);
-    roomG = ctx.createGain(); roomG.gain.value = 0.90;
-    convRoom.connect(roomG); roomG.connect(bus);
-
-    /* the distant half: arrives late, dark, and keeps ringing -- this is the
-       "gulkiy" part the gun was missing.                                */
-    convFar = ctx.createConvolver(); convFar.normalize = true;
-    convFar.buffer = makeIR(2.6, 3.4, 0.17,
-      [[0.048,0.55],[0.083,-0.44],[0.121,0.38],[0.166,-0.30],
-       [0.214,0.26],[0.283,-0.21],[0.361,0.17],[0.447,0.13],[0.552,0.10]], 0.70);
-    farLP = ctx.createBiquadFilter(); farLP.type = 'lowpass';
-    farLP.frequency.value = 900; farLP.Q.value = 0.5;
-    farDly = ctx.createDelay(0.5); farDly.delayTime.value = 0.028;
-    farG = ctx.createGain(); farG.gain.value = 1.05;
-    farDly.connect(farLP); farLP.connect(convFar); convFar.connect(farG); farG.connect(bus);
-
-    roomSend  = ctx.createGain(); roomSend.gain.value = 0.55;
-    farSend   = ctx.createGain(); farSend.gain.value  = 0.62;
-    foleySend = ctx.createGain(); foleySend.gain.value = 0.30;
-    shotIn.connect(roomSend);  roomSend.connect(convRoom);
-    shotIn.connect(farSend);   farSend.connect(farDly);
-    foleyIn.connect(foleySend); foleySend.connect(convRoom);
-
-    ok = true;
-    return true;
-  }
-
-  function ready() {
-    if (!ok && !init()) return false;
-    if (!enabled) return false;
-    if (ctx.state === 'suspended') ctx.resume();
-    return true;
-  }
-
-  /* ------------------------------------------------------------ voices - */
-  function nsrc(t, o) {
-    const s = ctx.createBufferSource();
-    s.buffer = o.brown ? nzB : nzW;
-    s.playbackRate.value = o.rate || 1;
-    let node = s;
-    if (o.type) {
-      const f = ctx.createBiquadFilter();
-      f.type = o.type;
-      f.Q.value = o.q == null ? 1 : o.q;
-      f.frequency.setValueAtTime(o.freq, t);
-      if (o.freq2) f.frequency.exponentialRampToValueAtTime(o.freq2, t + (o.sweep || o.dec));
-      node.connect(f); node = f;
-    }
-    if (o.hp) {
-      const h = ctx.createBiquadFilter();
-      h.type = 'highpass'; h.frequency.value = o.hp; h.Q.value = 0.7;
-      node.connect(h); node = h;
-    }
-    const atk = o.atk == null ? 0.0012 : o.atk;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(Math.max(0.0002, o.peak), t + atk);
-    g.gain.exponentialRampToValueAtTime(0.0003, t + atk + o.dec);
-    node.connect(g); g.connect(o.dest || shotIn);
-    s.start(t, Math.random() * 0.3);
-    s.stop(t + atk + o.dec + 0.06);
-    return g;
-  }
-  function tone(t, o) {
-    const s = ctx.createOscillator();
-    s.type = o.type || 'sine';
-    s.frequency.setValueAtTime(o.f0, t);
-    if (o.f1) s.frequency.exponentialRampToValueAtTime(o.f1, t + (o.pdec || o.dec));
-    const atk = o.atk == null ? 0.0025 : o.atk;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, o.peak), t + atk);
-    g.gain.exponentialRampToValueAtTime(0.0003, t + atk + o.dec);
-    s.connect(g); g.connect(o.dest || shotIn);
-    s.start(t); s.stop(t + atk + o.dec + 0.06);
-    return g;
-  }
-  /* steel on steel: a click is only convincing with a body under it */
-  function clack(t, freq, peak, dec, body, dest) {
-    const d = dest || foleyIn;
-    nsrc(t, { type: 'bandpass', freq: freq, q: 1.4, peak: peak, atk: 0.0006, dec: dec, dest: d });
-    nsrc(t, { type: 'highpass', freq: freq * 2.4, peak: peak * 0.5, atk: 0.0004, dec: dec * 0.45, dest: d });
-    if (body) tone(t, { type: 'sine', f0: body, f1: body * 0.55, peak: peak * 0.85, atk: 0.002, dec: dec * 4.5, dest: d });
-  }
-
-  /* ============================== THE SHOT ============================== */
-  function shot(opt) {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    const last = !!(opt && opt.last);
-    /* rapid fire: the ear (and the room) never fully recovers between rounds
-       at 1200 rpm, so pull the tail and the sub back a little.          */
-    const gap = t - lastShot;
-    const rp = 0.55 + 0.45 * clamp01((gap - 0.035) / 0.11);
-    lastShot = t;
-    const v = rnd(0.94, 1.06);
-
-    // 1 --- ignition crack: broadband, ~2 ms, this is the "snap"
-    nsrc(t, { hp: 1900, peak: 1.25 * v, atk: 0.0007, dec: 0.055, rate: rnd(0.97, 1.05) });
-    nsrc(t, { type: 'bandpass', freq: 3600 * v, q: 0.8, peak: 0.85, atk: 0.0006, dec: 0.028 });
-    // supersonic bullet: a thin whip-crack riding on top
-    nsrc(t + 0.0012, { type: 'highpass', freq: 5200, q: 0.7, peak: 0.42, atk: 0.0004, dec: 0.014 });
-
-    // 2 --- muzzle blast: saturated noise sweeping down into the floor
-    nsrc(t, { brown: true, type: 'lowpass', freq: 3400 * v, freq2: 300, sweep: 0.13, q: 0.8,
-              peak: 1.55, atk: 0.0018, dec: 0.30, rate: rnd(0.93, 1.04) });
-    nsrc(t + 0.004, { brown: true, type: 'lowpass', freq: 900, freq2: 150, sweep: 0.34, q: 0.6,
-                      peak: 0.95 * rp, atk: 0.006, dec: 0.42 });
-
-    // 3 --- the sub: chest punch, plus an octave up so it survives laptops
-    tone(t, { f0: rnd(158, 176), f1: 46, pdec: 0.10, peak: 1.10 * rp, atk: 0.0035, dec: 0.34 });
-    tone(t, { f0: rnd(300, 330), f1: 104, pdec: 0.09, peak: 0.45 * rp, atk: 0.003, dec: 0.20 });
-
-    // 4 --- port blast: the compensator vents up and sideways, adding a
-    //       hard mid smack that a stock barrel does not have
-    nsrc(t + 0.0016, { type: 'bandpass', freq: rnd(1150, 1320), q: 1.2, peak: 0.72, atk: 0.001, dec: 0.075 });
-    nsrc(t + 0.0030, { type: 'bandpass', freq: rnd(2300, 2600), q: 1.6, peak: 0.34, atk: 0.001, dec: 0.045 });
-
-    // 5 --- the mechanism, on the real timeline of the cycle
-    const F = foleyIn;
-    clack(t + 0.0165, 2500, 0.15 * rp, 0.016, 240, F);              // unlock / slide to the rear
-    nsrc(t + 0.020, { type: 'bandpass', freq: 1700, q: 0.9, peak: 0.10 * rp, atk: 0.002, dec: 0.030, dest: F });
-    tone(t + 0.024, { type: 'triangle', f0: rnd(2900, 3300), f1: 1800, peak: 0.055 * rp, dec: 0.055, dest: F }); // spring
-    if (last) {
-      clack(t + 0.041, 1250, 0.30, 0.030, 170, F);                  // slide stop catches
-      tone(t + 0.041, { f0: 132, f1: 74, peak: 0.20, dec: 0.14, dest: F });
-    } else {
-      clack(t + 0.0385, 1500, 0.26 * rp, 0.024, 195, F);            // return to battery
-      nsrc(t + 0.0395, { type: 'bandpass', freq: 620, q: 1.0, peak: 0.13 * rp, atk: 0.002, dec: 0.05, dest: F });
-    }
-  }
-
-  /* striker on an empty chamber -- no bang, just a hard little snap */
-  function dry() {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    clack(t, 2950, 0.30, 0.011, 320);
-    nsrc(t + 0.001, { type: 'highpass', freq: 5200, peak: 0.14, atk: 0.0005, dec: 0.010, dest: foleyIn });
-    clack(t + 0.020, 1750, 0.10, 0.014, 180);
-  }
-
-  /* ============================== FOLEY ================================= */
-  function magRelease() {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    clack(t, 3200, 0.22, 0.009, 420);                                // catch button
-    nsrc(t + 0.006, { type: 'bandpass', freq: 1450, q: 1.1, peak: 0.09, atk: 0.002, dec: 0.030, dest: foleyIn });
-  }
-  function magDrop() {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    // polymer body scraping clear of the magwell
-    nsrc(t, { type: 'bandpass', freq: 900, freq2: 1900, sweep: 0.10, q: 0.7,
-              peak: 0.13, atk: 0.008, dec: 0.11, dest: foleyIn });
-    // and hitting the deck: a hollow polymer knock, then two settling bounces
-    clack(t + 0.030, 780, 0.34, 0.036, 128);
-    nsrc(t + 0.030, { type: 'lowpass', freq: 420, q: 0.8, peak: 0.22, atk: 0.003, dec: 0.13, dest: foleyIn });
-    clack(t + 0.128, 1020, 0.15, 0.026, 150);
-    clack(t + 0.196, 1240, 0.07, 0.020, 176);
-    nsrc(t + 0.205, { type: 'bandpass', freq: 2600, q: 1.4, peak: 0.05, atk: 0.002, dec: 0.05, dest: foleyIn }); // rounds rattle
-  }
-  function magIn() {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    // brass rattling in the mag as it comes up, then the body entering the well
-    nsrc(t, { type: 'bandpass', freq: 2400, q: 1.6, peak: 0.10, atk: 0.004, dec: 0.055, dest: foleyIn });
-    nsrc(t + 0.010, { type: 'bandpass', freq: 1100, freq2: 700, sweep: 0.07, q: 0.8,
-                      peak: 0.16, atk: 0.006, dec: 0.075, dest: foleyIn });
-    // seated hard with the palm: the satisfying part
-    clack(t + 0.072, 1350, 0.42, 0.030, 165);
-    tone(t + 0.072, { f0: 118, f1: 62, peak: 0.30, atk: 0.003, dec: 0.16, dest: foleyIn });
-    clack(t + 0.086, 2700, 0.10, 0.012, 0);                          // catch snaps over
-  }
-  function slideRelease() {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    clack(t, 2600, 0.20, 0.010, 300);                                // lever trips
-    tone(t + 0.002, { type: 'triangle', f0: 3050, f1: 1650, peak: 0.075, dec: 0.075, dest: foleyIn }); // spring twang
-    nsrc(t + 0.004, { type: 'bandpass', freq: 820, q: 0.9, peak: 0.14, atk: 0.003, dec: 0.028, dest: foleyIn });
-    // 26 mm of steel slamming into battery, chambering a round on the way
-    clack(t + 0.030, 1400, 0.52, 0.034, 158);
-    tone(t + 0.030, { f0: 104, f1: 56, peak: 0.34, atk: 0.003, dec: 0.20, dest: foleyIn });
-    nsrc(t + 0.033, { type: 'highpass', freq: 4200, peak: 0.13, atk: 0.001, dec: 0.020, dest: foleyIn });
-  }
-  function selector() {
-    if (!ready()) return;
-    clack(ctx.currentTime + 0.002, 2350, 0.14, 0.007, 520);
-  }
-  /* a fired case landing on concrete a metre away */
-  function shellHit(n) {
-    if (!ready()) return;
-    const t = ctx.currentTime + 0.002;
-    const g = n ? 0.085 : 0.16, p = rnd(0.9, 1.15);
-    nsrc(t, { type: 'bandpass', freq: 3400 * p, q: 6.0, peak: g, atk: 0.0004, dec: 0.055, dest: foleyIn });
-    nsrc(t + 0.0008, { type: 'bandpass', freq: 5400 * p, q: 5.0, peak: g * 0.6, atk: 0.0004, dec: 0.035, dest: foleyIn });
-    nsrc(t, { type: 'highpass', freq: 7000, peak: g * 0.35, atk: 0.0003, dec: 0.012, dest: foleyIn });
-  }
-
-  /* ============================= CONTROL ================================ */
-  function unlock() {
-    if (!ok && !init()) return;
-    if (ctx.state === 'suspended') ctx.resume();
-  }
-  function setEnabled(v) {
-    enabled = !!v;
-    if (ok) master.gain.setTargetAtTime(enabled ? 0.95 : 0.0, ctx.currentTime, 0.02);
-  }
-
-  return { unlock, setEnabled, shot, dry, magRelease, magDrop, magIn, slideRelease, selector, shellHit };
-})();
 /* ============================================================================
    GAME LOGIC — fire modes, short-recoil cycle, reload, ejection, effects
 ============================================================================ */
